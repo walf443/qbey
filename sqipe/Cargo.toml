@@ -14,3 +14,4 @@ rusqlite = { version = "0.32" }
 [features]
 test-sqlx = []
 test-rusqlite = []
+full = ["test-sqlx", "test-rusqlite"]
