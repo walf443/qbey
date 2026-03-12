@@ -249,6 +249,85 @@ let (sql, binds) = uq.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ? UNION ALL SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ?");
 ```
 
+### IN clause
+
+```rust
+# use sqipe::{sqipe, col};
+let mut q = sqipe("users");
+q.and_where(col("status").included(&["active", "pending"]));
+q.select(&["id", "name"]);
+
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" WHERE \"status\" IN (?, ?)");
+```
+
+Empty lists are safely handled as `1 = 0`.
+
+### JOIN
+
+```rust
+# use sqipe::{sqipe, col, table, join};
+// INNER JOIN with ON
+let mut q = sqipe("users");
+q.join("orders", table("users").col("id").eq_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\"");
+
+// LEFT JOIN
+let mut q = sqipe("users");
+q.left_join("addresses", table("users").col("id").eq_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" LEFT JOIN \"addresses\" ON \"users\".\"id\" = \"addresses\".\"user_id\"");
+
+// JOIN with USING
+let mut q = sqipe("users");
+q.join("orders", join::using_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\")");
+
+// Multiple columns USING
+let mut q = sqipe("users");
+q.join("orders", join::using_cols(&["user_id", "tenant_id"]));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\", \"tenant_id\")");
+```
+
+### Table aliases and qualified columns
+
+```rust
+# use sqipe::{sqipe, col, table};
+let mut q = sqipe("users");
+q.as_("u");
+q.join(
+    table("orders").as_("o"),
+    table("u").col("id").eq_col("user_id"),
+);
+q.select(&["id"]);
+q.add_select(table("o").col("total").as_("order_total"));
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"o\".\"total\" AS \"order_total\" FROM \"users\" AS \"u\" INNER JOIN \"orders\" AS \"o\" ON \"u\".\"id\" = \"o\".\"user_id\"");
+```
+
+### Column aliases
+
+```rust
+# use sqipe::{sqipe, col};
+let mut q = sqipe("users");
+q.add_select(col("name").as_("user_name"));
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"name\" AS \"user_name\" FROM \"users\"");
+```
+
 ### MySQL-specific features (sqipe-mysql)
 
 ```rust,ignore
@@ -262,5 +341,5 @@ q.select(&["id", "name"]);
 let (sql, binds) = q.to_sql();
 // => "SELECT `id`, `name` FROM `employee` FORCE INDEX (idx_name) WHERE `name` = ?"
 
-// Also available: use_index, ignore_index
+// Also available: use_index, ignore_index, straight_join
 ```

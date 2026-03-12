@@ -44,3 +44,17 @@ q.select(&["id", "name"]);
 let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT `id`, `name` FROM `employee` IGNORE INDEX (idx_old) WHERE `name` = ?");
 ```
+
+## STRAIGHT_JOIN
+
+```rust
+use sqipe_mysql::sqipe;
+use sqipe::table;
+
+let mut q = sqipe("users");
+q.straight_join("orders", table("users").col("id").eq_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT `id`, `name` FROM `users` STRAIGHT_JOIN `orders` ON `users`.`id` = `orders`.`user_id`");
+```
