@@ -197,7 +197,7 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
     }
 
     /// Convert into a SelectTree by moving fields, with MySQL-specific index hints applied.
-    pub fn into_tree(self) -> SelectTree<V> {
+    pub(crate) fn into_tree(self) -> SelectTree<V> {
         let mut tree = sqipe::tree::SelectTree::from_query_owned(self.inner);
         apply_index_hints_to(
             &mut tree,
