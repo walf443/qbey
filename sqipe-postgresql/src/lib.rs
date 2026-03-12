@@ -6,6 +6,11 @@ impl sqipe::Dialect for PostgreSQL {
     fn placeholder(&self, index: usize) -> String {
         format!("${}", index)
     }
+
+    // PostgreSQL uses double quotes (same as default), but we implement explicitly for clarity.
+    fn quote_identifier(&self, name: &str) -> String {
+        format!("\"{}\"", name.replace('"', "\"\""))
+    }
 }
 
 /// PostgreSQL-specific query builder wrapping the core Query.
@@ -57,7 +62,10 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, _) = q.to_sql();
-        assert_eq!(sql, "SELECT id, name FROM employee WHERE name = $1");
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = $1"
+        );
     }
 
     #[test]
@@ -70,7 +78,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee WHERE name = $1 AND age > $2"
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = $1 AND \"age\" > $2"
         );
     }
 
@@ -86,7 +94,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee WHERE name = $1 ORDER BY name ASC LIMIT 10 OFFSET 5"
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = $1 ORDER BY \"name\" ASC LIMIT 10 OFFSET 5"
         );
     }
 }

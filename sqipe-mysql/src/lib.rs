@@ -6,6 +6,10 @@ impl sqipe::Dialect for MySQL {
     fn placeholder(&self, _index: usize) -> String {
         "?".to_string()
     }
+
+    fn quote_identifier(&self, name: &str) -> String {
+        format!("`{}`", name.replace('`', "``"))
+    }
 }
 
 /// MySQL-specific query builder wrapping the core Query.
@@ -74,7 +78,7 @@ impl MysqlQuery {
         if hints.is_empty() {
             return sql;
         }
-        let from_table = format!("FROM {}", self.table);
+        let from_table = format!("FROM `{}`", self.table.replace('`', "``"));
         sql.replacen(&from_table, &format!("{} {}", from_table, hints), 1)
     }
 
@@ -105,7 +109,10 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, _) = q.to_sql();
-        assert_eq!(sql, "SELECT id, name FROM employee WHERE name = ?");
+        assert_eq!(
+            sql,
+            "SELECT `id`, `name` FROM `employee` WHERE `name` = ?"
+        );
     }
 
     #[test]
@@ -118,7 +125,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee FORCE INDEX (idx_name) WHERE name = ?"
+            "SELECT `id`, `name` FROM `employee` FORCE INDEX (idx_name) WHERE `name` = ?"
         );
     }
 
@@ -132,7 +139,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee FORCE INDEX (idx_name, idx_age) WHERE name = ?"
+            "SELECT `id`, `name` FROM `employee` FORCE INDEX (idx_name, idx_age) WHERE `name` = ?"
         );
     }
 
@@ -146,7 +153,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee USE INDEX (idx_name) WHERE name = ?"
+            "SELECT `id`, `name` FROM `employee` USE INDEX (idx_name) WHERE `name` = ?"
         );
     }
 
@@ -160,7 +167,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee IGNORE INDEX (idx_old) WHERE name = ?"
+            "SELECT `id`, `name` FROM `employee` IGNORE INDEX (idx_old) WHERE `name` = ?"
         );
     }
 
@@ -177,7 +184,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee WHERE name = ? AND age > ? ORDER BY name ASC LIMIT 10 OFFSET 5"
+            "SELECT `id`, `name` FROM `employee` WHERE `name` = ? AND `age` > ? ORDER BY `name` ASC LIMIT 10 OFFSET 5"
         );
     }
 
@@ -191,7 +198,7 @@ mod tests {
         let (sql, _) = q.to_pipe_sql();
         assert_eq!(
             sql,
-            "FROM employee FORCE INDEX (idx_name) |> WHERE name = ? |> SELECT id, name"
+            "FROM `employee` FORCE INDEX (idx_name) |> WHERE `name` = ? |> SELECT `id`, `name`"
         );
     }
 }

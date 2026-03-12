@@ -185,15 +185,30 @@ pub struct OrderByClause {
     dir: SortDir,
 }
 
-/// Trait for SQL dialect placeholder styles.
+/// Trait for SQL dialect placeholder and quoting styles.
 pub trait Dialect {
     fn placeholder(&self, index: usize) -> String;
+
+    fn quote_identifier(&self, name: &str) -> String {
+        format!("\"{}\"", name.replace('"', "\"\""))
+    }
 }
 
 #[derive(Debug, Clone)]
 enum WhereEntry {
     And(WhereClause),
     Or(WhereClause),
+}
+
+/// Internal config for SQL generation.
+struct SqlConfig<'a> {
+    ph: &'a dyn Fn(usize) -> String,
+    qi: &'a dyn Fn(&str) -> String,
+}
+
+/// Default double-quote identifier quoting (SQL standard).
+fn default_quote_identifier(name: &str) -> String {
+    format!("\"{}\"", name.replace('"', "\"\""))
 }
 
 /// The query builder.
@@ -250,116 +265,125 @@ impl Query {
         self
     }
 
-    /// Build standard SQL with `?` placeholders.
+    /// Build standard SQL with `?` placeholders and double-quote identifiers.
     pub fn to_sql(&self) -> (String, Vec<Value>) {
-        self.build_standard_sql(&|_| "?".to_string())
+        let cfg = SqlConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+        };
+        self.build_standard_sql(&cfg)
     }
 
-    /// Build pipe syntax SQL with `?` placeholders.
+    /// Build pipe syntax SQL with `?` placeholders and double-quote identifiers.
     pub fn to_pipe_sql(&self) -> (String, Vec<Value>) {
-        self.build_pipe_sql(&|_| "?".to_string())
+        let cfg = SqlConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+        };
+        self.build_pipe_sql(&cfg)
     }
 
-    /// Build standard SQL with dialect-specific placeholders.
+    /// Build standard SQL with dialect-specific placeholders and quoting.
     pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
-        self.build_standard_sql(&|n| dialect.placeholder(n))
+        let cfg = SqlConfig {
+            ph: &|n| dialect.placeholder(n),
+            qi: &|name| dialect.quote_identifier(name),
+        };
+        self.build_standard_sql(&cfg)
     }
 
-    /// Build pipe syntax SQL with dialect-specific placeholders.
+    /// Build pipe syntax SQL with dialect-specific placeholders and quoting.
     pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
-        self.build_pipe_sql(&|n| dialect.placeholder(n))
+        let cfg = SqlConfig {
+            ph: &|n| dialect.placeholder(n),
+            qi: &|name| dialect.quote_identifier(name),
+        };
+        self.build_pipe_sql(&cfg)
     }
 
-    fn build_standard_sql(&self, ph: &dyn Fn(usize) -> String) -> (String, Vec<Value>) {
+    fn build_select_clause(&self, cfg: &SqlConfig) -> String {
+        if self.selects.is_empty() {
+            "SELECT *".to_string()
+        } else {
+            let cols: Vec<String> = self.selects.iter().map(|c| (cfg.qi)(c)).collect();
+            format!("SELECT {}", cols.join(", "))
+        }
+    }
+
+    fn build_order_by_clause(&self, cfg: &SqlConfig) -> Option<String> {
+        if self.order_bys.is_empty() {
+            return None;
+        }
+        let clauses: Vec<String> = self
+            .order_bys
+            .iter()
+            .map(|o| {
+                let dir = match o.dir {
+                    SortDir::Asc => "ASC",
+                    SortDir::Desc => "DESC",
+                };
+                format!("{} {}", (cfg.qi)(&o.col), dir)
+            })
+            .collect();
+        Some(format!("ORDER BY {}", clauses.join(", ")))
+    }
+
+    fn build_limit_offset(&self) -> (Option<String>, Option<String>) {
+        (
+            self.limit_val.map(|n| format!("LIMIT {}", n)),
+            self.offset_val.map(|n| format!("OFFSET {}", n)),
+        )
+    }
+
+    fn build_standard_sql(&self, cfg: &SqlConfig) -> (String, Vec<Value>) {
         let mut binds = Vec::new();
         let mut parts = Vec::new();
 
-        // SELECT
-        let select_clause = if self.selects.is_empty() {
-            "SELECT *".to_string()
-        } else {
-            format!("SELECT {}", self.selects.join(", "))
-        };
-        parts.push(select_clause);
+        parts.push(self.build_select_clause(cfg));
+        parts.push(format!("FROM {}", (cfg.qi)(&self.table)));
 
-        // FROM
-        parts.push(format!("FROM {}", self.table));
-
-        // WHERE
-        if let Some(where_sql) = self.build_where(ph, &mut binds) {
+        if let Some(where_sql) = self.build_where(cfg, &mut binds) {
             parts.push(format!("WHERE {}", where_sql));
         }
 
-        // ORDER BY
-        if !self.order_bys.is_empty() {
-            let clauses: Vec<String> = self
-                .order_bys
-                .iter()
-                .map(|o| {
-                    let dir = match o.dir {
-                        SortDir::Asc => "ASC",
-                        SortDir::Desc => "DESC",
-                    };
-                    format!("{} {}", o.col, dir)
-                })
-                .collect();
-            parts.push(format!("ORDER BY {}", clauses.join(", ")));
+        if let Some(order_by) = self.build_order_by_clause(cfg) {
+            parts.push(order_by);
         }
 
-        // LIMIT / OFFSET
-        if let Some(limit) = self.limit_val {
-            parts.push(format!("LIMIT {}", limit));
+        let (limit, offset) = self.build_limit_offset();
+        if let Some(l) = limit {
+            parts.push(l);
         }
-        if let Some(offset) = self.offset_val {
-            parts.push(format!("OFFSET {}", offset));
+        if let Some(o) = offset {
+            parts.push(o);
         }
 
         (parts.join(" "), binds)
     }
 
-    fn build_pipe_sql(&self, ph: &dyn Fn(usize) -> String) -> (String, Vec<Value>) {
+    fn build_pipe_sql(&self, cfg: &SqlConfig) -> (String, Vec<Value>) {
         let mut binds = Vec::new();
         let mut parts = Vec::new();
 
-        // FROM
-        parts.push(format!("FROM {}", self.table));
+        parts.push(format!("FROM {}", (cfg.qi)(&self.table)));
 
-        // WHERE
-        if let Some(where_sql) = self.build_where(ph, &mut binds) {
+        if let Some(where_sql) = self.build_where(cfg, &mut binds) {
             parts.push(format!("WHERE {}", where_sql));
         }
 
-        // SELECT
-        let select_clause = if self.selects.is_empty() {
-            "SELECT *".to_string()
-        } else {
-            format!("SELECT {}", self.selects.join(", "))
-        };
-        parts.push(select_clause);
+        parts.push(self.build_select_clause(cfg));
 
-        // ORDER BY
-        if !self.order_bys.is_empty() {
-            let clauses: Vec<String> = self
-                .order_bys
-                .iter()
-                .map(|o| {
-                    let dir = match o.dir {
-                        SortDir::Asc => "ASC",
-                        SortDir::Desc => "DESC",
-                    };
-                    format!("{} {}", o.col, dir)
-                })
-                .collect();
-            parts.push(format!("ORDER BY {}", clauses.join(", ")));
+        if let Some(order_by) = self.build_order_by_clause(cfg) {
+            parts.push(order_by);
         }
 
-        // LIMIT / OFFSET
+        let (limit, offset) = self.build_limit_offset();
         let mut limit_offset_parts = Vec::new();
-        if let Some(limit) = self.limit_val {
-            limit_offset_parts.push(format!("LIMIT {}", limit));
+        if let Some(l) = limit {
+            limit_offset_parts.push(l);
         }
-        if let Some(offset) = self.offset_val {
-            limit_offset_parts.push(format!("OFFSET {}", offset));
+        if let Some(o) = offset {
+            limit_offset_parts.push(o);
         }
         if !limit_offset_parts.is_empty() {
             parts.push(limit_offset_parts.join(" "));
@@ -368,11 +392,7 @@ impl Query {
         (parts.join(" |> "), binds)
     }
 
-    fn build_where(
-        &self,
-        ph: &dyn Fn(usize) -> String,
-        binds: &mut Vec<Value>,
-    ) -> Option<String> {
+    fn build_where(&self, cfg: &SqlConfig, binds: &mut Vec<Value>) -> Option<String> {
         if self.wheres.is_empty() {
             return None;
         }
@@ -391,7 +411,7 @@ impl Query {
             }
 
             let is_top_level = single;
-            sql.push_str(&render_where_clause(clause, is_top_level, ph, binds));
+            sql.push_str(&render_where_clause(clause, is_top_level, cfg, binds));
         }
 
         Some(sql)
@@ -401,19 +421,19 @@ impl Query {
 fn render_where_clause(
     clause: &WhereClause,
     is_top_level: bool,
-    ph: &dyn Fn(usize) -> String,
+    cfg: &SqlConfig,
     binds: &mut Vec<Value>,
 ) -> String {
     match clause {
         WhereClause::Condition { col, op, val } => {
             binds.push(val.clone());
-            let placeholder = ph(binds.len());
-            format!("{} {} {}", col, op.as_str(), placeholder)
+            let placeholder = (cfg.ph)(binds.len());
+            format!("{} {} {}", (cfg.qi)(col), op.as_str(), placeholder)
         }
         WhereClause::Any(clauses) => {
             let parts: Vec<String> = clauses
                 .iter()
-                .map(|c| render_where_clause(c, false, ph, binds))
+                .map(|c| render_where_clause(c, false, cfg, binds))
                 .collect();
             let joined = parts.join(" OR ");
             if is_top_level {
@@ -425,7 +445,7 @@ fn render_where_clause(
         WhereClause::All(clauses) => {
             let parts: Vec<String> = clauses
                 .iter()
-                .map(|c| render_where_clause(c, false, ph, binds))
+                .map(|c| render_where_clause(c, false, cfg, binds))
                 .collect();
             let joined = parts.join(" AND ");
             if is_top_level {
@@ -448,7 +468,10 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, binds) = q.to_sql();
-        assert_eq!(sql, "SELECT id, name FROM employee WHERE name = ?");
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ?"
+        );
         assert_eq!(binds, vec![Value::String("Alice".to_string())]);
     }
 
@@ -459,7 +482,10 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, _binds) = q.to_pipe_sql();
-        assert_eq!(sql, "FROM employee |> WHERE name = ? |> SELECT id, name");
+        assert_eq!(
+            sql,
+            "FROM \"employee\" |> WHERE \"name\" = ? |> SELECT \"id\", \"name\""
+        );
     }
 
     #[test]
@@ -468,7 +494,7 @@ mod tests {
         q.and_where(("name", "Alice"));
 
         let (sql, _) = q.to_sql();
-        assert_eq!(sql, "SELECT * FROM employee WHERE name = ?");
+        assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"name\" = ?");
     }
 
     #[test]
@@ -485,7 +511,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee WHERE name = ? AND age > ? AND age <= ? AND salary < ? AND level >= ? AND role != ?"
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? AND \"age\" > ? AND \"age\" <= ? AND \"salary\" < ? AND \"level\" >= ? AND \"role\" != ?"
         );
     }
 
@@ -496,7 +522,10 @@ mod tests {
         q.or_where(col("role").eq("admin"));
 
         let (sql, _) = q.to_sql();
-        assert_eq!(sql, "SELECT * FROM employee WHERE name = ? OR role = ?");
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"employee\" WHERE \"name\" = ? OR \"role\" = ?"
+        );
     }
 
     #[test]
@@ -508,7 +537,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT * FROM employee WHERE name = ? AND (role = ? OR role = ?)"
+            "SELECT * FROM \"employee\" WHERE \"name\" = ? AND (\"role\" = ? OR \"role\" = ?)"
         );
     }
 
@@ -523,7 +552,7 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT * FROM employee WHERE (role = ? AND dept = ?) OR (role = ? AND dept = ?)"
+            "SELECT * FROM \"employee\" WHERE (\"role\" = ? AND \"dept\" = ?) OR (\"role\" = ? AND \"dept\" = ?)"
         );
     }
 
@@ -537,13 +566,13 @@ mod tests {
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT id, name, age FROM employee ORDER BY name ASC, age DESC"
+            "SELECT \"id\", \"name\", \"age\" FROM \"employee\" ORDER BY \"name\" ASC, \"age\" DESC"
         );
 
         let (sql, _) = q.to_pipe_sql();
         assert_eq!(
             sql,
-            "FROM employee |> SELECT id, name, age |> ORDER BY name ASC, age DESC"
+            "FROM \"employee\" |> SELECT \"id\", \"name\", \"age\" |> ORDER BY \"name\" ASC, \"age\" DESC"
         );
     }
 
@@ -555,12 +584,15 @@ mod tests {
         q.offset(20);
 
         let (sql, _) = q.to_sql();
-        assert_eq!(sql, "SELECT id, name FROM employee LIMIT 10 OFFSET 20");
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"employee\" LIMIT 10 OFFSET 20"
+        );
 
         let (sql, _) = q.to_pipe_sql();
         assert_eq!(
             sql,
-            "FROM employee |> SELECT id, name |> LIMIT 10 OFFSET 20"
+            "FROM \"employee\" |> SELECT \"id\", \"name\" |> LIMIT 10 OFFSET 20"
         );
     }
 
@@ -574,7 +606,7 @@ mod tests {
 
         assert_eq!(
             sql,
-            "SELECT id, name FROM employee WHERE name = ? AND age > ?"
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? AND \"age\" > ?"
         );
     }
 

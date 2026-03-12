@@ -6,6 +6,10 @@ impl sqipe::Dialect for BigQuery {
     fn placeholder(&self, index: usize) -> String {
         format!("@p{}", index)
     }
+
+    fn quote_identifier(&self, name: &str) -> String {
+        format!("`{}`", name.replace('`', "``"))
+    }
 }
 
 /// BigQuery-specific query builder wrapping the core Query.
@@ -57,7 +61,10 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, _) = q.to_pipe_sql();
-        assert_eq!(sql, "FROM employee |> WHERE name = @p1 |> SELECT id, name");
+        assert_eq!(
+            sql,
+            "FROM `employee` |> WHERE `name` = @p1 |> SELECT `id`, `name`"
+        );
     }
 
     #[test]
@@ -67,7 +74,10 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, _) = q.to_sql();
-        assert_eq!(sql, "SELECT id, name FROM employee WHERE name = @p1");
+        assert_eq!(
+            sql,
+            "SELECT `id`, `name` FROM `employee` WHERE `name` = @p1"
+        );
     }
 
     #[test]
@@ -83,7 +93,7 @@ mod tests {
         let (sql, _) = q.to_pipe_sql();
         assert_eq!(
             sql,
-            "FROM employee |> WHERE name = @p1 AND age > @p2 |> SELECT id, name |> ORDER BY name ASC |> LIMIT 10 OFFSET 5"
+            "FROM `employee` |> WHERE `name` = @p1 AND `age` > @p2 |> SELECT `id`, `name` |> ORDER BY `name` ASC |> LIMIT 10 OFFSET 5"
         );
     }
 }
