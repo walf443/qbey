@@ -18,7 +18,8 @@ Reference: [Spark SQL Pipe Syntax](https://spark.apache.org/docs/latest/sql-pipe
 - [x] AGGREGATE - Performs aggregation with or without GROUP BY
 - [ ] JOIN - Joins rows from both inputs (INNER, LEFT, RIGHT, FULL, CROSS, SEMI, ANTI)
 - [x] ORDER BY - Returns rows after sorting
-- [ ] UNION / INTERSECT / EXCEPT - Set operations
+- [x] UNION / UNION ALL - Set operations
+- [ ] INTERSECT / EXCEPT - Set operations
 - [ ] TABLESAMPLE - Returns subset of rows by sampling
 - [ ] PIVOT - Pivots rows to columns
 - [ ] UNPIVOT - Pivots columns to rows
