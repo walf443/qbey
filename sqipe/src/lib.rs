@@ -185,6 +185,86 @@ pub struct OrderByClause {
     dir: SortDir,
 }
 
+/// Aggregate expression builder.
+pub mod aggregate {
+    /// An aggregate expression that can be aliased with `.as_()`.
+    #[derive(Debug, Clone)]
+    pub struct AggregateExpr {
+        pub(crate) expr: AggregateFunc,
+        pub(crate) alias: Option<String>,
+    }
+
+    #[derive(Debug, Clone)]
+    pub(crate) enum AggregateFunc {
+        CountAll,
+        Count(String),
+        Sum(String),
+        Avg(String),
+        Min(String),
+        Max(String),
+        Expr(String),
+    }
+
+    impl AggregateExpr {
+        pub fn as_(mut self, alias: &str) -> Self {
+            self.alias = Some(alias.to_string());
+            self
+        }
+    }
+
+    pub fn count_all() -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::CountAll,
+            alias: None,
+        }
+    }
+
+    pub fn count(col: &str) -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::Count(col.to_string()),
+            alias: None,
+        }
+    }
+
+    pub fn sum(col: &str) -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::Sum(col.to_string()),
+            alias: None,
+        }
+    }
+
+    pub fn avg(col: &str) -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::Avg(col.to_string()),
+            alias: None,
+        }
+    }
+
+    pub fn min(col: &str) -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::Min(col.to_string()),
+            alias: None,
+        }
+    }
+
+    pub fn max(col: &str) -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::Max(col.to_string()),
+            alias: None,
+        }
+    }
+
+    /// Raw SQL expression for dialect-specific aggregate functions.
+    pub fn expr(raw: &str) -> AggregateExpr {
+        AggregateExpr {
+            expr: AggregateFunc::Expr(raw.to_string()),
+            alias: None,
+        }
+    }
+}
+
+use aggregate::{AggregateExpr, AggregateFunc};
+
 /// Trait for SQL dialect placeholder and quoting styles.
 pub trait Dialect {
     fn placeholder(&self, index: usize) -> String;
@@ -217,6 +297,8 @@ pub struct Query {
     table: String,
     selects: Vec<String>,
     wheres: Vec<WhereEntry>,
+    aggregates: Vec<AggregateExpr>,
+    group_bys: Vec<String>,
     order_bys: Vec<OrderByClause>,
     limit_val: Option<u64>,
     offset_val: Option<u64>,
@@ -228,6 +310,8 @@ pub fn sqipe(table: &str) -> Query {
         table: table.to_string(),
         selects: Vec::new(),
         wheres: Vec::new(),
+        aggregates: Vec::new(),
+        group_bys: Vec::new(),
         order_bys: Vec::new(),
         limit_val: None,
         offset_val: None,
@@ -247,6 +331,16 @@ impl Query {
 
     pub fn select(&mut self, cols: &[&str]) -> &mut Self {
         self.selects = cols.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    pub fn aggregate(&mut self, exprs: &[AggregateExpr]) -> &mut Self {
+        self.aggregates = exprs.to_vec();
+        self
+    }
+
+    pub fn group_by(&mut self, cols: &[&str]) -> &mut Self {
+        self.group_bys = cols.iter().map(|s| s.to_string()).collect();
         self
     }
 
@@ -310,6 +404,30 @@ impl Query {
         }
     }
 
+    fn render_aggregate_expr(expr: &AggregateExpr, cfg: &SqlConfig) -> String {
+        let func_str = match &expr.expr {
+            AggregateFunc::CountAll => "COUNT(*)".to_string(),
+            AggregateFunc::Count(col) => format!("COUNT({})", (cfg.qi)(col)),
+            AggregateFunc::Sum(col) => format!("SUM({})", (cfg.qi)(col)),
+            AggregateFunc::Avg(col) => format!("AVG({})", (cfg.qi)(col)),
+            AggregateFunc::Min(col) => format!("MIN({})", (cfg.qi)(col)),
+            AggregateFunc::Max(col) => format!("MAX({})", (cfg.qi)(col)),
+            AggregateFunc::Expr(raw) => raw.clone(),
+        };
+        match &expr.alias {
+            Some(alias) => format!("{} AS {}", func_str, (cfg.qi)(alias)),
+            None => func_str,
+        }
+    }
+
+    fn build_group_by_clause(&self, cfg: &SqlConfig) -> Option<String> {
+        if self.group_bys.is_empty() {
+            return None;
+        }
+        let cols: Vec<String> = self.group_bys.iter().map(|c| (cfg.qi)(c)).collect();
+        Some(format!("GROUP BY {}", cols.join(", ")))
+    }
+
     fn build_order_by_clause(&self, cfg: &SqlConfig) -> Option<String> {
         if self.order_bys.is_empty() {
             return None;
@@ -339,11 +457,28 @@ impl Query {
         let mut binds = Vec::new();
         let mut parts = Vec::new();
 
-        parts.push(self.build_select_clause(cfg));
+        if !self.aggregates.is_empty() {
+            // Aggregate query: SELECT group_by_cols, agg_exprs FROM table ... GROUP BY
+            let mut select_items = Vec::new();
+            for col in &self.group_bys {
+                select_items.push((cfg.qi)(col));
+            }
+            for expr in &self.aggregates {
+                select_items.push(Self::render_aggregate_expr(expr, cfg));
+            }
+            parts.push(format!("SELECT {}", select_items.join(", ")));
+        } else {
+            parts.push(self.build_select_clause(cfg));
+        }
+
         parts.push(format!("FROM {}", (cfg.qi)(&self.table)));
 
         if let Some(where_sql) = self.build_where(cfg, &mut binds) {
             parts.push(format!("WHERE {}", where_sql));
+        }
+
+        if let Some(group_by) = self.build_group_by_clause(cfg) {
+            parts.push(group_by);
         }
 
         if let Some(order_by) = self.build_order_by_clause(cfg) {
@@ -371,7 +506,21 @@ impl Query {
             parts.push(format!("WHERE {}", where_sql));
         }
 
-        parts.push(self.build_select_clause(cfg));
+        if !self.aggregates.is_empty() {
+            // Pipe syntax: AGGREGATE exprs GROUP BY cols
+            let agg_exprs: Vec<String> = self
+                .aggregates
+                .iter()
+                .map(|e| Self::render_aggregate_expr(e, cfg))
+                .collect();
+            let mut agg_clause = format!("AGGREGATE {}", agg_exprs.join(", "));
+            if let Some(group_by) = self.build_group_by_clause(cfg) {
+                agg_clause.push_str(&format!(" {}", group_by));
+            }
+            parts.push(agg_clause);
+        } else {
+            parts.push(self.build_select_clause(cfg));
+        }
 
         if let Some(order_by) = self.build_order_by_clause(cfg) {
             parts.push(order_by);
@@ -607,6 +756,110 @@ mod tests {
         assert_eq!(
             sql,
             "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? AND \"age\" > ?"
+        );
+    }
+
+    #[test]
+    fn test_aggregate_to_sql() {
+        let mut q = sqipe("employee");
+        q.aggregate(&[
+            aggregate::count_all().as_("cnt"),
+            aggregate::sum("salary").as_("total_salary"),
+        ]);
+        q.group_by(&["dept"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total_salary\" FROM \"employee\" GROUP BY \"dept\""
+        );
+    }
+
+    #[test]
+    fn test_aggregate_to_pipe_sql() {
+        let mut q = sqipe("employee");
+        q.aggregate(&[
+            aggregate::count_all().as_("cnt"),
+            aggregate::sum("salary").as_("total_salary"),
+        ]);
+        q.group_by(&["dept"]);
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"employee\" |> AGGREGATE COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total_salary\" GROUP BY \"dept\""
+        );
+    }
+
+    #[test]
+    fn test_aggregate_without_group_by() {
+        let mut q = sqipe("employee");
+        q.aggregate(&[aggregate::count_all().as_("cnt")]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT COUNT(*) AS \"cnt\" FROM \"employee\""
+        );
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"employee\" |> AGGREGATE COUNT(*) AS \"cnt\""
+        );
+    }
+
+    #[test]
+    fn test_aggregate_with_where() {
+        let mut q = sqipe("employee");
+        q.and_where(col("active").eq(true));
+        q.aggregate(&[aggregate::count_all().as_("cnt")]);
+        q.group_by(&["dept"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" WHERE \"active\" = ? GROUP BY \"dept\""
+        );
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"employee\" |> WHERE \"active\" = ? |> AGGREGATE COUNT(*) AS \"cnt\" GROUP BY \"dept\""
+        );
+    }
+
+    #[test]
+    fn test_aggregate_all_functions() {
+        let mut q = sqipe("employee");
+        q.aggregate(&[
+            aggregate::count_all().as_("cnt"),
+            aggregate::count("id").as_("id_cnt"),
+            aggregate::sum("salary").as_("total"),
+            aggregate::avg("salary").as_("average"),
+            aggregate::min("salary").as_("lowest"),
+            aggregate::max("salary").as_("highest"),
+        ]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT COUNT(*) AS \"cnt\", COUNT(\"id\") AS \"id_cnt\", SUM(\"salary\") AS \"total\", AVG(\"salary\") AS \"average\", MIN(\"salary\") AS \"lowest\", MAX(\"salary\") AS \"highest\" FROM \"employee\""
+        );
+    }
+
+    #[test]
+    fn test_aggregate_expr_raw() {
+        let mut q = sqipe("employee");
+        q.aggregate(&[
+            aggregate::count_all().as_("cnt"),
+            aggregate::expr("APPROX_COUNT_DISTINCT(user_id)").as_("approx_users"),
+        ]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT COUNT(*) AS \"cnt\", APPROX_COUNT_DISTINCT(user_id) AS \"approx_users\" FROM \"employee\""
         );
     }
 

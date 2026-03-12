@@ -15,7 +15,7 @@ Reference: [Spark SQL Pipe Syntax](https://spark.apache.org/docs/latest/sql-pipe
 - [x] WHERE - Returns subset of rows passing the condition
 - [x] LIMIT - Returns specified number of rows
 - [x] OFFSET - Skips specified number of rows
-- [ ] AGGREGATE - Performs aggregation with or without GROUP BY
+- [x] AGGREGATE - Performs aggregation with or without GROUP BY
 - [ ] JOIN - Joins rows from both inputs (INNER, LEFT, RIGHT, FULL, CROSS, SEMI, ANTI)
 - [x] ORDER BY - Returns rows after sorting
 - [ ] UNION / INTERSECT / EXCEPT - Set operations
