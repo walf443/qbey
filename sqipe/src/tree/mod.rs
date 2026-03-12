@@ -27,23 +27,23 @@ pub enum SelectClause {
     },
 }
 
-/// AST for a single SELECT query.
+/// AST for a single SELECT query, generic over bind value type.
 #[derive(Debug, Clone)]
-pub struct SelectTree {
+pub struct SelectTree<V: Clone = crate::Value> {
     pub from: FromClause,
     pub joins: Vec<JoinClause>,
-    pub(crate) wheres: Vec<WhereEntry>,
-    pub(crate) havings: Vec<WhereEntry>,
+    pub(crate) wheres: Vec<WhereEntry<V>>,
+    pub(crate) havings: Vec<WhereEntry<V>>,
     pub select: SelectClause,
     pub order_bys: Vec<OrderByClause>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
 }
 
-/// AST for a UNION query.
+/// AST for a UNION query, generic over bind value type.
 #[derive(Debug, Clone)]
-pub struct UnionTree {
-    pub parts: Vec<(crate::SetOp, SelectTree)>,
+pub struct UnionTree<V: Clone = crate::Value> {
+    pub parts: Vec<(crate::SetOp, SelectTree<V>)>,
     pub order_bys: Vec<OrderByClause>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
@@ -51,8 +51,8 @@ pub struct UnionTree {
 
 // ── Build tree from Query ──
 
-impl SelectTree {
-    pub fn from_query(query: &crate::Query) -> Self {
+impl<V: Clone + std::fmt::Debug> SelectTree<V> {
+    pub fn from_query(query: &crate::Query<V>) -> Self {
         let select = if !query.aggregates.is_empty() {
             SelectClause::Aggregate {
                 group_bys: query.group_bys.clone(),
@@ -79,8 +79,8 @@ impl SelectTree {
     }
 }
 
-impl UnionTree {
-    pub fn from_union_query(union: &crate::UnionQuery) -> Self {
+impl<V: Clone + std::fmt::Debug> UnionTree<V> {
+    pub fn from_union_query(union: &crate::UnionQuery<V>) -> Self {
         let parts = union
             .parts
             .iter()

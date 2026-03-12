@@ -1,7 +1,46 @@
 #![cfg(feature = "test-sqlx")]
 
-use sqipe::{col, sqipe, table};
+use sqipe::{col, sqipe_with, table};
 use sqlx::{Row, SqlitePool};
+
+#[derive(Debug, Clone)]
+enum SqliteValue {
+    Text(String),
+    Integer(i64),
+    Real(f64),
+}
+
+impl From<&str> for SqliteValue {
+    fn from(s: &str) -> Self {
+        SqliteValue::Text(s.to_string())
+    }
+}
+
+impl From<i32> for SqliteValue {
+    fn from(n: i32) -> Self {
+        SqliteValue::Integer(n as i64)
+    }
+}
+
+impl From<f64> for SqliteValue {
+    fn from(n: f64) -> Self {
+        SqliteValue::Real(n)
+    }
+}
+
+fn bind_params<'a>(
+    mut query: sqlx::query::Query<'a, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'a>>,
+    binds: &'a [SqliteValue],
+) -> sqlx::query::Query<'a, sqlx::Sqlite, sqlx::sqlite::SqliteArguments<'a>> {
+    for bind in binds {
+        query = match bind {
+            SqliteValue::Text(s) => query.bind(s.as_str()),
+            SqliteValue::Integer(n) => query.bind(*n),
+            SqliteValue::Real(f) => query.bind(*f),
+        };
+    }
+    query
+}
 
 async fn setup_db() -> SqlitePool {
     let pool = SqlitePool::connect(":memory:").await.unwrap();
@@ -46,7 +85,7 @@ async fn setup_db() -> SqlitePool {
 async fn test_basic_select() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.select(&["id", "name"]);
     let (sql, _binds) = q.to_sql();
 
@@ -59,22 +98,15 @@ async fn test_basic_select() {
 async fn test_where_condition() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.and_where(("name", "Alice"));
     q.select(&["id", "name", "age"]);
     let (sql, binds) = q.to_sql();
 
-    let mut query = sqlx::query(&sql);
-    for bind in &binds {
-        query = match bind {
-            sqipe::Value::String(s) => query.bind(s.as_str()),
-            sqipe::Value::Int(n) => query.bind(*n),
-            sqipe::Value::Float(f) => query.bind(*f),
-            sqipe::Value::Bool(b) => query.bind(*b),
-        };
-    }
-
-    let rows = query.fetch_all(&pool).await.unwrap();
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
     assert_eq!(rows[0].get::<i64, _>("age"), 30);
@@ -84,7 +116,7 @@ async fn test_where_condition() {
 async fn test_order_by_and_limit() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.select(&["id", "name"]);
     q.order_by(col("age").desc());
     q.limit(2);
@@ -100,24 +132,17 @@ async fn test_order_by_and_limit() {
 async fn test_join() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.join("orders", table("users").col("id").eq_col("user_id"));
     q.and_where(table("orders").col("status").eq("shipped"));
     q.select_cols(&table("users").cols(&["id", "name"]));
     q.add_select(table("orders").col("total"));
     let (sql, binds) = q.to_sql();
 
-    let mut query = sqlx::query(&sql);
-    for bind in &binds {
-        query = match bind {
-            sqipe::Value::String(s) => query.bind(s.as_str()),
-            sqipe::Value::Int(n) => query.bind(*n),
-            sqipe::Value::Float(f) => query.bind(*f),
-            sqipe::Value::Bool(b) => query.bind(*b),
-        };
-    }
-
-    let rows = query.fetch_all(&pool).await.unwrap();
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2);
 }
 
@@ -125,7 +150,7 @@ async fn test_join() {
 async fn test_join_with_alias() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.as_("u");
     q.join(
         table("orders").as_("o"),
@@ -137,17 +162,10 @@ async fn test_join_with_alias() {
     q.select_cols(&cols);
     let (sql, binds) = q.to_sql();
 
-    let mut query = sqlx::query(&sql);
-    for bind in &binds {
-        query = match bind {
-            sqipe::Value::String(s) => query.bind(s.as_str()),
-            sqipe::Value::Int(n) => query.bind(*n),
-            sqipe::Value::Float(f) => query.bind(*f),
-            sqipe::Value::Bool(b) => query.bind(*b),
-        };
-    }
-
-    let rows = query.fetch_all(&pool).await.unwrap();
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
 }
@@ -156,7 +174,7 @@ async fn test_join_with_alias() {
 async fn test_left_join() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.as_("u");
     q.left_join(
         table("orders").as_("o"),
@@ -167,7 +185,7 @@ async fn test_left_join() {
     let (sql, _) = q.to_sql();
 
     let rows = sqlx::query(&sql).fetch_all(&pool).await.unwrap();
-    // Alice has 2 orders, Bob has 1 order, Charlie has 0 orders (NULL total)
+    // Alice=2 orders, Bob=1 order, Charlie=0 orders (NULL total)
     assert_eq!(rows.len(), 4);
 }
 
@@ -175,23 +193,16 @@ async fn test_left_join() {
 async fn test_between() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.and_where(col("age").between(25, 30));
     q.select(&["id", "name"]);
     q.order_by(col("name").asc());
     let (sql, binds) = q.to_sql();
 
-    let mut query = sqlx::query(&sql);
-    for bind in &binds {
-        query = match bind {
-            sqipe::Value::String(s) => query.bind(s.as_str()),
-            sqipe::Value::Int(n) => query.bind(*n),
-            sqipe::Value::Float(f) => query.bind(*f),
-            sqipe::Value::Bool(b) => query.bind(*b),
-        };
-    }
-
-    let rows = query.fetch_all(&pool).await.unwrap();
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2);
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
     assert_eq!(rows[1].get::<String, _>("name"), "Bob");
@@ -201,7 +212,7 @@ async fn test_between() {
 async fn test_aggregate_count() {
     let pool = setup_db().await;
 
-    let mut q = sqipe("orders");
+    let mut q = sqipe_with::<SqliteValue>("orders");
     q.aggregate(&[sqipe::aggregate::count_all().as_("cnt")]);
     q.group_by(&["status"]);
     q.select(&["status"]);
@@ -217,27 +228,20 @@ async fn test_union() {
 
     use sqipe::UnionQueryOps;
 
-    let mut q1 = sqipe("users");
+    let mut q1 = sqipe_with::<SqliteValue>("users");
     q1.and_where(col("age").gt(30));
     q1.select(&["id", "name"]);
 
-    let mut q2 = sqipe("users");
+    let mut q2 = sqipe_with::<SqliteValue>("users");
     q2.and_where(col("age").lt(26));
     q2.select(&["id", "name"]);
 
     let uq = q1.union(&q2);
     let (sql, binds) = uq.to_sql();
 
-    let mut query = sqlx::query(&sql);
-    for bind in &binds {
-        query = match bind {
-            sqipe::Value::String(s) => query.bind(s.as_str()),
-            sqipe::Value::Int(n) => query.bind(*n),
-            sqipe::Value::Float(f) => query.bind(*f),
-            sqipe::Value::Bool(b) => query.bind(*b),
-        };
-    }
-
-    let rows = query.fetch_all(&pool).await.unwrap();
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
     assert_eq!(rows.len(), 2); // Charlie (35) and Bob (25)
 }

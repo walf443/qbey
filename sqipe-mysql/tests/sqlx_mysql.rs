@@ -1,10 +1,43 @@
 #![cfg(feature = "test-sqlx")]
 
 use sqipe::{col, table};
-use sqipe_mysql::sqipe;
+use sqipe_mysql::sqipe_with;
 use sqlx::{MySqlPool, Row};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::mysql::Mysql;
+
+/// Custom value type for MySQL — maps directly to sqlx bind types.
+#[derive(Debug, Clone)]
+enum MysqlValue {
+    Text(String),
+    Int(i64),
+    Float(f64),
+    Bool(bool),
+}
+
+impl From<&str> for MysqlValue {
+    fn from(s: &str) -> Self {
+        MysqlValue::Text(s.to_string())
+    }
+}
+
+impl From<i32> for MysqlValue {
+    fn from(n: i32) -> Self {
+        MysqlValue::Int(n as i64)
+    }
+}
+
+impl From<f64> for MysqlValue {
+    fn from(n: f64) -> Self {
+        MysqlValue::Float(n)
+    }
+}
+
+impl From<bool> for MysqlValue {
+    fn from(b: bool) -> Self {
+        MysqlValue::Bool(b)
+    }
+}
 
 async fn setup_container() -> (testcontainers::ContainerAsync<Mysql>, MySqlPool) {
     let container = Mysql::default().start().await.unwrap();
@@ -51,14 +84,14 @@ async fn setup_container() -> (testcontainers::ContainerAsync<Mysql>, MySqlPool)
 
 fn bind_params<'a>(
     mut query: sqlx::query::Query<'a, sqlx::MySql, sqlx::mysql::MySqlArguments>,
-    binds: &'a [sqipe::Value],
+    binds: &'a [MysqlValue],
 ) -> sqlx::query::Query<'a, sqlx::MySql, sqlx::mysql::MySqlArguments> {
     for bind in binds {
         query = match bind {
-            sqipe::Value::String(s) => query.bind(s.as_str()),
-            sqipe::Value::Int(n) => query.bind(*n),
-            sqipe::Value::Float(f) => query.bind(*f),
-            sqipe::Value::Bool(b) => query.bind(*b),
+            MysqlValue::Text(s) => query.bind(s.as_str()),
+            MysqlValue::Int(n) => query.bind(*n),
+            MysqlValue::Float(f) => query.bind(*f),
+            MysqlValue::Bool(b) => query.bind(*b),
         };
     }
     query
@@ -68,7 +101,7 @@ fn bind_params<'a>(
 async fn test_basic_select() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.select(&["id", "name"]);
     let (sql, _) = q.to_sql();
 
@@ -81,7 +114,7 @@ async fn test_basic_select() {
 async fn test_where_condition() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.and_where(("name", "Alice"));
     q.select(&["id", "name", "age"]);
     let (sql, binds) = q.to_sql();
@@ -100,7 +133,7 @@ async fn test_where_condition() {
 async fn test_order_by_and_limit() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.select(&["id", "name"]);
     q.order_by(col("age").desc());
     q.limit(2);
@@ -116,7 +149,7 @@ async fn test_order_by_and_limit() {
 async fn test_join() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.join("orders", table("users").col("id").eq_col("user_id"));
     q.and_where(table("orders").col("status").eq("shipped"));
     q.select_cols(&table("users").cols(&["id", "name"]));
@@ -135,7 +168,7 @@ async fn test_join() {
 async fn test_join_with_alias() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.as_("u");
     q.join(
         table("orders").as_("o"),
@@ -160,7 +193,7 @@ async fn test_join_with_alias() {
 async fn test_left_join() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.as_("u");
     q.left_join(
         table("orders").as_("o"),
@@ -178,7 +211,7 @@ async fn test_left_join() {
 async fn test_straight_join() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.straight_join("orders", table("users").col("id").eq_col("user_id"));
     q.select_cols(&table("users").cols(&["id", "name"]));
     q.add_select(table("orders").col("total"));
@@ -198,7 +231,7 @@ async fn test_force_index() {
         .await
         .unwrap();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.force_index(&["idx_name"]);
     q.and_where(("name", "Alice"));
     q.select(&["id", "name"]);
@@ -217,7 +250,7 @@ async fn test_force_index() {
 async fn test_between() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<MysqlValue>("users");
     q.and_where(col("age").between(25, 30));
     q.select(&["id", "name"]);
     q.order_by(col("name").asc());
@@ -237,7 +270,7 @@ async fn test_between() {
 async fn test_aggregate_count() {
     let (_container, pool) = setup_container().await;
 
-    let mut q = sqipe("orders");
+    let mut q = sqipe_with::<MysqlValue>("orders");
     q.aggregate(&[sqipe::aggregate::count_all().as_("cnt")]);
     q.group_by(&["status"]);
     q.select(&["status"]);
@@ -253,11 +286,11 @@ async fn test_union() {
 
     use sqipe::UnionQueryOps;
 
-    let mut q1 = sqipe("users");
+    let mut q1 = sqipe_with::<MysqlValue>("users");
     q1.and_where(col("age").gt(30));
     q1.select(&["id", "name"]);
 
-    let mut q2 = sqipe("users");
+    let mut q2 = sqipe_with::<MysqlValue>("users");
     q2.and_where(col("age").lt(26));
     q2.select(&["id", "name"]);
 

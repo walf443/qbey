@@ -1,7 +1,7 @@
 #![cfg(feature = "test-postgres")]
 
 use postgres::{Client, NoTls, types::ToSql};
-use sqipe::{Dialect, col, sqipe, table};
+use sqipe::{Dialect, col, sqipe_with, table};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 
@@ -13,15 +13,48 @@ impl Dialect for PostgresDialect {
     }
 }
 
-fn to_pg_params(binds: &[sqipe::Value]) -> Vec<Box<dyn ToSql + Sync>> {
+/// Custom value type for PostgreSQL — stores i32 directly.
+#[derive(Debug, Clone)]
+enum PgValue {
+    Text(String),
+    Int(i32),
+    Float(f64),
+    Bool(bool),
+}
+
+impl From<&str> for PgValue {
+    fn from(s: &str) -> Self {
+        PgValue::Text(s.to_string())
+    }
+}
+
+impl From<i32> for PgValue {
+    fn from(n: i32) -> Self {
+        PgValue::Int(n)
+    }
+}
+
+impl From<f64> for PgValue {
+    fn from(n: f64) -> Self {
+        PgValue::Float(n)
+    }
+}
+
+impl From<bool> for PgValue {
+    fn from(b: bool) -> Self {
+        PgValue::Bool(b)
+    }
+}
+
+fn to_pg_params(binds: &[PgValue]) -> Vec<Box<dyn ToSql + Sync>> {
     binds
         .iter()
         .map(|v| -> Box<dyn ToSql + Sync> {
             match v {
-                sqipe::Value::String(s) => Box::new(s.clone()),
-                sqipe::Value::Int(n) => Box::new(*n as i32),
-                sqipe::Value::Float(f) => Box::new(*f),
-                sqipe::Value::Bool(b) => Box::new(*b),
+                PgValue::Text(s) => Box::new(s.clone()),
+                PgValue::Int(n) => Box::new(*n),
+                PgValue::Float(f) => Box::new(*f),
+                PgValue::Bool(b) => Box::new(*b),
             }
         })
         .collect()
@@ -83,7 +116,7 @@ macro_rules! pg_test {
 }
 
 pg_test!(test_basic_select, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.select(&["id", "name"]);
     let (sql, _) = q.to_sql_with(&PostgresDialect);
 
@@ -93,7 +126,7 @@ pg_test!(test_basic_select, |client| {
 });
 
 pg_test!(test_where_condition, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.and_where(("name", "Alice"));
     q.select(&["id", "name", "age"]);
     let (sql, binds) = q.to_sql_with(&PostgresDialect);
@@ -108,7 +141,7 @@ pg_test!(test_where_condition, |client| {
 });
 
 pg_test!(test_order_by_and_limit, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.select(&["id", "name"]);
     q.order_by(col("age").desc());
     q.limit(2);
@@ -121,7 +154,7 @@ pg_test!(test_order_by_and_limit, |client| {
 });
 
 pg_test!(test_join, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.join("orders", table("users").col("id").eq_col("user_id"));
     q.and_where(table("orders").col("status").eq("shipped"));
     q.select_cols(&table("users").cols(&["id", "name"]));
@@ -136,7 +169,7 @@ pg_test!(test_join, |client| {
 });
 
 pg_test!(test_join_with_alias, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.as_("u");
     q.join(
         table("orders").as_("o"),
@@ -157,7 +190,7 @@ pg_test!(test_join_with_alias, |client| {
 });
 
 pg_test!(test_left_join, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.as_("u");
     q.left_join(
         table("orders").as_("o"),
@@ -172,7 +205,7 @@ pg_test!(test_left_join, |client| {
 });
 
 pg_test!(test_between, |client| {
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<PgValue>("users");
     q.and_where(col("age").between(25, 30));
     q.select(&["id", "name"]);
     q.order_by(col("name").asc());
@@ -188,7 +221,7 @@ pg_test!(test_between, |client| {
 });
 
 pg_test!(test_aggregate_count, |client| {
-    let mut q = sqipe("orders");
+    let mut q = sqipe_with::<PgValue>("orders");
     q.aggregate(&[sqipe::aggregate::count_all().as_("cnt")]);
     q.group_by(&["status"]);
     q.select(&["status"]);
@@ -199,11 +232,11 @@ pg_test!(test_aggregate_count, |client| {
 });
 
 pg_test!(test_union, |client| {
-    let mut q1 = sqipe("users");
+    let mut q1 = sqipe_with::<PgValue>("users");
     q1.and_where(col("age").gt(30));
     q1.select(&["id", "name"]);
 
-    let mut q2 = sqipe("users");
+    let mut q2 = sqipe_with::<PgValue>("users");
     q2.and_where(col("age").lt(26));
     q2.select(&["id", "name"]);
 

@@ -1,7 +1,45 @@
 #![cfg(feature = "test-rusqlite")]
 
 use rusqlite::{Connection, params_from_iter};
-use sqipe::{col, sqipe, table};
+use sqipe::{col, sqipe_with, table};
+
+#[derive(Debug, Clone)]
+enum SqliteValue {
+    Text(String),
+    Integer(i64),
+    Real(f64),
+}
+
+impl From<&str> for SqliteValue {
+    fn from(s: &str) -> Self {
+        SqliteValue::Text(s.to_string())
+    }
+}
+
+impl From<i32> for SqliteValue {
+    fn from(n: i32) -> Self {
+        SqliteValue::Integer(n as i64)
+    }
+}
+
+impl From<f64> for SqliteValue {
+    fn from(n: f64) -> Self {
+        SqliteValue::Real(n)
+    }
+}
+
+fn to_rusqlite_params(binds: &[SqliteValue]) -> Vec<Box<dyn rusqlite::types::ToSql>> {
+    binds
+        .iter()
+        .map(|v| -> Box<dyn rusqlite::types::ToSql> {
+            match v {
+                SqliteValue::Text(s) => Box::new(s.clone()),
+                SqliteValue::Integer(n) => Box::new(*n),
+                SqliteValue::Real(f) => Box::new(*f),
+            }
+        })
+        .collect()
+}
 
 fn setup_db() -> Connection {
     let conn = Connection::open_in_memory().unwrap();
@@ -26,26 +64,11 @@ fn setup_db() -> Connection {
     conn
 }
 
-/// Convert sqipe::Value to a type rusqlite can bind.
-fn to_rusqlite_params(binds: &[sqipe::Value]) -> Vec<Box<dyn rusqlite::types::ToSql>> {
-    binds
-        .iter()
-        .map(|v| -> Box<dyn rusqlite::types::ToSql> {
-            match v {
-                sqipe::Value::String(s) => Box::new(s.clone()),
-                sqipe::Value::Int(n) => Box::new(*n),
-                sqipe::Value::Float(f) => Box::new(*f),
-                sqipe::Value::Bool(b) => Box::new(*b),
-            }
-        })
-        .collect()
-}
-
 #[test]
 fn test_basic_select() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.select(&["id", "name"]);
     let (sql, _) = q.to_sql();
 
@@ -63,7 +86,7 @@ fn test_basic_select() {
 fn test_where_condition() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.and_where(("name", "Alice"));
     q.select(&["id", "name", "age"]);
     let (sql, binds) = q.to_sql();
@@ -86,7 +109,7 @@ fn test_where_condition() {
 fn test_order_by_and_limit() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.select(&["id", "name"]);
     q.order_by(col("age").desc());
     q.limit(2);
@@ -106,7 +129,7 @@ fn test_order_by_and_limit() {
 fn test_join() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.join("orders", table("users").col("id").eq_col("user_id"));
     q.and_where(table("orders").col("status").eq("shipped"));
     q.select_cols(&table("users").cols(&["id", "name"]));
@@ -130,7 +153,7 @@ fn test_join() {
 fn test_join_with_alias() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.as_("u");
     q.join(
         table("orders").as_("o"),
@@ -160,7 +183,7 @@ fn test_join_with_alias() {
 fn test_left_join() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.as_("u");
     q.left_join(
         table("orders").as_("o"),
@@ -185,7 +208,7 @@ fn test_left_join() {
 fn test_between() {
     let conn = setup_db();
 
-    let mut q = sqipe("users");
+    let mut q = sqipe_with::<SqliteValue>("users");
     q.and_where(col("age").between(25, 30));
     q.select(&["id", "name"]);
     q.order_by(col("name").asc());
@@ -208,7 +231,7 @@ fn test_between() {
 fn test_aggregate_count() {
     let conn = setup_db();
 
-    let mut q = sqipe("orders");
+    let mut q = sqipe_with::<SqliteValue>("orders");
     q.aggregate(&[sqipe::aggregate::count_all().as_("cnt")]);
     q.group_by(&["status"]);
     q.select(&["status"]);
@@ -230,11 +253,11 @@ fn test_union() {
 
     use sqipe::UnionQueryOps;
 
-    let mut q1 = sqipe("users");
+    let mut q1 = sqipe_with::<SqliteValue>("users");
     q1.and_where(col("age").gt(30));
     q1.select(&["id", "name"]);
 
-    let mut q2 = sqipe("users");
+    let mut q2 = sqipe_with::<SqliteValue>("users");
     q2.and_where(col("age").lt(26));
     q2.select(&["id", "name"]);
 

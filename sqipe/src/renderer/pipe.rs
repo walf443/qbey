@@ -1,5 +1,3 @@
-use crate::Value;
-
 use super::{
     RenderConfig, Renderer, append_limit_offset_pipe, append_order_by, render_aggregate_expr,
     render_from, render_joins, render_select_columns, render_wheres, set_op_keyword,
@@ -9,7 +7,12 @@ use crate::tree::{SelectClause, SelectTree, UnionTree};
 pub struct PipeSqlRenderer;
 
 impl PipeSqlRenderer {
-    fn render_core(&self, tree: &SelectTree, cfg: &RenderConfig, binds: &mut Vec<Value>) -> String {
+    fn render_core<V: Clone>(
+        &self,
+        tree: &SelectTree<V>,
+        cfg: &RenderConfig,
+        binds: &mut Vec<V>,
+    ) -> String {
         let mut parts = Vec::new();
 
         parts.push(render_from(&tree.from, cfg));
@@ -47,11 +50,11 @@ impl PipeSqlRenderer {
         parts.join(" |> ")
     }
 
-    fn render_union_part(
+    fn render_union_part<V: Clone>(
         &self,
-        tree: &SelectTree,
+        tree: &SelectTree<V>,
         cfg: &RenderConfig,
-        binds: &mut Vec<Value>,
+        binds: &mut Vec<V>,
     ) -> String {
         let mut sql = self.render_core(tree, cfg, binds);
         let has_extra = !tree.order_bys.is_empty() || tree.limit.is_some() || tree.offset.is_some();
@@ -67,7 +70,11 @@ impl PipeSqlRenderer {
 }
 
 impl Renderer for PipeSqlRenderer {
-    fn render_select(&self, tree: &SelectTree, cfg: &RenderConfig) -> (String, Vec<Value>) {
+    fn render_select<V: Clone>(
+        &self,
+        tree: &SelectTree<V>,
+        cfg: &RenderConfig,
+    ) -> (String, Vec<V>) {
         let mut binds = Vec::new();
         let mut sql = self.render_core(tree, cfg, &mut binds);
         append_order_by(&mut sql, &tree.order_bys, cfg, " |> ");
@@ -75,7 +82,7 @@ impl Renderer for PipeSqlRenderer {
         (sql, binds)
     }
 
-    fn render_union(&self, tree: &UnionTree, cfg: &RenderConfig) -> (String, Vec<Value>) {
+    fn render_union<V: Clone>(&self, tree: &UnionTree<V>, cfg: &RenderConfig) -> (String, Vec<V>) {
         let mut binds = Vec::new();
         let mut sql = String::new();
 

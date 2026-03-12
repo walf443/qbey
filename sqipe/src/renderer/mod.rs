@@ -1,6 +1,6 @@
 use crate::{
     AggregateExpr, AggregateFunc, ColRef, JoinClause, JoinCondition, JoinType, OrderByClause,
-    SortDir, Value, WhereClause, WhereEntry,
+    SortDir, WhereClause, WhereEntry,
 };
 
 pub mod pipe;
@@ -16,8 +16,9 @@ pub struct RenderConfig<'a> {
 
 /// Trait for SQL rendering strategies.
 pub trait Renderer {
-    fn render_select(&self, tree: &SelectTree, cfg: &RenderConfig) -> (String, Vec<Value>);
-    fn render_union(&self, tree: &UnionTree, cfg: &RenderConfig) -> (String, Vec<Value>);
+    fn render_select<V: Clone>(&self, tree: &SelectTree<V>, cfg: &RenderConfig)
+    -> (String, Vec<V>);
+    fn render_union<V: Clone>(&self, tree: &UnionTree<V>, cfg: &RenderConfig) -> (String, Vec<V>);
 }
 
 // ── Shared rendering helpers (crate-visible for standard/pipe modules) ──
@@ -67,10 +68,10 @@ pub(super) fn append_limit_offset_pipe(sql: &mut String, limit: Option<u64>, off
     }
 }
 
-pub(super) fn render_wheres(
-    wheres: &[WhereEntry],
+pub(super) fn render_wheres<V: Clone>(
+    wheres: &[WhereEntry<V>],
     cfg: &RenderConfig,
-    binds: &mut Vec<Value>,
+    binds: &mut Vec<V>,
 ) -> Option<String> {
     if wheres.is_empty() {
         return None;
@@ -210,11 +211,11 @@ fn render_select_item(col: &ColRef, cfg: &RenderConfig) -> String {
     }
 }
 
-fn render_where_clause(
-    clause: &WhereClause,
+fn render_where_clause<V: Clone>(
+    clause: &WhereClause<V>,
     is_top_level: bool,
     cfg: &RenderConfig,
-    binds: &mut Vec<Value>,
+    binds: &mut Vec<V>,
 ) -> String {
     match clause {
         WhereClause::Condition { col, op, val } => {

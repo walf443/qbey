@@ -206,51 +206,51 @@ impl IntoColRef for ColRef {
 macro_rules! impl_col_methods {
     ($ty:ty) => {
         impl $ty {
-            pub fn eq(self, val: impl Into<Value>) -> WhereClause {
+            pub fn eq<V>(self, val: V) -> WhereClause<V> {
                 WhereClause::Condition {
                     col: self.into_col_ref(),
                     op: Op::Eq,
-                    val: val.into(),
+                    val,
                 }
             }
 
-            pub fn ne(self, val: impl Into<Value>) -> WhereClause {
+            pub fn ne<V>(self, val: V) -> WhereClause<V> {
                 WhereClause::Condition {
                     col: self.into_col_ref(),
                     op: Op::Ne,
-                    val: val.into(),
+                    val,
                 }
             }
 
-            pub fn gt(self, val: impl Into<Value>) -> WhereClause {
+            pub fn gt<V>(self, val: V) -> WhereClause<V> {
                 WhereClause::Condition {
                     col: self.into_col_ref(),
                     op: Op::Gt,
-                    val: val.into(),
+                    val,
                 }
             }
 
-            pub fn lt(self, val: impl Into<Value>) -> WhereClause {
+            pub fn lt<V>(self, val: V) -> WhereClause<V> {
                 WhereClause::Condition {
                     col: self.into_col_ref(),
                     op: Op::Lt,
-                    val: val.into(),
+                    val,
                 }
             }
 
-            pub fn gte(self, val: impl Into<Value>) -> WhereClause {
+            pub fn gte<V>(self, val: V) -> WhereClause<V> {
                 WhereClause::Condition {
                     col: self.into_col_ref(),
                     op: Op::Gte,
-                    val: val.into(),
+                    val,
                 }
             }
 
-            pub fn lte(self, val: impl Into<Value>) -> WhereClause {
+            pub fn lte<V>(self, val: V) -> WhereClause<V> {
                 WhereClause::Condition {
                     col: self.into_col_ref(),
                     op: Op::Lte,
-                    val: val.into(),
+                    val,
                 }
             }
 
@@ -259,18 +259,18 @@ macro_rules! impl_col_methods {
             /// When the list is empty, this produces `1 = 0` (always false) instead of
             /// invalid SQL. If you need to distinguish "no filter" from "match nothing",
             /// check that the slice is non-empty before calling this method.
-            pub fn included(self, vals: &[impl Into<Value> + Clone]) -> WhereClause {
+            pub fn included<V: Clone>(self, vals: &[V]) -> WhereClause<V> {
                 WhereClause::In {
                     col: self.into_col_ref(),
-                    vals: vals.iter().map(|v| v.clone().into()).collect(),
+                    vals: vals.to_vec(),
                 }
             }
 
-            pub fn between(self, low: impl Into<Value>, high: impl Into<Value>) -> WhereClause {
+            pub fn between<V>(self, low: V, high: V) -> WhereClause<V> {
                 WhereClause::Between {
                     col: self.into_col_ref(),
-                    low: low.into(),
-                    high: high.into(),
+                    low,
+                    high,
                 }
             }
 
@@ -281,7 +281,7 @@ macro_rules! impl_col_methods {
             /// - `20..`    → `col >= 20`
             /// - `..30`    → `col < 30`
             /// - `..=30`   → `col <= 30`
-            pub fn in_range<V: Into<Value>>(self, range: impl IntoRangeClause<V>) -> WhereClause {
+            pub fn in_range<V>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
                 range.into_where_clause(self.into_col_ref())
             }
         }
@@ -359,116 +359,141 @@ impl QualifiedCol {
     }
 }
 
-/// A WHERE condition tree.
+/// A WHERE condition tree, generic over the bind value type.
 #[derive(Debug, Clone)]
-pub enum WhereClause {
-    Condition {
-        col: ColRef,
-        op: Op,
-        val: Value,
-    },
-    Between {
-        col: ColRef,
-        low: Value,
-        high: Value,
-    },
-    In {
-        col: ColRef,
-        vals: Vec<Value>,
-    },
-    Any(Vec<WhereClause>),
-    All(Vec<WhereClause>),
+pub enum WhereClause<V = Value> {
+    Condition { col: ColRef, op: Op, val: V },
+    Between { col: ColRef, low: V, high: V },
+    In { col: ColRef, vals: Vec<V> },
+    Any(Vec<WhereClause<V>>),
+    All(Vec<WhereClause<V>>),
+}
+
+impl<V> WhereClause<V> {
+    /// Transform all bind values in this clause.
+    pub fn map_values<U>(self, f: &dyn Fn(V) -> U) -> WhereClause<U> {
+        match self {
+            WhereClause::Condition { col, op, val } => WhereClause::Condition {
+                col,
+                op,
+                val: f(val),
+            },
+            WhereClause::Between { col, low, high } => WhereClause::Between {
+                col,
+                low: f(low),
+                high: f(high),
+            },
+            WhereClause::In { col, vals } => WhereClause::In {
+                col,
+                vals: vals.into_iter().map(f).collect(),
+            },
+            WhereClause::Any(clauses) => {
+                WhereClause::Any(clauses.into_iter().map(|c| c.map_values(f)).collect())
+            }
+            WhereClause::All(clauses) => {
+                WhereClause::All(clauses.into_iter().map(|c| c.map_values(f)).collect())
+            }
+        }
+    }
+}
+
+/// Trait for types that can be converted into a `WhereClause<V>`.
+pub trait IntoWhereClause<V> {
+    fn into_where_clause(self) -> WhereClause<V>;
+}
+
+/// Convert `WhereClause<T>` to `WhereClause<V>` when `T: Into<V>`.
+impl<V, T: Into<V>> IntoWhereClause<V> for WhereClause<T> {
+    fn into_where_clause(self) -> WhereClause<V> {
+        self.map_values(&|v| v.into())
+    }
 }
 
 /// Tuple shorthand: `("name", value)` becomes `col = value`.
-impl<V: Into<Value>> From<(&str, V)> for WhereClause {
-    fn from((col, val): (&str, V)) -> Self {
+impl<V, T: Into<V>> IntoWhereClause<V> for (&str, T) {
+    fn into_where_clause(self) -> WhereClause<V> {
         WhereClause::Condition {
-            col: ColRef::Simple(col.to_string()),
+            col: ColRef::Simple(self.0.to_string()),
             op: Op::Eq,
-            val: val.into(),
+            val: self.1.into(),
         }
     }
 }
 
 /// Trait for converting Rust range types into WhereClause.
-pub trait IntoRangeClause<V: Into<Value>> {
-    fn into_where_clause(self, col: ColRef) -> WhereClause;
+pub trait IntoRangeClause<V> {
+    fn into_where_clause(self, col: ColRef) -> WhereClause<V>;
 }
 
 use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
 
 /// `20..=30` → `col BETWEEN 20 AND 30`
-impl<V: Into<Value>> IntoRangeClause<V> for RangeInclusive<V> {
-    fn into_where_clause(self, col: ColRef) -> WhereClause {
+impl<V> IntoRangeClause<V> for RangeInclusive<V> {
+    fn into_where_clause(self, col: ColRef) -> WhereClause<V> {
         let (low, high) = self.into_inner();
-        WhereClause::Between {
-            col,
-            low: low.into(),
-            high: high.into(),
-        }
+        WhereClause::Between { col, low, high }
     }
 }
 
 /// `20..30` → `col >= 20 AND col < 30`
-impl<V: Into<Value>> IntoRangeClause<V> for Range<V> {
-    fn into_where_clause(self, col: ColRef) -> WhereClause {
+impl<V> IntoRangeClause<V> for Range<V> {
+    fn into_where_clause(self, col: ColRef) -> WhereClause<V> {
         WhereClause::All(vec![
             WhereClause::Condition {
                 col: col.clone(),
                 op: Op::Gte,
-                val: self.start.into(),
+                val: self.start,
             },
             WhereClause::Condition {
                 col,
                 op: Op::Lt,
-                val: self.end.into(),
+                val: self.end,
             },
         ])
     }
 }
 
 /// `20..` → `col >= 20`
-impl<V: Into<Value>> IntoRangeClause<V> for RangeFrom<V> {
-    fn into_where_clause(self, col: ColRef) -> WhereClause {
+impl<V> IntoRangeClause<V> for RangeFrom<V> {
+    fn into_where_clause(self, col: ColRef) -> WhereClause<V> {
         WhereClause::Condition {
             col,
             op: Op::Gte,
-            val: self.start.into(),
+            val: self.start,
         }
     }
 }
 
 /// `..30` → `col < 30`
-impl<V: Into<Value>> IntoRangeClause<V> for RangeTo<V> {
-    fn into_where_clause(self, col: ColRef) -> WhereClause {
+impl<V> IntoRangeClause<V> for RangeTo<V> {
+    fn into_where_clause(self, col: ColRef) -> WhereClause<V> {
         WhereClause::Condition {
             col,
             op: Op::Lt,
-            val: self.end.into(),
+            val: self.end,
         }
     }
 }
 
 /// `..=30` → `col <= 30`
-impl<V: Into<Value>> IntoRangeClause<V> for RangeToInclusive<V> {
-    fn into_where_clause(self, col: ColRef) -> WhereClause {
+impl<V> IntoRangeClause<V> for RangeToInclusive<V> {
+    fn into_where_clause(self, col: ColRef) -> WhereClause<V> {
         WhereClause::Condition {
             col,
             op: Op::Lte,
-            val: self.end.into(),
+            val: self.end,
         }
     }
 }
 
 /// Combine conditions with OR: `any(a, b)` => `(a OR b)`.
-pub fn any(a: impl Into<WhereClause>, b: impl Into<WhereClause>) -> WhereClause {
-    WhereClause::Any(vec![a.into(), b.into()])
+pub fn any<V>(a: WhereClause<V>, b: WhereClause<V>) -> WhereClause<V> {
+    WhereClause::Any(vec![a, b])
 }
 
 /// Combine conditions with AND: `all(a, b)` => `(a AND b)`.
-pub fn all(a: impl Into<WhereClause>, b: impl Into<WhereClause>) -> WhereClause {
-    WhereClause::All(vec![a.into(), b.into()])
+pub fn all<V>(a: WhereClause<V>, b: WhereClause<V>) -> WhereClause<V> {
+    WhereClause::All(vec![a, b])
 }
 
 #[derive(Debug, Clone)]
@@ -573,9 +598,9 @@ pub trait Dialect {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum WhereEntry {
-    And(WhereClause),
-    Or(WhereClause),
+pub(crate) enum WhereEntry<V = Value> {
+    And(WhereClause<V>),
+    Or(WhereClause<V>),
 }
 
 #[derive(Debug, Clone)]
@@ -591,14 +616,14 @@ pub trait AsUnionParts {
 }
 
 /// Common interface for union query builders.
-pub trait UnionQueryOps: AsUnionParts {
+pub trait UnionQueryOps<V: Clone + std::fmt::Debug = Value>: AsUnionParts {
     fn union<T: AsUnionParts<Query = Self::Query>>(&mut self, other: &T) -> &mut Self;
     fn union_all<T: AsUnionParts<Query = Self::Query>>(&mut self, other: &T) -> &mut Self;
     fn order_by(&mut self, clause: OrderByClause) -> &mut Self;
     fn limit(&mut self, n: u64) -> &mut Self;
     fn offset(&mut self, n: u64) -> &mut Self;
-    fn to_sql(&self) -> (String, Vec<Value>);
-    fn to_pipe_sql(&self) -> (String, Vec<Value>);
+    fn to_sql(&self) -> (String, Vec<V>);
+    fn to_pipe_sql(&self) -> (String, Vec<V>);
 }
 
 pub mod renderer;
@@ -609,14 +634,14 @@ use renderer::standard::StandardSqlRenderer;
 use renderer::{RenderConfig, Renderer};
 use tree::{SelectTree, UnionTree, default_quote_identifier};
 
-/// The query builder.
+/// The query builder, generic over the bind value type `V`.
 #[derive(Debug, Clone)]
-pub struct Query {
+pub struct Query<V: Clone + std::fmt::Debug = Value> {
     pub(crate) table: String,
     pub(crate) table_alias: Option<String>,
     pub(crate) selects: Vec<ColRef>,
-    pub(crate) wheres: Vec<WhereEntry>,
-    pub(crate) havings: Vec<WhereEntry>,
+    pub(crate) wheres: Vec<WhereEntry<V>>,
+    pub(crate) havings: Vec<WhereEntry<V>>,
     pub(crate) aggregates: Vec<AggregateExpr>,
     pub(crate) group_bys: Vec<String>,
     pub(crate) joins: Vec<JoinClause>,
@@ -627,42 +652,35 @@ pub struct Query {
 
 /// A combined query built from UNION / UNION ALL operations.
 #[derive(Debug, Clone)]
-pub struct UnionQuery {
-    pub(crate) parts: Vec<(SetOp, Query)>,
+pub struct UnionQuery<V: Clone + std::fmt::Debug = Value> {
+    pub(crate) parts: Vec<(SetOp, Query<V>)>,
     pub(crate) order_bys: Vec<OrderByClause>,
     pub(crate) limit_val: Option<u64>,
     pub(crate) offset_val: Option<u64>,
 }
 
-impl AsUnionParts for Query {
-    type Query = Query;
-    fn as_union_parts(&self) -> Vec<(SetOp, Query)> {
+impl<V: Clone + std::fmt::Debug> AsUnionParts for Query<V> {
+    type Query = Query<V>;
+    fn as_union_parts(&self) -> Vec<(SetOp, Query<V>)> {
         vec![(SetOp::Union, self.clone())] // SetOp is placeholder, caller overrides
     }
 }
 
-impl AsUnionParts for UnionQuery {
-    type Query = Query;
-    fn as_union_parts(&self) -> Vec<(SetOp, Query)> {
+impl<V: Clone + std::fmt::Debug> AsUnionParts for UnionQuery<V> {
+    type Query = Query<V>;
+    fn as_union_parts(&self) -> Vec<(SetOp, Query<V>)> {
         self.parts.clone()
     }
 }
 
 /// Create a new query builder for the given table.
-pub fn sqipe(table: &str) -> Query {
-    Query {
-        table: table.to_string(),
-        table_alias: None,
-        selects: Vec::new(),
-        wheres: Vec::new(),
-        havings: Vec::new(),
-        aggregates: Vec::new(),
-        group_bys: Vec::new(),
-        joins: Vec::new(),
-        order_bys: Vec::new(),
-        limit_val: None,
-        offset_val: None,
-    }
+pub fn sqipe(table: &str) -> Query<Value> {
+    Query::new(table)
+}
+
+/// Create a new query builder with a custom value type.
+pub fn sqipe_with<V: Clone + std::fmt::Debug>(table: &str) -> Query<V> {
+    Query::new(table)
 }
 
 /// Trait for types that can specify a join target table.
@@ -698,26 +716,42 @@ fn resolve_join_condition(cond: &mut JoinCondition, join_table: &str) {
     }
 }
 
-impl Query {
+impl<V: Clone + std::fmt::Debug> Query<V> {
+    pub fn new(table: &str) -> Self {
+        Query {
+            table: table.to_string(),
+            table_alias: None,
+            selects: Vec::new(),
+            wheres: Vec::new(),
+            havings: Vec::new(),
+            aggregates: Vec::new(),
+            group_bys: Vec::new(),
+            joins: Vec::new(),
+            order_bys: Vec::new(),
+            limit_val: None,
+            offset_val: None,
+        }
+    }
+
     pub fn as_(&mut self, alias: &str) -> &mut Self {
         self.table_alias = Some(alias.to_string());
         self
     }
 
-    pub fn and_where(&mut self, cond: impl Into<WhereClause>) -> &mut Self {
+    pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
         if self.aggregates.is_empty() {
-            self.wheres.push(WhereEntry::And(cond.into()));
+            self.wheres.push(WhereEntry::And(cond.into_where_clause()));
         } else {
-            self.havings.push(WhereEntry::And(cond.into()));
+            self.havings.push(WhereEntry::And(cond.into_where_clause()));
         }
         self
     }
 
-    pub fn or_where(&mut self, cond: impl Into<WhereClause>) -> &mut Self {
+    pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
         if self.aggregates.is_empty() {
-            self.wheres.push(WhereEntry::Or(cond.into()));
+            self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
         } else {
-            self.havings.push(WhereEntry::Or(cond.into()));
+            self.havings.push(WhereEntry::Or(cond.into_where_clause()));
         }
         self
     }
@@ -798,7 +832,7 @@ impl Query {
         self
     }
 
-    pub fn union<T: AsUnionParts<Query = Query>>(&self, other: &T) -> UnionQuery {
+    pub fn union<T: AsUnionParts<Query = Query<V>>>(&self, other: &T) -> UnionQuery<V> {
         let mut parts = vec![(SetOp::Union, self.clone())];
         let other_parts = other.as_union_parts();
         for (i, (op, query)) in other_parts.into_iter().enumerate() {
@@ -816,7 +850,7 @@ impl Query {
         }
     }
 
-    pub fn union_all<T: AsUnionParts<Query = Query>>(&self, other: &T) -> UnionQuery {
+    pub fn union_all<T: AsUnionParts<Query = Query<V>>>(&self, other: &T) -> UnionQuery<V> {
         let mut parts = vec![(SetOp::Union, self.clone())];
         let other_parts = other.as_union_parts();
         for (i, (op, query)) in other_parts.into_iter().enumerate() {
@@ -850,12 +884,12 @@ impl Query {
     }
 
     /// Build a SelectTree from this query.
-    pub fn to_tree(&self) -> SelectTree {
+    pub fn to_tree(&self) -> SelectTree<V> {
         SelectTree::from_query(self)
     }
 
     /// Build standard SQL with `?` placeholders and double-quote identifiers.
-    pub fn to_sql(&self) -> (String, Vec<Value>) {
+    pub fn to_sql(&self) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let cfg = RenderConfig {
             ph: &|_| "?".to_string(),
@@ -865,7 +899,7 @@ impl Query {
     }
 
     /// Build pipe syntax SQL with `?` placeholders and double-quote identifiers.
-    pub fn to_pipe_sql(&self) -> (String, Vec<Value>) {
+    pub fn to_pipe_sql(&self) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let cfg = RenderConfig {
             ph: &|_| "?".to_string(),
@@ -875,7 +909,7 @@ impl Query {
     }
 
     /// Build standard SQL with dialect-specific placeholders and quoting.
-    pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
+    pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
@@ -883,7 +917,7 @@ impl Query {
     }
 
     /// Build pipe syntax SQL with dialect-specific placeholders and quoting.
-    pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
+    pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
@@ -891,8 +925,8 @@ impl Query {
     }
 }
 
-impl UnionQueryOps for UnionQuery {
-    fn union<T: AsUnionParts<Query = Query>>(&mut self, other: &T) -> &mut Self {
+impl<V: Clone + std::fmt::Debug> UnionQueryOps<V> for UnionQuery<V> {
+    fn union<T: AsUnionParts<Query = Query<V>>>(&mut self, other: &T) -> &mut Self {
         let parts = other.as_union_parts();
         for (i, (op, query)) in parts.into_iter().enumerate() {
             if i == 0 {
@@ -904,7 +938,7 @@ impl UnionQueryOps for UnionQuery {
         self
     }
 
-    fn union_all<T: AsUnionParts<Query = Query>>(&mut self, other: &T) -> &mut Self {
+    fn union_all<T: AsUnionParts<Query = Query<V>>>(&mut self, other: &T) -> &mut Self {
         let parts = other.as_union_parts();
         for (i, (op, query)) in parts.into_iter().enumerate() {
             if i == 0 {
@@ -931,7 +965,7 @@ impl UnionQueryOps for UnionQuery {
         self
     }
 
-    fn to_sql(&self) -> (String, Vec<Value>) {
+    fn to_sql(&self) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let cfg = RenderConfig {
             ph: &|_| "?".to_string(),
@@ -940,7 +974,7 @@ impl UnionQueryOps for UnionQuery {
         StandardSqlRenderer.render_union(&tree, &cfg)
     }
 
-    fn to_pipe_sql(&self) -> (String, Vec<Value>) {
+    fn to_pipe_sql(&self) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let cfg = RenderConfig {
             ph: &|_| "?".to_string(),
@@ -950,20 +984,20 @@ impl UnionQueryOps for UnionQuery {
     }
 }
 
-impl UnionQuery {
+impl<V: Clone + std::fmt::Debug> UnionQuery<V> {
     /// Build a UnionTree from this union query.
-    pub fn to_tree(&self) -> UnionTree {
+    pub fn to_tree(&self) -> UnionTree<V> {
         UnionTree::from_union_query(self)
     }
 
-    pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
+    pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
         StandardSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
-    pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
+    pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
@@ -971,7 +1005,7 @@ impl UnionQuery {
     }
 
     /// Returns the parts for dialect wrappers to build SQL with custom rendering per part.
-    pub fn parts(&self) -> &[(SetOp, Query)] {
+    pub fn parts(&self) -> &[(SetOp, Query<V>)] {
         &self.parts
     }
 }
