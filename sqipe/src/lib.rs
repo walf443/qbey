@@ -137,6 +137,17 @@ impl Col {
         }
     }
 
+    /// Convert a Rust range into SQL conditions.
+    ///
+    /// - `20..=30` → `BETWEEN 20 AND 30`
+    /// - `20..30`  → `col >= 20 AND col < 30`
+    /// - `20..`    → `col >= 20`
+    /// - `..30`    → `col < 30`
+    /// - `..=30`   → `col <= 30`
+    pub fn in_range<V: Into<Value>>(self, range: impl IntoRangeClause<V>) -> WhereClause {
+        range.into_where_clause(self.name)
+    }
+
     pub fn asc(self) -> OrderByClause {
         OrderByClause {
             col: self.name,
@@ -168,6 +179,76 @@ impl<V: Into<Value>> From<(&str, V)> for WhereClause {
             col: col.to_string(),
             op: Op::Eq,
             val: val.into(),
+        }
+    }
+}
+
+/// Trait for converting Rust range types into WhereClause.
+pub trait IntoRangeClause<V: Into<Value>> {
+    fn into_where_clause(self, col: String) -> WhereClause;
+}
+
+use std::ops::{Range, RangeFrom, RangeInclusive, RangeTo, RangeToInclusive};
+
+/// `20..=30` → `col BETWEEN 20 AND 30`
+impl<V: Into<Value>> IntoRangeClause<V> for RangeInclusive<V> {
+    fn into_where_clause(self, col: String) -> WhereClause {
+        let (low, high) = self.into_inner();
+        WhereClause::Between {
+            col,
+            low: low.into(),
+            high: high.into(),
+        }
+    }
+}
+
+/// `20..30` → `col >= 20 AND col < 30`
+impl<V: Into<Value>> IntoRangeClause<V> for Range<V> {
+    fn into_where_clause(self, col: String) -> WhereClause {
+        WhereClause::All(vec![
+            WhereClause::Condition {
+                col: col.clone(),
+                op: Op::Gte,
+                val: self.start.into(),
+            },
+            WhereClause::Condition {
+                col,
+                op: Op::Lt,
+                val: self.end.into(),
+            },
+        ])
+    }
+}
+
+/// `20..` → `col >= 20`
+impl<V: Into<Value>> IntoRangeClause<V> for RangeFrom<V> {
+    fn into_where_clause(self, col: String) -> WhereClause {
+        WhereClause::Condition {
+            col,
+            op: Op::Gte,
+            val: self.start.into(),
+        }
+    }
+}
+
+/// `..30` → `col < 30`
+impl<V: Into<Value>> IntoRangeClause<V> for RangeTo<V> {
+    fn into_where_clause(self, col: String) -> WhereClause {
+        WhereClause::Condition {
+            col,
+            op: Op::Lt,
+            val: self.end.into(),
+        }
+    }
+}
+
+/// `..=30` → `col <= 30`
+impl<V: Into<Value>> IntoRangeClause<V> for RangeToInclusive<V> {
+    fn into_where_clause(self, col: String) -> WhereClause {
+        WhereClause::Condition {
+            col,
+            op: Op::Lte,
+            val: self.end.into(),
         }
     }
 }
@@ -1085,5 +1166,61 @@ mod tests {
                 Value::Int(30)
             ]
         );
+    }
+
+    #[test]
+    fn test_in_range_inclusive() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").in_range(20..=30));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"employee\" WHERE \"age\" BETWEEN ? AND ?"
+        );
+        assert_eq!(binds, vec![Value::Int(20), Value::Int(30)]);
+    }
+
+    #[test]
+    fn test_in_range_exclusive() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").in_range(20..30));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"employee\" WHERE \"age\" >= ? AND \"age\" < ?"
+        );
+        assert_eq!(binds, vec![Value::Int(20), Value::Int(30)]);
+    }
+
+    #[test]
+    fn test_in_range_from() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").in_range(20..));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"age\" >= ?");
+        assert_eq!(binds, vec![Value::Int(20)]);
+    }
+
+    #[test]
+    fn test_in_range_to() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").in_range(..30));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"age\" < ?");
+        assert_eq!(binds, vec![Value::Int(30)]);
+    }
+
+    #[test]
+    fn test_in_range_to_inclusive() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").in_range(..=30));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"age\" <= ?");
+        assert_eq!(binds, vec![Value::Int(30)]);
     }
 }
