@@ -29,15 +29,7 @@ assert_eq!(sql, "FROM \"employee\" |> WHERE \"name\" = ? |> SELECT \"id\", \"nam
 Each dialect is a separate crate with its own `sqipe` function.
 Dialect-specific methods are available through the wrapper.
 
-```rust,ignore
-// MySQL (sqipe-mysql)
-use sqipe_mysql::sqipe;
-let mut q = sqipe("employee");
-q.and_where(("name", "Alice"));
-q.select(&["id", "name"]);
-let (sql, binds) = q.to_sql();
-// => "SELECT `id`, `name` FROM `employee` WHERE `name` = ?"
-```
+- [sqipe-mysql](./sqipe-mysql/README.md) — MySQL dialect (backtick quoting, index hints, STRAIGHT_JOIN)
 
 ### Comparison operators
 
@@ -328,18 +320,6 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"name\" AS \"user_name\" FROM \"users\"");
 ```
 
-### MySQL-specific features (sqipe-mysql)
+### MySQL dialect
 
-```rust,ignore
-use sqipe_mysql::sqipe;
-
-let mut q = sqipe("employee");
-q.force_index(&["idx_name"]);
-q.and_where(("name", "Alice"));
-q.select(&["id", "name"]);
-
-let (sql, binds) = q.to_sql();
-// => "SELECT `id`, `name` FROM `employee` FORCE INDEX (idx_name) WHERE `name` = ?"
-
-// Also available: use_index, ignore_index, straight_join
-```
+See [sqipe-mysql](./sqipe-mysql/README.md) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).
