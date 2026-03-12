@@ -1,6 +1,6 @@
 #![cfg(feature = "test-tokio-postgres")]
 
-use sqipe::{Dialect, UnionQueryOps, col, sqipe_with, table};
+use sqipe::{Dialect, col, sqipe_with, table};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
 use tokio_postgres::{NoTls, types::ToSql};
