@@ -287,15 +287,15 @@ pub enum SetOp {
 }
 
 /// Trait for types that can be used as a source in union operations.
-pub trait IntoUnionParts {
+pub trait AsUnionParts {
     type Query: Clone;
-    fn into_union_parts(&self) -> Vec<(SetOp, Self::Query)>;
+    fn as_union_parts(&self) -> Vec<(SetOp, Self::Query)>;
 }
 
 /// Common interface for union query builders.
-pub trait UnionQueryOps: IntoUnionParts {
-    fn union<T: IntoUnionParts<Query = Self::Query>>(&mut self, other: &T) -> &mut Self;
-    fn union_all<T: IntoUnionParts<Query = Self::Query>>(&mut self, other: &T) -> &mut Self;
+pub trait UnionQueryOps: AsUnionParts {
+    fn union<T: AsUnionParts<Query = Self::Query>>(&mut self, other: &T) -> &mut Self;
+    fn union_all<T: AsUnionParts<Query = Self::Query>>(&mut self, other: &T) -> &mut Self;
     fn order_by(&mut self, clause: OrderByClause) -> &mut Self;
     fn limit(&mut self, n: u64) -> &mut Self;
     fn offset(&mut self, n: u64) -> &mut Self;
@@ -303,13 +303,12 @@ pub trait UnionQueryOps: IntoUnionParts {
     fn to_pipe_sql(&self) -> (String, Vec<Value>);
 }
 
-mod builder;
 pub mod tree;
 
-use builder::{default_quote_identifier, SqlBuilder, SqlConfig};
-use builder::standard::StandardSqlBuilder;
-use builder::pipe::PipeSqlBuilder;
-use tree::{RenderConfig, SelectTree, UnionTree};
+use tree::{
+    PipeSqlRenderer, RenderConfig, Renderer, SelectTree, StandardSqlRenderer, UnionTree,
+    default_quote_identifier,
+};
 
 /// The query builder.
 #[derive(Debug, Clone)]
@@ -333,16 +332,16 @@ pub struct UnionQuery {
     pub(crate) offset_val: Option<u64>,
 }
 
-impl IntoUnionParts for Query {
+impl AsUnionParts for Query {
     type Query = Query;
-    fn into_union_parts(&self) -> Vec<(SetOp, Query)> {
+    fn as_union_parts(&self) -> Vec<(SetOp, Query)> {
         vec![(SetOp::Union, self.clone())] // SetOp is placeholder, caller overrides
     }
 }
 
-impl IntoUnionParts for UnionQuery {
+impl AsUnionParts for UnionQuery {
     type Query = Query;
-    fn into_union_parts(&self) -> Vec<(SetOp, Query)> {
+    fn as_union_parts(&self) -> Vec<(SetOp, Query)> {
         self.parts.clone()
     }
 }
@@ -387,9 +386,9 @@ impl Query {
         self
     }
 
-    pub fn union<T: IntoUnionParts<Query = Query>>(&self, other: &T) -> UnionQuery {
+    pub fn union<T: AsUnionParts<Query = Query>>(&self, other: &T) -> UnionQuery {
         let mut parts = vec![(SetOp::Union, self.clone())];
-        let other_parts = other.into_union_parts();
+        let other_parts = other.as_union_parts();
         for (i, (op, query)) in other_parts.into_iter().enumerate() {
             if i == 0 {
                 parts.push((SetOp::Union, query));
@@ -397,12 +396,17 @@ impl Query {
                 parts.push((op, query));
             }
         }
-        UnionQuery { parts, order_bys: Vec::new(), limit_val: None, offset_val: None }
+        UnionQuery {
+            parts,
+            order_bys: Vec::new(),
+            limit_val: None,
+            offset_val: None,
+        }
     }
 
-    pub fn union_all<T: IntoUnionParts<Query = Query>>(&self, other: &T) -> UnionQuery {
+    pub fn union_all<T: AsUnionParts<Query = Query>>(&self, other: &T) -> UnionQuery {
         let mut parts = vec![(SetOp::Union, self.clone())];
-        let other_parts = other.into_union_parts();
+        let other_parts = other.as_union_parts();
         for (i, (op, query)) in other_parts.into_iter().enumerate() {
             if i == 0 {
                 parts.push((SetOp::UnionAll, query));
@@ -410,7 +414,12 @@ impl Query {
                 parts.push((op, query));
             }
         }
-        UnionQuery { parts, order_bys: Vec::new(), limit_val: None, offset_val: None }
+        UnionQuery {
+            parts,
+            order_bys: Vec::new(),
+            limit_val: None,
+            offset_val: None,
+        }
     }
 
     pub fn order_by(&mut self, clause: OrderByClause) -> &mut Self {
@@ -436,15 +445,21 @@ impl Query {
     /// Build standard SQL with `?` placeholders and double-quote identifiers.
     pub fn to_sql(&self) -> (String, Vec<Value>) {
         let tree = self.to_tree();
-        let cfg = RenderConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
-        tree.render_standard(&cfg)
+        let cfg = RenderConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+        };
+        StandardSqlRenderer.render_select(&tree, &cfg)
     }
 
     /// Build pipe syntax SQL with `?` placeholders and double-quote identifiers.
     pub fn to_pipe_sql(&self) -> (String, Vec<Value>) {
         let tree = self.to_tree();
-        let cfg = RenderConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
-        tree.render_pipe(&cfg)
+        let cfg = RenderConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+        };
+        PipeSqlRenderer.render_select(&tree, &cfg)
     }
 
     /// Build standard SQL with dialect-specific placeholders and quoting.
@@ -452,7 +467,7 @@ impl Query {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
-        tree.render_standard(&RenderConfig { ph: &ph, qi: &qi })
+        StandardSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
     /// Build pipe syntax SQL with dialect-specific placeholders and quoting.
@@ -460,53 +475,13 @@ impl Query {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
-        tree.render_pipe(&RenderConfig { ph: &ph, qi: &qi })
-    }
-
-    /// Build only the core body (SELECT/FROM/WHERE/GROUP BY, no ORDER BY/LIMIT).
-    pub fn to_sql_body_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let ph = |n: usize| dialect.placeholder(n);
-        let qi = |name: &str| dialect.quote_identifier(name);
-        StandardSqlBuilder::build_core(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
-    }
-
-    /// Build only the core body in pipe syntax (FROM/WHERE/SELECT/AGGREGATE, no ORDER BY/LIMIT).
-    pub fn to_pipe_sql_body_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let ph = |n: usize| dialect.placeholder(n);
-        let qi = |name: &str| dialect.quote_identifier(name);
-        PipeSqlBuilder::build_core(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
-    }
-
-    /// Build ORDER BY clause with dialect-specific quoting. Returns None if no ORDER BY.
-    pub fn to_order_by_with(&self, dialect: &dyn Dialect) -> Option<String> {
-        let ph = |n: usize| dialect.placeholder(n);
-        let qi = |name: &str| dialect.quote_identifier(name);
-        builder::build_order_by_clause(&self.order_bys, &SqlConfig { ph: &ph, qi: &qi })
-    }
-
-    /// Returns (LIMIT string, OFFSET string), each None if not set.
-    pub fn to_limit_offset(&self) -> (Option<String>, Option<String>) {
-        builder::build_limit_offset(self.limit_val, self.offset_val)
-    }
-
-    /// Build a full query for use as a UNION part with dialect-specific quoting.
-    pub fn to_sql_union_part_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let ph = |n: usize| dialect.placeholder(n);
-        let qi = |name: &str| dialect.quote_identifier(name);
-        StandardSqlBuilder::build_union_part(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
-    }
-
-    /// Build a full pipe query for use as a UNION part with dialect-specific quoting.
-    pub fn to_pipe_sql_union_part_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let ph = |n: usize| dialect.placeholder(n);
-        let qi = |name: &str| dialect.quote_identifier(name);
-        PipeSqlBuilder::build_union_part(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
+        PipeSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 }
 
 impl UnionQueryOps for UnionQuery {
-    fn union<T: IntoUnionParts<Query = Query>>(&mut self, other: &T) -> &mut Self {
-        let parts = other.into_union_parts();
+    fn union<T: AsUnionParts<Query = Query>>(&mut self, other: &T) -> &mut Self {
+        let parts = other.as_union_parts();
         for (i, (op, query)) in parts.into_iter().enumerate() {
             if i == 0 {
                 self.parts.push((SetOp::Union, query));
@@ -517,8 +492,8 @@ impl UnionQueryOps for UnionQuery {
         self
     }
 
-    fn union_all<T: IntoUnionParts<Query = Query>>(&mut self, other: &T) -> &mut Self {
-        let parts = other.into_union_parts();
+    fn union_all<T: AsUnionParts<Query = Query>>(&mut self, other: &T) -> &mut Self {
+        let parts = other.as_union_parts();
         for (i, (op, query)) in parts.into_iter().enumerate() {
             if i == 0 {
                 self.parts.push((SetOp::UnionAll, query));
@@ -545,15 +520,21 @@ impl UnionQueryOps for UnionQuery {
     }
 
     fn to_sql(&self) -> (String, Vec<Value>) {
-        let tree = UnionTree::from_union_query(self);
-        let cfg = RenderConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
-        tree.render_standard(&cfg)
+        let tree = self.to_tree();
+        let cfg = RenderConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+        };
+        StandardSqlRenderer.render_union(&tree, &cfg)
     }
 
     fn to_pipe_sql(&self) -> (String, Vec<Value>) {
-        let tree = UnionTree::from_union_query(self);
-        let cfg = RenderConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
-        tree.render_pipe(&cfg)
+        let tree = self.to_tree();
+        let cfg = RenderConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+        };
+        PipeSqlRenderer.render_union(&tree, &cfg)
     }
 }
 
@@ -567,29 +548,19 @@ impl UnionQuery {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
-        tree.render_standard(&RenderConfig { ph: &ph, qi: &qi })
+        StandardSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
     pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
-        tree.render_pipe(&RenderConfig { ph: &ph, qi: &qi })
+        PipeSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
     /// Returns the parts for dialect wrappers to build SQL with custom rendering per part.
     pub fn parts(&self) -> &[(SetOp, Query)] {
         &self.parts
-    }
-
-    pub fn to_order_by_with(&self, dialect: &dyn Dialect) -> Option<String> {
-        let ph = |n: usize| dialect.placeholder(n);
-        let qi = |name: &str| dialect.quote_identifier(name);
-        builder::build_order_by_clause(&self.order_bys, &SqlConfig { ph: &ph, qi: &qi })
-    }
-
-    pub fn to_limit_offset(&self) -> (Option<String>, Option<String>) {
-        builder::build_limit_offset(self.limit_val, self.offset_val)
     }
 }
 
@@ -784,16 +755,10 @@ mod tests {
         q.aggregate(&[aggregate::count_all().as_("cnt")]);
 
         let (sql, _) = q.to_sql();
-        assert_eq!(
-            sql,
-            "SELECT COUNT(*) AS \"cnt\" FROM \"employee\""
-        );
+        assert_eq!(sql, "SELECT COUNT(*) AS \"cnt\" FROM \"employee\"");
 
         let (sql, _) = q.to_pipe_sql();
-        assert_eq!(
-            sql,
-            "FROM \"employee\" |> AGGREGATE COUNT(*) AS \"cnt\""
-        );
+        assert_eq!(sql, "FROM \"employee\" |> AGGREGATE COUNT(*) AS \"cnt\"");
     }
 
     #[test]

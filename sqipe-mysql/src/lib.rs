@@ -1,6 +1,8 @@
-use std::ops::{Deref, DerefMut};
 use sqipe::Dialect;
-use sqipe::tree::{RenderConfig, SelectTree, UnionTree};
+use sqipe::tree::{
+    PipeSqlRenderer, RenderConfig, Renderer, SelectTree, StandardSqlRenderer, UnionTree,
+};
+use std::ops::{Deref, DerefMut};
 
 struct MySQL;
 
@@ -44,16 +46,16 @@ impl DerefMut for MysqlQuery {
     }
 }
 
-impl sqipe::IntoUnionParts for MysqlQuery {
+impl sqipe::AsUnionParts for MysqlQuery {
     type Query = MysqlQuery;
-    fn into_union_parts(&self) -> Vec<(sqipe::SetOp, MysqlQuery)> {
+    fn as_union_parts(&self) -> Vec<(sqipe::SetOp, MysqlQuery)> {
         vec![(sqipe::SetOp::Union, self.clone())]
     }
 }
 
-impl sqipe::IntoUnionParts for MysqlUnionQuery {
+impl sqipe::AsUnionParts for MysqlUnionQuery {
     type Query = MysqlQuery;
-    fn into_union_parts(&self) -> Vec<(sqipe::SetOp, MysqlQuery)> {
+    fn as_union_parts(&self) -> Vec<(sqipe::SetOp, MysqlQuery)> {
         self.parts.clone()
     }
 }
@@ -84,9 +86,9 @@ impl MysqlQuery {
         self
     }
 
-    pub fn union<T: sqipe::IntoUnionParts<Query = MysqlQuery>>(&self, other: &T) -> MysqlUnionQuery {
+    pub fn union<T: sqipe::AsUnionParts<Query = MysqlQuery>>(&self, other: &T) -> MysqlUnionQuery {
         let mut parts = vec![(sqipe::SetOp::Union, self.clone())];
-        let other_parts = other.into_union_parts();
+        let other_parts = other.as_union_parts();
         for (i, (op, query)) in other_parts.into_iter().enumerate() {
             if i == 0 {
                 parts.push((sqipe::SetOp::Union, query));
@@ -94,12 +96,20 @@ impl MysqlQuery {
                 parts.push((op, query));
             }
         }
-        MysqlUnionQuery { parts, order_bys: Vec::new(), limit_val: None, offset_val: None }
+        MysqlUnionQuery {
+            parts,
+            order_bys: Vec::new(),
+            limit_val: None,
+            offset_val: None,
+        }
     }
 
-    pub fn union_all<T: sqipe::IntoUnionParts<Query = MysqlQuery>>(&self, other: &T) -> MysqlUnionQuery {
+    pub fn union_all<T: sqipe::AsUnionParts<Query = MysqlQuery>>(
+        &self,
+        other: &T,
+    ) -> MysqlUnionQuery {
         let mut parts = vec![(sqipe::SetOp::Union, self.clone())];
-        let other_parts = other.into_union_parts();
+        let other_parts = other.as_union_parts();
         for (i, (op, query)) in other_parts.into_iter().enumerate() {
             if i == 0 {
                 parts.push((sqipe::SetOp::UnionAll, query));
@@ -107,7 +117,12 @@ impl MysqlQuery {
                 parts.push((op, query));
             }
         }
-        MysqlUnionQuery { parts, order_bys: Vec::new(), limit_val: None, offset_val: None }
+        MysqlUnionQuery {
+            parts,
+            order_bys: Vec::new(),
+            limit_val: None,
+            offset_val: None,
+        }
     }
 
     /// Build a SelectTree with MySQL-specific index hints applied.
@@ -122,7 +137,7 @@ impl MysqlQuery {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        tree.render_standard(&RenderConfig { ph: &ph, qi: &qi })
+        StandardSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
     /// Build pipe syntax SQL with MySQL dialect.
@@ -130,24 +145,24 @@ impl MysqlQuery {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        tree.render_pipe(&RenderConfig { ph: &ph, qi: &qi })
+        PipeSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
     fn apply_index_hints(&self, tree: &mut SelectTree) {
         if !self.force_indexes.is_empty() {
-            tree.from.table_suffix.push(
-                format!("FORCE INDEX ({})", self.force_indexes.join(", "))
-            );
+            tree.from
+                .table_suffix
+                .push(format!("FORCE INDEX ({})", self.force_indexes.join(", ")));
         }
         if !self.use_indexes.is_empty() {
-            tree.from.table_suffix.push(
-                format!("USE INDEX ({})", self.use_indexes.join(", "))
-            );
+            tree.from
+                .table_suffix
+                .push(format!("USE INDEX ({})", self.use_indexes.join(", ")));
         }
         if !self.ignore_indexes.is_empty() {
-            tree.from.table_suffix.push(
-                format!("IGNORE INDEX ({})", self.ignore_indexes.join(", "))
-            );
+            tree.from
+                .table_suffix
+                .push(format!("IGNORE INDEX ({})", self.ignore_indexes.join(", ")));
         }
     }
 }
@@ -169,8 +184,8 @@ impl MysqlUnionQuery {
 }
 
 impl sqipe::UnionQueryOps for MysqlUnionQuery {
-    fn union<T: sqipe::IntoUnionParts<Query = MysqlQuery>>(&mut self, other: &T) -> &mut Self {
-        let parts = other.into_union_parts();
+    fn union<T: sqipe::AsUnionParts<Query = MysqlQuery>>(&mut self, other: &T) -> &mut Self {
+        let parts = other.as_union_parts();
         for (i, (op, query)) in parts.into_iter().enumerate() {
             if i == 0 {
                 self.parts.push((sqipe::SetOp::Union, query));
@@ -181,8 +196,8 @@ impl sqipe::UnionQueryOps for MysqlUnionQuery {
         self
     }
 
-    fn union_all<T: sqipe::IntoUnionParts<Query = MysqlQuery>>(&mut self, other: &T) -> &mut Self {
-        let parts = other.into_union_parts();
+    fn union_all<T: sqipe::AsUnionParts<Query = MysqlQuery>>(&mut self, other: &T) -> &mut Self {
+        let parts = other.as_union_parts();
         for (i, (op, query)) in parts.into_iter().enumerate() {
             if i == 0 {
                 self.parts.push((sqipe::SetOp::UnionAll, query));
@@ -212,22 +227,22 @@ impl sqipe::UnionQueryOps for MysqlUnionQuery {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        tree.render_standard(&RenderConfig { ph: &ph, qi: &qi })
+        StandardSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 
     fn to_pipe_sql(&self) -> (String, Vec<sqipe::Value>) {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        tree.render_pipe(&RenderConfig { ph: &ph, qi: &qi })
+        PipeSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sqipe::col;
     use sqipe::UnionQueryOps;
+    use sqipe::col;
 
     #[test]
     fn test_basic_to_sql() {
@@ -236,10 +251,7 @@ mod tests {
         q.select(&["id", "name"]);
 
         let (sql, _) = q.to_sql();
-        assert_eq!(
-            sql,
-            "SELECT `id`, `name` FROM `employee` WHERE `name` = ?"
-        );
+        assert_eq!(sql, "SELECT `id`, `name` FROM `employee` WHERE `name` = ?");
     }
 
     #[test]
