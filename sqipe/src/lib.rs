@@ -71,6 +71,69 @@ impl Op {
     }
 }
 
+/// A table reference for building qualified column references.
+#[derive(Debug, Clone)]
+pub struct TableRef {
+    name: String,
+}
+
+/// Create a table reference for qualified column names.
+pub fn table(name: &str) -> TableRef {
+    TableRef {
+        name: name.to_string(),
+    }
+}
+
+impl TableRef {
+    pub fn col(&self, col: &str) -> QualifiedCol {
+        QualifiedCol {
+            table: self.name.clone(),
+            col: col.to_string(),
+        }
+    }
+}
+
+/// A column qualified with a table name (e.g., `"users"."id"`).
+#[derive(Debug, Clone)]
+pub struct QualifiedCol {
+    pub table: String,
+    pub col: String,
+}
+
+impl QualifiedCol {
+    pub fn eq_col(self, other: QualifiedCol) -> JoinCondition {
+        JoinCondition::ColEq {
+            left: self,
+            right: other,
+        }
+    }
+}
+
+/// A JOIN ON condition.
+#[derive(Debug, Clone)]
+pub enum JoinCondition {
+    ColEq {
+        left: QualifiedCol,
+        right: QualifiedCol,
+    },
+    And(Vec<JoinCondition>),
+}
+
+/// JOIN type.
+#[derive(Debug, Clone)]
+pub enum JoinType {
+    Inner,
+    Left,
+}
+
+/// A JOIN clause.
+#[derive(Debug, Clone)]
+pub struct JoinClause {
+    pub join_type: JoinType,
+    pub table: String,
+    pub condition: JoinCondition,
+}
+
 /// A column reference used to build conditions and order-by clauses.
 #[derive(Debug, Clone)]
 pub struct Col {
@@ -170,8 +233,16 @@ impl Col {
 /// A WHERE condition tree.
 #[derive(Debug, Clone)]
 pub enum WhereClause {
-    Condition { col: String, op: Op, val: Value },
-    Between { col: String, low: Value, high: Value },
+    Condition {
+        col: String,
+        op: Op,
+        val: Value,
+    },
+    Between {
+        col: String,
+        low: Value,
+        high: Value,
+    },
     Any(Vec<WhereClause>),
     All(Vec<WhereClause>),
 }
@@ -414,6 +485,7 @@ pub struct Query {
     pub(crate) havings: Vec<WhereEntry>,
     pub(crate) aggregates: Vec<AggregateExpr>,
     pub(crate) group_bys: Vec<String>,
+    pub(crate) joins: Vec<JoinClause>,
     pub(crate) order_bys: Vec<OrderByClause>,
     pub(crate) limit_val: Option<u64>,
     pub(crate) offset_val: Option<u64>,
@@ -451,6 +523,7 @@ pub fn sqipe(table: &str) -> Query {
         havings: Vec::new(),
         aggregates: Vec::new(),
         group_bys: Vec::new(),
+        joins: Vec::new(),
         order_bys: Vec::new(),
         limit_val: None,
         offset_val: None,
@@ -488,6 +561,24 @@ impl Query {
 
     pub fn group_by(&mut self, cols: &[&str]) -> &mut Self {
         self.group_bys = cols.iter().map(|s| s.to_string()).collect();
+        self
+    }
+
+    pub fn join(&mut self, table: &str, condition: JoinCondition) -> &mut Self {
+        self.joins.push(JoinClause {
+            join_type: JoinType::Inner,
+            table: table.to_string(),
+            condition,
+        });
+        self
+    }
+
+    pub fn left_join(&mut self, table: &str, condition: JoinCondition) -> &mut Self {
+        self.joins.push(JoinClause {
+            join_type: JoinType::Left,
+            table: table.to_string(),
+            condition,
+        });
         self
     }
 
@@ -1216,6 +1307,161 @@ mod tests {
         let (sql, binds) = q.to_sql();
         assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"age\" < ?");
         assert_eq!(binds, vec![Value::Int(30)]);
+    }
+
+    #[test]
+    fn test_inner_join_standard() {
+        let mut q = sqipe("users");
+        q.join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\""
+        );
+    }
+
+    #[test]
+    fn test_inner_join_pipe() {
+        let mut q = sqipe("users");
+        q.join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"users\" |> INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" |> SELECT \"id\", \"name\""
+        );
+    }
+
+    #[test]
+    fn test_left_join_standard() {
+        let mut q = sqipe("users");
+        q.left_join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"users\" LEFT JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\""
+        );
+    }
+
+    #[test]
+    fn test_left_join_pipe() {
+        let mut q = sqipe("users");
+        q.left_join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"users\" |> LEFT JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" |> SELECT \"id\", \"name\""
+        );
+    }
+
+    #[test]
+    fn test_multiple_joins() {
+        let mut q = sqipe("users");
+        q.join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.left_join(
+            "addresses",
+            table("users")
+                .col("id")
+                .eq_col(table("addresses").col("user_id")),
+        );
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" LEFT JOIN \"addresses\" ON \"users\".\"id\" = \"addresses\".\"user_id\""
+        );
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"users\" |> INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" |> LEFT JOIN \"addresses\" ON \"users\".\"id\" = \"addresses\".\"user_id\" |> SELECT \"id\", \"name\""
+        );
+    }
+
+    #[test]
+    fn test_join_with_where() {
+        let mut q = sqipe("users");
+        q.join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.and_where(("name", "Alice"));
+        q.select(&["id", "name"]);
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" WHERE \"name\" = ?"
+        );
+        assert_eq!(binds, vec![Value::String("Alice".to_string())]);
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"users\" |> INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" |> WHERE \"name\" = ? |> SELECT \"id\", \"name\""
+        );
+    }
+
+    #[test]
+    fn test_join_with_aggregate_and_having() {
+        let mut q = sqipe("users");
+        q.join(
+            "orders",
+            table("users")
+                .col("id")
+                .eq_col(table("orders").col("user_id")),
+        );
+        q.aggregate(&[aggregate::count_all().as_("cnt")]);
+        q.group_by(&["name"]);
+        q.and_where(col("cnt").gt(5));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"name\", COUNT(*) AS \"cnt\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" GROUP BY \"name\" HAVING \"cnt\" > ?"
+        );
+        assert_eq!(binds, vec![Value::Int(5)]);
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"users\" |> INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" |> AGGREGATE COUNT(*) AS \"cnt\" GROUP BY \"name\" |> WHERE \"cnt\" > ?"
+        );
     }
 
     #[test]

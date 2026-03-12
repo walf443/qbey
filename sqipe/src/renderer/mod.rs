@@ -1,4 +1,7 @@
-use crate::{AggregateExpr, AggregateFunc, OrderByClause, SortDir, Value, WhereClause, WhereEntry};
+use crate::{
+    AggregateExpr, AggregateFunc, JoinClause, JoinCondition, JoinType, OrderByClause, SortDir,
+    Value, WhereClause, WhereEntry,
+};
 
 pub mod pipe;
 pub mod standard;
@@ -115,6 +118,45 @@ pub(super) fn render_from(from: &FromClause, cfg: &RenderConfig) -> String {
         s.push_str(suffix);
     }
     s
+}
+
+pub(super) fn render_join_condition(cond: &JoinCondition, cfg: &RenderConfig) -> String {
+    match cond {
+        JoinCondition::ColEq { left, right } => {
+            format!(
+                "{}.{} = {}.{}",
+                (cfg.qi)(&left.table),
+                (cfg.qi)(&left.col),
+                (cfg.qi)(&right.table),
+                (cfg.qi)(&right.col)
+            )
+        }
+        JoinCondition::And(conditions) => {
+            let parts: Vec<String> = conditions
+                .iter()
+                .map(|c| render_join_condition(c, cfg))
+                .collect();
+            parts.join(" AND ")
+        }
+    }
+}
+
+pub(super) fn render_joins(joins: &[JoinClause], cfg: &RenderConfig) -> Vec<String> {
+    joins
+        .iter()
+        .map(|j| {
+            let keyword = match j.join_type {
+                JoinType::Inner => "INNER JOIN",
+                JoinType::Left => "LEFT JOIN",
+            };
+            format!(
+                "{} {} ON {}",
+                keyword,
+                (cfg.qi)(&j.table),
+                render_join_condition(&j.condition, cfg)
+            )
+        })
+        .collect()
 }
 
 pub(super) fn render_select_columns(cols: &[String], cfg: &RenderConfig) -> String {

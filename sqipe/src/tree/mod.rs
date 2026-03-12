@@ -1,4 +1,4 @@
-use crate::{AggregateExpr, OrderByClause, WhereEntry};
+use crate::{AggregateExpr, JoinClause, OrderByClause, WhereEntry};
 
 /// Default double-quote identifier quoting (SQL standard).
 pub fn default_quote_identifier(name: &str) -> String {
@@ -30,6 +30,7 @@ pub enum SelectClause {
 #[derive(Debug, Clone)]
 pub struct SelectTree {
     pub from: FromClause,
+    pub joins: Vec<JoinClause>,
     pub(crate) wheres: Vec<WhereEntry>,
     pub(crate) havings: Vec<WhereEntry>,
     pub select: SelectClause,
@@ -65,6 +66,7 @@ impl SelectTree {
                 table: query.table.clone(),
                 table_suffix: Vec::new(),
             },
+            joins: query.joins.clone(),
             wheres: query.wheres.clone(),
             havings: query.havings.clone(),
             select,

@@ -2,7 +2,7 @@ use crate::Value;
 
 use super::{
     RenderConfig, Renderer, append_limit_offset_flat, append_order_by, render_aggregate_expr,
-    render_from, render_select_columns, render_wheres, set_op_keyword,
+    render_from, render_joins, render_select_columns, render_wheres, set_op_keyword,
 };
 use crate::tree::{SelectClause, SelectTree, UnionTree};
 
@@ -29,6 +29,10 @@ impl StandardSqlRenderer {
         }
 
         parts.push(render_from(&tree.from, cfg));
+
+        for join_sql in render_joins(&tree.joins, cfg) {
+            parts.push(join_sql);
+        }
 
         if let Some(where_sql) = render_wheres(&tree.wheres, cfg, binds) {
             parts.push(format!("WHERE {}", where_sql));
