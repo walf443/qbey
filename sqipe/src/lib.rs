@@ -1,3 +1,7 @@
+#[doc = include_str!("../../README.md")]
+#[cfg(doctest)]
+struct ReadmeDocTests;
+
 /// Value represents a bind parameter value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Value {

@@ -10,17 +10,18 @@ pipe syntax based sql query builder
 ### Basic usage
 
 ```rust
+# use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
-q.and_where(("name", name));   // tuple shorthand for Eq
+q.and_where(("name", "Alice"));   // tuple shorthand for Eq
 q.select(&["id", "name"]);
 
 // Standard SQL (default placeholder: ?)
 let (sql, binds) = q.to_sql();
-// => "SELECT "id", "name" FROM "employee" WHERE "name" = ?"
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ?");
 
 // Pipe syntax SQL (default placeholder: ?)
 let (sql, binds) = q.to_pipe_sql();
-// => "FROM "employee" |> WHERE "name" = ? |> SELECT "id", "name""
+assert_eq!(sql, "FROM \"employee\" |> WHERE \"name\" = ? |> SELECT \"id\", \"name\"");
 ```
 
 ### Dialect support
@@ -28,11 +29,11 @@ let (sql, binds) = q.to_pipe_sql();
 Each dialect is a separate crate with its own `sqipe` function.
 Dialect-specific methods are available through the wrapper.
 
-```rust
+```rust,ignore
 // MySQL (sqipe-mysql)
 use sqipe_mysql::sqipe;
 let mut q = sqipe("employee");
-q.and_where(("name", name));
+q.and_where(("name", "Alice"));
 q.select(&["id", "name"]);
 let (sql, binds) = q.to_sql();
 // => "SELECT `id`, `name` FROM `employee` WHERE `name` = ?"
@@ -41,28 +42,30 @@ let (sql, binds) = q.to_sql();
 ### Comparison operators
 
 ```rust
+# use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
-q.and_where(("name", name));               // tuple shorthand for Eq
-q.and_where(col("age").gt(min_age));        // age > ?
-q.and_where(col("age").lte(max_age));       // age <= ?
-q.and_where(col("salary").lt(max_salary));  // salary < ?
-q.and_where(col("level").gte(min_level));   // level >= ?
-q.and_where(col("role").ne("intern"));      // role != ?
+q.and_where(("name", "Alice"));               // tuple shorthand for Eq
+q.and_where(col("age").gt(20));               // age > ?
+q.and_where(col("age").lte(60));              // age <= ?
+q.and_where(col("salary").lt(100000));        // salary < ?
+q.and_where(col("level").gte(3));             // level >= ?
+q.and_where(col("role").ne("intern"));        // role != ?
 q.select(&["id", "name"]);
 
 let (sql, binds) = q.to_sql();
-// => "SELECT id, name FROM employee WHERE name = ? AND age > ? AND age <= ? AND salary < ? AND level >= ? AND role != ?"
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? AND \"age\" > ? AND \"age\" <= ? AND \"salary\" < ? AND \"level\" >= ? AND \"role\" != ?");
 ```
 
 ### BETWEEN
 
 ```rust
+# use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
 q.and_where(col("age").between(20, 30));
 q.select(&["id", "name"]);
 
 let (sql, binds) = q.to_sql();
-// => "SELECT id, name FROM employee WHERE age BETWEEN ? AND ?"
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"age\" BETWEEN ? AND ?");
 ```
 
 ### Range conditions
@@ -70,31 +73,36 @@ let (sql, binds) = q.to_sql();
 Rust range types are automatically converted to the appropriate SQL conditions.
 
 ```rust
+# use sqipe::{sqipe, col};
 // Inclusive range: BETWEEN
-q.and_where(col("age").in_range(20..=30));
-// => "age BETWEEN ? AND ?"
+let (sql, _) = sqipe("t").and_where(col("age").in_range(20..=30)).to_sql();
+assert_eq!(sql, "SELECT * FROM \"t\" WHERE \"age\" BETWEEN ? AND ?");
 
 // Exclusive range: >= AND <
-q.and_where(col("age").in_range(20..30));
-// => "age >= ? AND age < ?"
+let (sql, _) = sqipe("t").and_where(col("age").in_range(20..30)).to_sql();
+assert_eq!(sql, "SELECT * FROM \"t\" WHERE \"age\" >= ? AND \"age\" < ?");
 
 // From range: >=
-q.and_where(col("age").in_range(20..));
-// => "age >= ?"
+let (sql, _) = sqipe("t").and_where(col("age").in_range(20..)).to_sql();
+assert_eq!(sql, "SELECT * FROM \"t\" WHERE \"age\" >= ?");
 
 // To range: <
-q.and_where(col("age").in_range(..30));
-// => "age < ?"
+let (sql, _) = sqipe("t").and_where(col("age").in_range(..30)).to_sql();
+assert_eq!(sql, "SELECT * FROM \"t\" WHERE \"age\" < ?");
 
 // To inclusive range: <=
-q.and_where(col("age").in_range(..=30));
-// => "age <= ?"
+let (sql, _) = sqipe("t").and_where(col("age").in_range(..=30)).to_sql();
+assert_eq!(sql, "SELECT * FROM \"t\" WHERE \"age\" <= ?");
 ```
 
 ### Dynamic query building
 
 ```rust
+# use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
+
+let name: Option<&str> = Some("Alice");
+let min_age: Option<i32> = Some(20);
 
 if let Some(name) = name {
     q.and_where(("name", name));
@@ -110,22 +118,24 @@ let (sql, binds) = q.to_sql();
 ### or_where
 
 ```rust
+# use sqipe::{sqipe, col};
 // Simple OR
 let mut q = sqipe("employee");
-q.and_where(("name", name));
+q.and_where(("name", "Alice"));
 q.or_where(col("role").eq("admin"));
 let (sql, binds) = q.to_sql();
-// => "SELECT * FROM employee WHERE name = ? OR role = ?"
+assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"name\" = ? OR \"role\" = ?");
 ```
 
 ### Grouping conditions with any / all
 
 ```rust
+# use sqipe::{sqipe, col, any, all};
 let mut q = sqipe("employee");
-q.and_where(("name", name));
+q.and_where(("name", "Alice"));
 q.and_where(any(col("role").eq("admin"), col("role").eq("manager")));
 let (sql, binds) = q.to_sql();
-// => "SELECT * FROM employee WHERE name = ? AND (role = ? OR role = ?)"
+assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"name\" = ? AND (\"role\" = ? OR \"role\" = ?)");
 
 // Combining all + any
 let mut q = sqipe("employee");
@@ -136,14 +146,13 @@ q.and_where(
     )
 );
 let (sql, binds) = q.to_sql();
-// => "SELECT * FROM employee WHERE (role = ? AND dept = ?) OR (role = ? AND dept = ?)"
+assert_eq!(sql, "SELECT * FROM \"employee\" WHERE (\"role\" = ? AND \"dept\" = ?) OR (\"role\" = ? AND \"dept\" = ?)");
 ```
 
 ### Aggregate / GROUP BY
 
 ```rust
-use sqipe::aggregate;
-
+# use sqipe::{sqipe, col, aggregate};
 let mut q = sqipe("employee");
 q.aggregate(&[
     aggregate::count_all().as_("cnt"),
@@ -152,10 +161,10 @@ q.aggregate(&[
 q.group_by(&["dept"]);
 
 let (sql, binds) = q.to_sql();
-// => "SELECT dept, COUNT(*) AS cnt, SUM(salary) AS total_salary FROM employee GROUP BY dept"
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total_salary\" FROM \"employee\" GROUP BY \"dept\"");
 
 let (sql, binds) = q.to_pipe_sql();
-// => "FROM employee |> AGGREGATE COUNT(*) AS cnt, SUM(salary) AS total_salary GROUP BY dept"
+assert_eq!(sql, "FROM \"employee\" |> AGGREGATE COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total_salary\" GROUP BY \"dept\"");
 ```
 
 Available aggregate functions: `count_all()`, `count(col)`, `sum(col)`, `avg(col)`, `min(col)`, `max(col)`, `expr(raw_sql)`.
@@ -165,6 +174,7 @@ Available aggregate functions: `count_all()`, `count(col)`, `sum(col)`, `avg(col
 `and_where` / `or_where` called after `aggregate()` automatically become HAVING conditions.
 
 ```rust
+# use sqipe::{sqipe, col, aggregate};
 let mut q = sqipe("employee");
 q.and_where(col("active").eq(true));       // WHERE (before aggregate)
 q.aggregate(&[aggregate::count_all().as_("cnt")]);
@@ -172,56 +182,60 @@ q.group_by(&["dept"]);
 q.and_where(col("cnt").gt(5));             // HAVING (after aggregate)
 
 let (sql, binds) = q.to_sql();
-// => "SELECT dept, COUNT(*) AS cnt FROM employee WHERE active = ? GROUP BY dept HAVING cnt > ?"
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" WHERE \"active\" = ? GROUP BY \"dept\" HAVING \"cnt\" > ?");
 
 let (sql, binds) = q.to_pipe_sql();
-// => "FROM employee |> WHERE active = ? |> AGGREGATE COUNT(*) AS cnt GROUP BY dept |> WHERE cnt > ?"
+assert_eq!(sql, "FROM \"employee\" |> WHERE \"active\" = ? |> AGGREGATE COUNT(*) AS \"cnt\" GROUP BY \"dept\" |> WHERE \"cnt\" > ?");
 ```
 
 ### Order By
 
 ```rust
+# use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
 q.select(&["id", "name", "age"]);
 q.order_by(col("name").asc());
 q.order_by(col("age").desc());
 
 let (sql, binds) = q.to_sql();
-// => "SELECT id, name, age FROM employee ORDER BY name ASC, age DESC"
+assert_eq!(sql, "SELECT \"id\", \"name\", \"age\" FROM \"employee\" ORDER BY \"name\" ASC, \"age\" DESC");
 
 let (sql, binds) = q.to_pipe_sql();
-// => "FROM employee |> SELECT id, name, age |> ORDER BY name ASC, age DESC"
+assert_eq!(sql, "FROM \"employee\" |> SELECT \"id\", \"name\", \"age\" |> ORDER BY \"name\" ASC, \"age\" DESC");
 ```
 
 ### Limit / Offset
 
 ```rust
+# use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
 q.select(&["id", "name"]);
 q.limit(10);
 q.offset(20);
 
 let (sql, binds) = q.to_sql();
-// => "SELECT id, name FROM employee LIMIT 10 OFFSET 20"
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" LIMIT 10 OFFSET 20");
 
 let (sql, binds) = q.to_pipe_sql();
-// => "FROM employee |> SELECT id, name |> LIMIT 10 OFFSET 20"
+assert_eq!(sql, "FROM \"employee\" |> SELECT \"id\", \"name\" |> LIMIT 10 OFFSET 20");
 ```
 
 ### Method chaining
 
 ```rust
+# use sqipe::{sqipe, col};
 let (sql, binds) = sqipe("employee")
-    .and_where(("name", name))
+    .and_where(("name", "Alice"))
     .and_where(col("age").gt(20))
     .select(&["id", "name"])
     .to_sql();
-// => "SELECT id, name FROM employee WHERE name = ? AND age > ?"
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? AND \"age\" > ?");
 ```
 
 ### UNION / UNION ALL
 
 ```rust
+# use sqipe::{sqipe, col, UnionQueryOps};
 let mut q1 = sqipe("employee");
 q1.and_where(("dept", "eng"));
 q1.select(&["id", "name"]);
@@ -232,19 +246,12 @@ q2.select(&["id", "name"]);
 
 let uq = q1.union_all(&q2);
 let (sql, binds) = uq.to_sql();
-// => "SELECT id, name FROM employee WHERE dept = ? UNION ALL SELECT id, name FROM employee WHERE dept = ?"
-
-// With ORDER BY and LIMIT on the union result
-let mut uq = q1.union_all(&q2);
-uq.order_by(col("name").asc());
-uq.limit(10);
-let (sql, binds) = uq.to_sql();
-// => "... UNION ALL ... ORDER BY name ASC LIMIT 10"
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ? UNION ALL SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ?");
 ```
 
 ### MySQL-specific features (sqipe-mysql)
 
-```rust
+```rust,ignore
 use sqipe_mysql::sqipe;
 
 let mut q = sqipe("employee");

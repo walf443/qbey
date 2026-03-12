@@ -1,3 +1,7 @@
+#[doc = include_str!("../README.md")]
+#[cfg(doctest)]
+struct ReadmeDocTests;
+
 use sqipe::Dialect;
 use sqipe::renderer::pipe::PipeSqlRenderer;
 use sqipe::renderer::standard::StandardSqlRenderer;
