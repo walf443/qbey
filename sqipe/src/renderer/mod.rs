@@ -248,11 +248,11 @@ pub(super) fn render_select_core<V: Clone>(
         parts.push(format!("WHERE {}", where_sql));
     }
 
-    if let SelectClause::Aggregate { group_bys, .. } = &tree.select {
-        if !group_bys.is_empty() {
-            let cols: Vec<String> = group_bys.iter().map(|c| (cfg.qi)(c)).collect();
-            parts.push(format!("GROUP BY {}", cols.join(", ")));
-        }
+    if let SelectClause::Aggregate { group_bys, .. } = &tree.select
+        && !group_bys.is_empty()
+    {
+        let cols: Vec<String> = group_bys.iter().map(|c| (cfg.qi)(c)).collect();
+        parts.push(format!("GROUP BY {}", cols.join(", ")));
     }
 
     if let Some(having_sql) = render_wheres(&tree.havings, cfg, binds) {

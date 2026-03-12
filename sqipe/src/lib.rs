@@ -363,9 +363,20 @@ impl QualifiedCol {
 /// A WHERE condition tree, generic over the bind value type.
 #[derive(Clone)]
 pub enum WhereClause<V: Clone = Value> {
-    Condition { col: ColRef, op: Op, val: V },
-    Between { col: ColRef, low: V, high: V },
-    In { col: ColRef, vals: Vec<V> },
+    Condition {
+        col: ColRef,
+        op: Op,
+        val: V,
+    },
+    Between {
+        col: ColRef,
+        low: V,
+        high: V,
+    },
+    In {
+        col: ColRef,
+        vals: Vec<V>,
+    },
     InSubQuery {
         col: ColRef,
         sub: Box<tree::SelectTree<V>>,
