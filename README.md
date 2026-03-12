@@ -23,18 +23,27 @@ let (sql, binds) = q.to_pipe_sql();
 
 ### Dialect support
 
-```rust
-// BigQuery (pipe syntax + named parameters)
-let (sql, binds) = q.to_pipe_sql_with(BigQuery);
-// => "FROM employee |> WHERE name = @p1 |> SELECT id, name"
+Each dialect is a separate crate with its own `sqipe` function.
+Dialect-specific methods are available through the wrapper.
 
-// PostgreSQL (positional parameters)
-let (sql, binds) = q.to_sql_with(PostgreSQL);
+```rust
+// MySQL (sqipe-mysql)
+use sqipe_mysql::sqipe;
+let mut q = sqipe("employee");
+q.and_where(("name", name));
+q.select(&["id", "name"]);
+let (sql, binds) = q.to_sql();
+// => "SELECT id, name FROM employee WHERE name = ?"
+
+// PostgreSQL (sqipe-postgresql)
+use sqipe_postgresql::sqipe;
+let (sql, binds) = q.to_sql();
 // => "SELECT id, name FROM employee WHERE name = $1"
 
-// MySQL (? placeholder)
-let (sql, binds) = q.to_sql_with(MySQL);
-// => "SELECT id, name FROM employee WHERE name = ?"
+// BigQuery (sqipe-bigquery)
+use sqipe_bigquery::sqipe;
+let (sql, binds) = q.to_pipe_sql();
+// => "FROM employee |> WHERE name = @p1 |> SELECT id, name"
 ```
 
 ### Comparison operators

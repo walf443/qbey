@@ -1,0 +1,46 @@
+# sqipe-mysql
+
+MySQL dialect for [sqipe](../README.md) query builder.
+
+## Usage
+
+```rust
+use sqipe_mysql::sqipe;
+use sqipe::col;
+
+let mut q = sqipe("employee");
+q.and_where(("name", name));
+q.select(&["id", "name"]);
+let (sql, binds) = q.to_sql();
+// => "SELECT id, name FROM employee WHERE name = ?"
+```
+
+## Index hints
+
+```rust
+use sqipe_mysql::sqipe;
+
+// FORCE INDEX
+let mut q = sqipe("employee");
+q.force_index(&["idx_name"]);
+q.and_where(("name", name));
+q.select(&["id", "name"]);
+let (sql, binds) = q.to_sql();
+// => "SELECT id, name FROM employee FORCE INDEX (idx_name) WHERE name = ?"
+
+// USE INDEX (multiple)
+let mut q = sqipe("employee");
+q.use_index(&["idx_name", "idx_age"]);
+q.and_where(("name", name));
+q.select(&["id", "name"]);
+let (sql, binds) = q.to_sql();
+// => "SELECT id, name FROM employee USE INDEX (idx_name, idx_age) WHERE name = ?"
+
+// IGNORE INDEX
+let mut q = sqipe("employee");
+q.ignore_index(&["idx_old"]);
+q.and_where(("name", name));
+q.select(&["id", "name"]);
+let (sql, binds) = q.to_sql();
+// => "SELECT id, name FROM employee IGNORE INDEX (idx_old) WHERE name = ?"
+```
