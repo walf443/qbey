@@ -24,20 +24,16 @@ let (sql, binds) = q.to_pipe_sql();
 assert_eq!(sql, "FROM \"employee\" |> WHERE \"name\" = ? |> SELECT \"id\", \"name\"");
 ```
 
-### Dialect support
+## Features
 
-Each dialect is a separate crate with its own `sqipe` function.
-Dialect-specific methods are available through the wrapper.
+- **Standard SQL & pipe syntax** — Generate both traditional `SELECT ... FROM ... WHERE` and pipe syntax `FROM ... |> WHERE ... |> SELECT ...` from the same query builder
+- **Driver agnostic** — Works with any database driver. Tested with [sqlx](https://github.com/launchbadge/sqlx) (SQLite, MySQL), [rusqlite](https://github.com/rusqlite/rusqlite), [tokio-postgres](https://github.com/sfackler/rust-postgres), and [postgres](https://github.com/sfackler/rust-postgres)
+- **Extensible bind value types** — Use the built-in `Value` enum for quick prototyping, or define your own type with `sqipe_with::<V>()` to match your driver's parameter types
+- **Dialect support** — Customize placeholder style (`?`, `$1`, ...) and identifier quoting via the `Dialect` trait. MySQL dialect is available as a separate crate:
+  - [sqipe-mysql](./sqipe-mysql/README.md) — backtick quoting, index hints, STRAIGHT_JOIN
+- **Dynamic query building** — Conditionally add WHERE clauses, JOINs, and other clauses at runtime
 
-```rust,ignore
-// MySQL (sqipe-mysql)
-use sqipe_mysql::sqipe;
-let mut q = sqipe("employee");
-q.and_where(("name", "Alice"));
-q.select(&["id", "name"]);
-let (sql, binds) = q.to_sql();
-// => "SELECT `id`, `name` FROM `employee` WHERE `name` = ?"
-```
+## API
 
 ### Comparison operators
 
@@ -249,18 +245,85 @@ let (sql, binds) = uq.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ? UNION ALL SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ?");
 ```
 
-### MySQL-specific features (sqipe-mysql)
+### IN clause
 
-```rust,ignore
-use sqipe_mysql::sqipe;
-
-let mut q = sqipe("employee");
-q.force_index(&["idx_name"]);
-q.and_where(("name", "Alice"));
+```rust
+# use sqipe::{sqipe, col};
+let mut q = sqipe("users");
+q.and_where(col("status").included(&["active", "pending"]));
 q.select(&["id", "name"]);
 
 let (sql, binds) = q.to_sql();
-// => "SELECT `id`, `name` FROM `employee` FORCE INDEX (idx_name) WHERE `name` = ?"
-
-// Also available: use_index, ignore_index
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" WHERE \"status\" IN (?, ?)");
 ```
+
+Empty lists are safely handled as `1 = 0`.
+
+### JOIN
+
+```rust
+# use sqipe::{sqipe, col, table, join};
+// INNER JOIN with ON
+let mut q = sqipe("users");
+q.join("orders", table("users").col("id").eq_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\"");
+
+// LEFT JOIN
+let mut q = sqipe("users");
+q.left_join("addresses", table("users").col("id").eq_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" LEFT JOIN \"addresses\" ON \"users\".\"id\" = \"addresses\".\"user_id\"");
+
+// JOIN with USING
+let mut q = sqipe("users");
+q.join("orders", join::using_col("user_id"));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\")");
+
+// Multiple columns USING
+let mut q = sqipe("users");
+q.join("orders", join::using_cols(&["user_id", "tenant_id"]));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\", \"tenant_id\")");
+```
+
+### Table aliases and qualified columns
+
+```rust
+# use sqipe::{sqipe, col, table};
+let mut q = sqipe("users");
+q.as_("u");
+q.join(
+    table("orders").as_("o"),
+    table("u").col("id").eq_col("user_id"),
+);
+q.select(&["id"]);
+q.add_select(table("o").col("total").as_("order_total"));
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"o\".\"total\" AS \"order_total\" FROM \"users\" AS \"u\" INNER JOIN \"orders\" AS \"o\" ON \"u\".\"id\" = \"o\".\"user_id\"");
+```
+
+### Column aliases
+
+```rust
+# use sqipe::{sqipe, col};
+let mut q = sqipe("users");
+q.add_select(col("name").as_("user_name"));
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"name\" AS \"user_name\" FROM \"users\"");
+```
+
+### MySQL dialect
+
+See [sqipe-mysql](./sqipe-mysql/README.md) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).
