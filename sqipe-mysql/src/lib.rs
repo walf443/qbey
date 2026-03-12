@@ -91,6 +91,19 @@ impl MysqlQuery {
         self
     }
 
+    pub fn straight_join(
+        &mut self,
+        table: impl sqipe::IntoJoinTable,
+        condition: sqipe::JoinCondition,
+    ) -> &mut Self {
+        self.inner.add_join(
+            sqipe::JoinType::Custom("STRAIGHT_JOIN".to_string()),
+            table,
+            condition,
+        );
+        self
+    }
+
     pub fn union<T: sqipe::AsUnionParts<Query = MysqlQuery>>(&self, other: &T) -> MysqlUnionQuery {
         let mut parts = vec![(sqipe::SetOp::Union, self.clone())];
         let other_parts = other.as_union_parts();
@@ -247,7 +260,7 @@ impl sqipe::UnionQueryOps for MysqlUnionQuery {
 mod tests {
     use super::*;
     use sqipe::UnionQueryOps;
-    use sqipe::col;
+    use sqipe::{col, table};
 
     #[test]
     fn test_basic_to_sql() {
@@ -469,5 +482,48 @@ mod tests {
             "SELECT `id`, `name` FROM `employee` WHERE `dept` = ? UNION ALL SELECT `id`, `name` FROM `employee` WHERE `dept` = ? UNION ALL SELECT `id`, `name` FROM `contractor` WHERE `dept` = ?"
         );
         assert_eq!(binds.len(), 3);
+    }
+
+    #[test]
+    fn test_straight_join() {
+        let mut q = sqipe("users");
+        q.straight_join("orders", table("users").col("id").eq_col("user_id"));
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `id`, `name` FROM `users` STRAIGHT_JOIN `orders` ON `users`.`id` = `orders`.`user_id`"
+        );
+    }
+
+    #[test]
+    fn test_straight_join_pipe() {
+        let mut q = sqipe("users");
+        q.straight_join("orders", table("users").col("id").eq_col("user_id"));
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM `users` |> STRAIGHT_JOIN `orders` ON `users`.`id` = `orders`.`user_id` |> SELECT `id`, `name`"
+        );
+    }
+
+    #[test]
+    fn test_straight_join_with_alias() {
+        let mut q = sqipe("users");
+        q.as_("u");
+        q.straight_join(
+            table("orders").as_("o"),
+            table("u").col("id").eq_col("user_id"),
+        );
+        q.select(&["id", "name"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `id`, `name` FROM `users` AS `u` STRAIGHT_JOIN `orders` AS `o` ON `u`.`id` = `o`.`user_id`"
+        );
     }
 }

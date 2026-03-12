@@ -171,6 +171,8 @@ pub mod join {
 pub enum JoinType {
     Inner,
     Left,
+    /// Dialect-specific join type (e.g., "STRAIGHT_JOIN" in MySQL).
+    Custom(String),
 }
 
 /// A JOIN clause.
@@ -752,6 +754,27 @@ impl Query {
         resolve_join_condition(&mut condition, resolve_name);
         self.joins.push(JoinClause {
             join_type: JoinType::Left,
+            table: name,
+            alias,
+            condition,
+        });
+        self
+    }
+
+    /// Add a JOIN clause with a custom join type. Used by dialect crates for
+    /// dialect-specific join types (e.g., STRAIGHT_JOIN in MySQL).
+    pub fn add_join(
+        &mut self,
+        join_type: JoinType,
+        table: impl IntoJoinTable,
+        condition: JoinCondition,
+    ) -> &mut Self {
+        let (name, alias) = table.into_join_table();
+        let resolve_name = alias.as_deref().unwrap_or(&name);
+        let mut condition = condition;
+        resolve_join_condition(&mut condition, resolve_name);
+        self.joins.push(JoinClause {
+            join_type,
             table: name,
             alias,
             condition,

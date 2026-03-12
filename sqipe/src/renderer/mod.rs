@@ -162,9 +162,10 @@ pub(super) fn render_joins(joins: &[JoinClause], cfg: &RenderConfig) -> Vec<Stri
     joins
         .iter()
         .map(|j| {
-            let keyword = match j.join_type {
+            let keyword = match &j.join_type {
                 JoinType::Inner => "INNER JOIN",
                 JoinType::Left => "LEFT JOIN",
+                JoinType::Custom(s) => s.as_str(),
             };
             let table = render_join_table(&j.table, &j.alias, cfg);
             if let JoinCondition::Using(cols) = &j.condition {
