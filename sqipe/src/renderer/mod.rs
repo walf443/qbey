@@ -211,6 +211,60 @@ fn render_select_item(col: &ColRef, cfg: &RenderConfig) -> String {
     }
 }
 
+/// Render a SelectTree as standard SQL for use in subqueries.
+/// Uses the shared binds accumulator so placeholder indices are correct.
+fn render_subquery_sql<V: Clone>(
+    tree: &SelectTree<V>,
+    cfg: &RenderConfig,
+    binds: &mut Vec<V>,
+) -> String {
+    use crate::tree::SelectClause;
+
+    let mut parts = Vec::new();
+
+    match &tree.select {
+        SelectClause::Columns(cols) => {
+            parts.push(render_select_columns(cols, cfg));
+        }
+        SelectClause::Aggregate { group_bys, exprs } => {
+            let mut items = Vec::new();
+            for col in group_bys {
+                items.push((cfg.qi)(col));
+            }
+            for expr in exprs {
+                items.push(render_aggregate_expr(expr, cfg));
+            }
+            parts.push(format!("SELECT {}", items.join(", ")));
+        }
+    }
+
+    parts.push(render_from(&tree.from, cfg));
+
+    for join_sql in render_joins(&tree.joins, cfg) {
+        parts.push(join_sql);
+    }
+
+    if let Some(where_sql) = render_wheres(&tree.wheres, cfg, binds) {
+        parts.push(format!("WHERE {}", where_sql));
+    }
+
+    if let SelectClause::Aggregate { group_bys, .. } = &tree.select {
+        if !group_bys.is_empty() {
+            let cols: Vec<String> = group_bys.iter().map(|c| (cfg.qi)(c)).collect();
+            parts.push(format!("GROUP BY {}", cols.join(", ")));
+        }
+    }
+
+    if let Some(having_sql) = render_wheres(&tree.havings, cfg, binds) {
+        parts.push(format!("HAVING {}", having_sql));
+    }
+
+    let mut sql = parts.join(" ");
+    append_order_by(&mut sql, &tree.order_bys, cfg, " ");
+    append_limit_offset_flat(&mut sql, tree.limit, tree.offset);
+    sql
+}
+
 fn render_where_clause<V: Clone>(
     clause: &WhereClause<V>,
     is_top_level: bool,
@@ -254,6 +308,10 @@ fn render_where_clause<V: Clone>(
                 render_col_ref(col, cfg),
                 placeholders.join(", ")
             )
+        }
+        WhereClause::InSubQuery { col, sub } => {
+            let sub_sql = render_subquery_sql(sub, cfg, binds);
+            format!("{} IN ({})", render_col_ref(col, cfg), sub_sql)
         }
         WhereClause::Any(clauses) => {
             let parts: Vec<String> = clauses

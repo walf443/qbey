@@ -52,6 +52,15 @@ impl<V: Clone + std::fmt::Debug> DerefMut for MysqlQuery<V> {
     }
 }
 
+impl<V: Clone + std::fmt::Debug> sqipe::IntoIncluded<V> for &MysqlQuery<V> {
+    fn into_in_clause(self, col: sqipe::ColRef) -> sqipe::WhereClause<V> {
+        sqipe::WhereClause::InSubQuery {
+            col,
+            sub: Box::new(self.to_tree()),
+        }
+    }
+}
+
 impl<V: Clone + std::fmt::Debug> sqipe::AsUnionParts for MysqlQuery<V> {
     type Query = MysqlQuery<V>;
     fn as_union_parts(&self) -> Vec<(sqipe::SetOp, MysqlQuery<V>)> {
@@ -522,6 +531,43 @@ mod tests {
             sql,
             "FROM `users` |> STRAIGHT_JOIN `orders` ON `users`.`id` = `orders`.`user_id` |> SELECT `id`, `name`"
         );
+    }
+
+    #[test]
+    fn test_in_subquery() {
+        let mut sub = sqipe("orders");
+        sub.select(&["user_id"]);
+        sub.and_where(col("status").eq("shipped"));
+
+        let mut q = sqipe("users");
+        q.and_where(col("id").included(&sub));
+        q.select(&["id", "name"]);
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `id`, `name` FROM `users` WHERE `id` IN (SELECT `user_id` FROM `orders` WHERE `status` = ?)"
+        );
+        assert_eq!(binds, vec![sqipe::Value::String("shipped".to_string())]);
+    }
+
+    #[test]
+    fn test_in_subquery_with_force_index() {
+        let mut sub = sqipe("orders");
+        sub.force_index(&["idx_status"]);
+        sub.select(&["user_id"]);
+        sub.and_where(col("status").eq("shipped"));
+
+        let mut q = sqipe("users");
+        q.and_where(col("id").included(&sub));
+        q.select(&["id", "name"]);
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `id`, `name` FROM `users` WHERE `id` IN (SELECT `user_id` FROM `orders` FORCE INDEX (idx_status) WHERE `status` = ?)"
+        );
+        assert_eq!(binds, vec![sqipe::Value::String("shipped".to_string())]);
     }
 
     #[test]

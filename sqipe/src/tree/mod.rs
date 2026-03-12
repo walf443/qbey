@@ -49,6 +49,22 @@ pub struct UnionTree<V: Clone = crate::Value> {
     pub offset: Option<u64>,
 }
 
+impl<V: Clone> SelectTree<V> {
+    /// Transform all bind values in this tree.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectTree<U> {
+        SelectTree {
+            from: self.from,
+            joins: self.joins,
+            wheres: self.wheres.into_iter().map(|w| w.map_values(f)).collect(),
+            havings: self.havings.into_iter().map(|w| w.map_values(f)).collect(),
+            select: self.select,
+            order_bys: self.order_bys,
+            limit: self.limit,
+            offset: self.offset,
+        }
+    }
+}
+
 // ── Build tree from Query ──
 
 impl<V: Clone + std::fmt::Debug> SelectTree<V> {
