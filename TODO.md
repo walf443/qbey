@@ -11,12 +11,12 @@ Reference: [Spark SQL Pipe Syntax](https://spark.apache.org/docs/latest/sql-pipe
 - [ ] EXTEND - Appends new computed columns to the input table
 - [ ] SET - Updates columns by replacing with new expressions
 - [ ] DROP - Drops columns from the input table by name
-- [ ] AS - Retains rows with a new table alias
+- [x] AS - Retains rows with a new table alias
 - [x] WHERE - Returns subset of rows passing the condition
 - [x] LIMIT - Returns specified number of rows
 - [x] OFFSET - Skips specified number of rows
 - [x] AGGREGATE - Performs aggregation with or without GROUP BY
-- [ ] JOIN - Joins rows from both inputs (INNER, LEFT, RIGHT, FULL, CROSS, SEMI, ANTI)
+- [x] JOIN - Joins rows from both inputs (INNER, LEFT, USING, Custom)
 - [x] ORDER BY - Returns rows after sorting
 - [x] UNION / UNION ALL - Set operations
 - [ ] INTERSECT / EXCEPT - Set operations
