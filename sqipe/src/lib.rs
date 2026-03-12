@@ -55,7 +55,7 @@ pub enum Op {
 }
 
 impl Op {
-    fn as_str(&self) -> &'static str {
+    pub(crate) fn as_str(&self) -> &'static str {
         match self {
             Op::Eq => "=",
             Op::Ne => "!=",
@@ -275,7 +275,7 @@ pub trait Dialect {
 }
 
 #[derive(Debug, Clone)]
-enum WhereEntry {
+pub(crate) enum WhereEntry {
     And(WhereClause),
     Or(WhereClause),
 }
@@ -303,37 +303,32 @@ pub trait UnionQueryOps: IntoUnionParts {
     fn to_pipe_sql(&self) -> (String, Vec<Value>);
 }
 
-/// Internal config for SQL generation.
-struct SqlConfig<'a> {
-    ph: &'a dyn Fn(usize) -> String,
-    qi: &'a dyn Fn(&str) -> String,
-}
+mod builder;
 
-/// Default double-quote identifier quoting (SQL standard).
-fn default_quote_identifier(name: &str) -> String {
-    format!("\"{}\"", name.replace('"', "\"\""))
-}
+use builder::{default_quote_identifier, SqlBuilder, SqlConfig};
+use builder::standard::StandardSqlBuilder;
+use builder::pipe::PipeSqlBuilder;
 
 /// The query builder.
 #[derive(Debug, Clone)]
 pub struct Query {
-    table: String,
-    selects: Vec<String>,
-    wheres: Vec<WhereEntry>,
-    aggregates: Vec<AggregateExpr>,
-    group_bys: Vec<String>,
-    order_bys: Vec<OrderByClause>,
-    limit_val: Option<u64>,
-    offset_val: Option<u64>,
+    pub(crate) table: String,
+    pub(crate) selects: Vec<String>,
+    pub(crate) wheres: Vec<WhereEntry>,
+    pub(crate) aggregates: Vec<AggregateExpr>,
+    pub(crate) group_bys: Vec<String>,
+    pub(crate) order_bys: Vec<OrderByClause>,
+    pub(crate) limit_val: Option<u64>,
+    pub(crate) offset_val: Option<u64>,
 }
 
 /// A combined query built from UNION / UNION ALL operations.
 #[derive(Debug, Clone)]
 pub struct UnionQuery {
-    parts: Vec<(SetOp, Query)>,
-    order_bys: Vec<OrderByClause>,
-    limit_val: Option<u64>,
-    offset_val: Option<u64>,
+    pub(crate) parts: Vec<(SetOp, Query)>,
+    pub(crate) order_bys: Vec<OrderByClause>,
+    pub(crate) limit_val: Option<u64>,
+    pub(crate) offset_val: Option<u64>,
 }
 
 impl IntoUnionParts for Query {
@@ -433,325 +428,68 @@ impl Query {
 
     /// Build standard SQL with `?` placeholders and double-quote identifiers.
     pub fn to_sql(&self) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|_| "?".to_string(),
-            qi: &default_quote_identifier,
-        };
-        self.build_standard_sql(&cfg)
+        let cfg = SqlConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
+        StandardSqlBuilder::build_full(self, &cfg)
     }
 
     /// Build pipe syntax SQL with `?` placeholders and double-quote identifiers.
     pub fn to_pipe_sql(&self) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|_| "?".to_string(),
-            qi: &default_quote_identifier,
-        };
-        self.build_pipe_sql(&cfg)
+        let cfg = SqlConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
+        PipeSqlBuilder::build_full(self, &cfg)
     }
 
     /// Build standard SQL with dialect-specific placeholders and quoting.
     pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_standard_sql(&cfg)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        StandardSqlBuilder::build_full(self, &SqlConfig { ph: &ph, qi: &qi })
     }
 
     /// Build pipe syntax SQL with dialect-specific placeholders and quoting.
     pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_pipe_sql(&cfg)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        PipeSqlBuilder::build_full(self, &SqlConfig { ph: &ph, qi: &qi })
     }
 
-    /// Build only the core body (SELECT/FROM/WHERE/GROUP BY, no set ops/ORDER BY/LIMIT).
-    /// Used by dialect wrappers that need to inject dialect-specific clauses.
+    /// Build only the core body (SELECT/FROM/WHERE/GROUP BY, no ORDER BY/LIMIT).
     pub fn to_sql_body_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_standard_sql_core(&cfg, binds)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        StandardSqlBuilder::build_core(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
     }
 
-    /// Build only the core body in pipe syntax (FROM/WHERE/SELECT/AGGREGATE, no set ops/ORDER BY/LIMIT).
-    /// Used by dialect wrappers that need to inject dialect-specific clauses.
+    /// Build only the core body in pipe syntax (FROM/WHERE/SELECT/AGGREGATE, no ORDER BY/LIMIT).
     pub fn to_pipe_sql_body_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_pipe_sql_core(&cfg, binds)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        PipeSqlBuilder::build_core(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
     }
 
     /// Build ORDER BY clause with dialect-specific quoting. Returns None if no ORDER BY.
     pub fn to_order_by_with(&self, dialect: &dyn Dialect) -> Option<String> {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_order_by_clause(&cfg)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        builder::build_order_by_clause(&self.order_bys, &SqlConfig { ph: &ph, qi: &qi })
     }
 
     /// Returns (LIMIT string, OFFSET string), each None if not set.
     pub fn to_limit_offset(&self) -> (Option<String>, Option<String>) {
-        self.build_limit_offset()
+        builder::build_limit_offset(self.limit_val, self.offset_val)
     }
 
     /// Build a full query for use as a UNION part with dialect-specific quoting.
-    /// If the query has ORDER BY/LIMIT/OFFSET, wraps in parentheses.
     pub fn to_sql_union_part_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_standard_sql_union_part(&cfg, binds)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        StandardSqlBuilder::build_union_part(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
     }
 
     /// Build a full pipe query for use as a UNION part with dialect-specific quoting.
-    /// If the query has ORDER BY/LIMIT/OFFSET, wraps in parentheses.
     pub fn to_pipe_sql_union_part_with(&self, dialect: &dyn Dialect, binds: &mut Vec<Value>) -> String {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_pipe_sql_union_part(&cfg, binds)
-    }
-
-    fn build_select_clause(&self, cfg: &SqlConfig) -> String {
-        if self.selects.is_empty() {
-            "SELECT *".to_string()
-        } else {
-            let cols: Vec<String> = self.selects.iter().map(|c| (cfg.qi)(c)).collect();
-            format!("SELECT {}", cols.join(", "))
-        }
-    }
-
-    fn render_aggregate_expr(expr: &AggregateExpr, cfg: &SqlConfig) -> String {
-        let func_str = match &expr.expr {
-            AggregateFunc::CountAll => "COUNT(*)".to_string(),
-            AggregateFunc::Count(col) => format!("COUNT({})", (cfg.qi)(col)),
-            AggregateFunc::Sum(col) => format!("SUM({})", (cfg.qi)(col)),
-            AggregateFunc::Avg(col) => format!("AVG({})", (cfg.qi)(col)),
-            AggregateFunc::Min(col) => format!("MIN({})", (cfg.qi)(col)),
-            AggregateFunc::Max(col) => format!("MAX({})", (cfg.qi)(col)),
-            AggregateFunc::Expr(raw) => raw.clone(),
-        };
-        match &expr.alias {
-            Some(alias) => format!("{} AS {}", func_str, (cfg.qi)(alias)),
-            None => func_str,
-        }
-    }
-
-    fn build_group_by_clause(&self, cfg: &SqlConfig) -> Option<String> {
-        if self.group_bys.is_empty() {
-            return None;
-        }
-        let cols: Vec<String> = self.group_bys.iter().map(|c| (cfg.qi)(c)).collect();
-        Some(format!("GROUP BY {}", cols.join(", ")))
-    }
-
-    fn build_order_by_clause(&self, cfg: &SqlConfig) -> Option<String> {
-        if self.order_bys.is_empty() {
-            return None;
-        }
-        let clauses: Vec<String> = self
-            .order_bys
-            .iter()
-            .map(|o| {
-                let dir = match o.dir {
-                    SortDir::Asc => "ASC",
-                    SortDir::Desc => "DESC",
-                };
-                format!("{} {}", (cfg.qi)(&o.col), dir)
-            })
-            .collect();
-        Some(format!("ORDER BY {}", clauses.join(", ")))
-    }
-
-    fn build_limit_offset(&self) -> (Option<String>, Option<String>) {
-        (
-            self.limit_val.map(|n| format!("LIMIT {}", n)),
-            self.offset_val.map(|n| format!("OFFSET {}", n)),
-        )
-    }
-
-    fn build_standard_sql_core(&self, cfg: &SqlConfig, binds: &mut Vec<Value>) -> String {
-        let mut parts = Vec::new();
-
-        if !self.aggregates.is_empty() {
-            let mut select_items = Vec::new();
-            for col in &self.group_bys {
-                select_items.push((cfg.qi)(col));
-            }
-            for expr in &self.aggregates {
-                select_items.push(Self::render_aggregate_expr(expr, cfg));
-            }
-            parts.push(format!("SELECT {}", select_items.join(", ")));
-        } else {
-            parts.push(self.build_select_clause(cfg));
-        }
-
-        parts.push(format!("FROM {}", (cfg.qi)(&self.table)));
-
-        if let Some(where_sql) = self.build_where(cfg, binds) {
-            parts.push(format!("WHERE {}", where_sql));
-        }
-
-        if let Some(group_by) = self.build_group_by_clause(cfg) {
-            parts.push(group_by);
-        }
-
-        parts.join(" ")
-    }
-
-    /// Build a full query for use as a UNION part.
-    /// If the query has ORDER BY/LIMIT/OFFSET, wraps in parentheses.
-    fn build_standard_sql_union_part(&self, cfg: &SqlConfig, binds: &mut Vec<Value>) -> String {
-        let mut sql = self.build_standard_sql_core(cfg, binds);
-        let has_extra = !self.order_bys.is_empty() || self.limit_val.is_some() || self.offset_val.is_some();
-
-        if has_extra {
-            if let Some(order_by) = self.build_order_by_clause(cfg) {
-                sql.push_str(&format!(" {}", order_by));
-            }
-            let (limit, offset) = self.build_limit_offset();
-            if let Some(l) = limit {
-                sql.push_str(&format!(" {}", l));
-            }
-            if let Some(o) = offset {
-                sql.push_str(&format!(" {}", o));
-            }
-            sql = format!("({})", sql);
-        }
-
-        sql
-    }
-
-    /// Build a full pipe query for use as a UNION part.
-    /// If the query has ORDER BY/LIMIT/OFFSET, wraps in parentheses.
-    fn build_pipe_sql_union_part(&self, cfg: &SqlConfig, binds: &mut Vec<Value>) -> String {
-        let mut sql = self.build_pipe_sql_core(cfg, binds);
-        let has_extra = !self.order_bys.is_empty() || self.limit_val.is_some() || self.offset_val.is_some();
-
-        if has_extra {
-            if let Some(order_by) = self.build_order_by_clause(cfg) {
-                sql.push_str(&format!(" |> {}", order_by));
-            }
-            let (limit, offset) = self.build_limit_offset();
-            let mut lo_parts = Vec::new();
-            if let Some(l) = limit {
-                lo_parts.push(l);
-            }
-            if let Some(o) = offset {
-                lo_parts.push(o);
-            }
-            if !lo_parts.is_empty() {
-                sql.push_str(&format!(" |> {}", lo_parts.join(" ")));
-            }
-            sql = format!("({})", sql);
-        }
-
-        sql
-    }
-
-    fn build_standard_sql(&self, cfg: &SqlConfig) -> (String, Vec<Value>) {
-        let mut binds = Vec::new();
-
-        let mut sql = self.build_standard_sql_core(cfg, &mut binds);
-
-        if let Some(order_by) = self.build_order_by_clause(cfg) {
-            sql.push_str(&format!(" {}", order_by));
-        }
-
-        let (limit, offset) = self.build_limit_offset();
-        if let Some(l) = limit {
-            sql.push_str(&format!(" {}", l));
-        }
-        if let Some(o) = offset {
-            sql.push_str(&format!(" {}", o));
-        }
-
-        (sql, binds)
-    }
-
-    fn build_pipe_sql_core(&self, cfg: &SqlConfig, binds: &mut Vec<Value>) -> String {
-        let mut parts = Vec::new();
-
-        parts.push(format!("FROM {}", (cfg.qi)(&self.table)));
-
-        if let Some(where_sql) = self.build_where(cfg, binds) {
-            parts.push(format!("WHERE {}", where_sql));
-        }
-
-        if !self.aggregates.is_empty() {
-            let agg_exprs: Vec<String> = self
-                .aggregates
-                .iter()
-                .map(|e| Self::render_aggregate_expr(e, cfg))
-                .collect();
-            let mut agg_clause = format!("AGGREGATE {}", agg_exprs.join(", "));
-            if let Some(group_by) = self.build_group_by_clause(cfg) {
-                agg_clause.push_str(&format!(" {}", group_by));
-            }
-            parts.push(agg_clause);
-        } else {
-            parts.push(self.build_select_clause(cfg));
-        }
-
-        parts.join(" |> ")
-    }
-
-    fn build_pipe_sql(&self, cfg: &SqlConfig) -> (String, Vec<Value>) {
-        let mut binds = Vec::new();
-
-        let mut sql = self.build_pipe_sql_core(cfg, &mut binds);
-
-        if let Some(order_by) = self.build_order_by_clause(cfg) {
-            sql.push_str(&format!(" |> {}", order_by));
-        }
-
-        let (limit, offset) = self.build_limit_offset();
-        let mut limit_offset_parts = Vec::new();
-        if let Some(l) = limit {
-            limit_offset_parts.push(l);
-        }
-        if let Some(o) = offset {
-            limit_offset_parts.push(o);
-        }
-        if !limit_offset_parts.is_empty() {
-            sql.push_str(&format!(" |> {}", limit_offset_parts.join(" ")));
-        }
-
-        (sql, binds)
-    }
-
-    fn build_where(&self, cfg: &SqlConfig, binds: &mut Vec<Value>) -> Option<String> {
-        if self.wheres.is_empty() {
-            return None;
-        }
-
-        let single = self.wheres.len() == 1;
-        let mut sql = String::new();
-
-        for (i, entry) in self.wheres.iter().enumerate() {
-            let (connector, clause) = match entry {
-                WhereEntry::And(c) => ("AND", c),
-                WhereEntry::Or(c) => ("OR", c),
-            };
-
-            if i > 0 {
-                sql.push_str(&format!(" {} ", connector));
-            }
-
-            let is_top_level = single;
-            sql.push_str(&render_where_clause(clause, is_top_level, cfg, binds));
-        }
-
-        Some(sql)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        PipeSqlBuilder::build_union_part(self, &SqlConfig { ph: &ph, qi: &qi }, binds)
     }
 }
 
@@ -796,37 +534,27 @@ impl UnionQueryOps for UnionQuery {
     }
 
     fn to_sql(&self) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|_| "?".to_string(),
-            qi: &default_quote_identifier,
-        };
-        self.build_standard_sql(&cfg)
+        let cfg = SqlConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
+        StandardSqlBuilder::build_union(self, &cfg)
     }
 
     fn to_pipe_sql(&self) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|_| "?".to_string(),
-            qi: &default_quote_identifier,
-        };
-        self.build_pipe_sql(&cfg)
+        let cfg = SqlConfig { ph: &|_| "?".to_string(), qi: &default_quote_identifier };
+        PipeSqlBuilder::build_union(self, &cfg)
     }
 }
 
 impl UnionQuery {
     pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_standard_sql(&cfg)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        StandardSqlBuilder::build_union(self, &SqlConfig { ph: &ph, qi: &qi })
     }
 
     pub fn to_pipe_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<Value>) {
-        let cfg = SqlConfig {
-            ph: &|n| dialect.placeholder(n),
-            qi: &|name| dialect.quote_identifier(name),
-        };
-        self.build_pipe_sql(&cfg)
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        PipeSqlBuilder::build_union(self, &SqlConfig { ph: &ph, qi: &qi })
     }
 
     /// Returns the parts for dialect wrappers to build SQL with custom rendering per part.
@@ -835,151 +563,13 @@ impl UnionQuery {
     }
 
     pub fn to_order_by_with(&self, dialect: &dyn Dialect) -> Option<String> {
-        if self.order_bys.is_empty() {
-            return None;
-        }
-        let clauses: Vec<String> = self
-            .order_bys
-            .iter()
-            .map(|o| {
-                let dir = match o.dir {
-                    SortDir::Asc => "ASC",
-                    SortDir::Desc => "DESC",
-                };
-                format!("{} {}", dialect.quote_identifier(&o.col), dir)
-            })
-            .collect();
-        Some(format!("ORDER BY {}", clauses.join(", ")))
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        builder::build_order_by_clause(&self.order_bys, &SqlConfig { ph: &ph, qi: &qi })
     }
 
     pub fn to_limit_offset(&self) -> (Option<String>, Option<String>) {
-        (
-            self.limit_val.map(|n| format!("LIMIT {}", n)),
-            self.offset_val.map(|n| format!("OFFSET {}", n)),
-        )
-    }
-
-    fn build_standard_sql(&self, cfg: &SqlConfig) -> (String, Vec<Value>) {
-        let mut binds = Vec::new();
-        let mut sql = String::new();
-
-        for (i, (op, query)) in self.parts.iter().enumerate() {
-            if i > 0 {
-                let keyword = match op {
-                    SetOp::Union => "UNION",
-                    SetOp::UnionAll => "UNION ALL",
-                };
-                sql.push_str(&format!(" {} ", keyword));
-            }
-            sql.push_str(&query.build_standard_sql_union_part(cfg, &mut binds));
-        }
-
-        if !self.order_bys.is_empty() {
-            let clauses: Vec<String> = self
-                .order_bys
-                .iter()
-                .map(|o| {
-                    let dir = match o.dir {
-                        SortDir::Asc => "ASC",
-                        SortDir::Desc => "DESC",
-                    };
-                    format!("{} {}", (cfg.qi)(&o.col), dir)
-                })
-                .collect();
-            sql.push_str(&format!(" ORDER BY {}", clauses.join(", ")));
-        }
-
-        if let Some(limit) = self.limit_val {
-            sql.push_str(&format!(" LIMIT {}", limit));
-        }
-        if let Some(offset) = self.offset_val {
-            sql.push_str(&format!(" OFFSET {}", offset));
-        }
-
-        (sql, binds)
-    }
-
-    fn build_pipe_sql(&self, cfg: &SqlConfig) -> (String, Vec<Value>) {
-        let mut binds = Vec::new();
-        let mut sql = String::new();
-
-        for (i, (op, query)) in self.parts.iter().enumerate() {
-            if i > 0 {
-                let keyword = match op {
-                    SetOp::Union => "UNION",
-                    SetOp::UnionAll => "UNION ALL",
-                };
-                sql.push_str(&format!(" |> {} ", keyword));
-            }
-            sql.push_str(&query.build_pipe_sql_union_part(cfg, &mut binds));
-        }
-
-        if !self.order_bys.is_empty() {
-            let clauses: Vec<String> = self
-                .order_bys
-                .iter()
-                .map(|o| {
-                    let dir = match o.dir {
-                        SortDir::Asc => "ASC",
-                        SortDir::Desc => "DESC",
-                    };
-                    format!("{} {}", (cfg.qi)(&o.col), dir)
-                })
-                .collect();
-            sql.push_str(&format!(" |> ORDER BY {}", clauses.join(", ")));
-        }
-
-        let mut limit_offset_parts = Vec::new();
-        if let Some(limit) = self.limit_val {
-            limit_offset_parts.push(format!("LIMIT {}", limit));
-        }
-        if let Some(offset) = self.offset_val {
-            limit_offset_parts.push(format!("OFFSET {}", offset));
-        }
-        if !limit_offset_parts.is_empty() {
-            sql.push_str(&format!(" |> {}", limit_offset_parts.join(" ")));
-        }
-
-        (sql, binds)
-    }
-}
-
-fn render_where_clause(
-    clause: &WhereClause,
-    is_top_level: bool,
-    cfg: &SqlConfig,
-    binds: &mut Vec<Value>,
-) -> String {
-    match clause {
-        WhereClause::Condition { col, op, val } => {
-            binds.push(val.clone());
-            let placeholder = (cfg.ph)(binds.len());
-            format!("{} {} {}", (cfg.qi)(col), op.as_str(), placeholder)
-        }
-        WhereClause::Any(clauses) => {
-            let parts: Vec<String> = clauses
-                .iter()
-                .map(|c| render_where_clause(c, false, cfg, binds))
-                .collect();
-            let joined = parts.join(" OR ");
-            if is_top_level {
-                joined
-            } else {
-                format!("({})", joined)
-            }
-        }
-        WhereClause::All(clauses) => {
-            let parts: Vec<String> = clauses
-                .iter()
-                .map(|c| render_where_clause(c, false, cfg, binds))
-                .collect();
-            let joined = parts.join(" AND ");
-            if is_top_level {
-                joined
-            } else {
-                format!("({})", joined)
-            }
-        }
+        builder::build_limit_offset(self.limit_val, self.offset_val)
     }
 }
 
