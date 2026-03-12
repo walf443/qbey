@@ -2,6 +2,7 @@
 name = "sqipe-mysql"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
 
 [dependencies]
 sqipe = { path = "../sqipe" }
