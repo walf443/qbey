@@ -140,6 +140,13 @@ fn render_where_clause(
             let placeholder = (cfg.ph)(binds.len());
             format!("{} {} {}", (cfg.qi)(col), op.as_str(), placeholder)
         }
+        WhereClause::Between { col, low, high } => {
+            binds.push(low.clone());
+            let ph_low = (cfg.ph)(binds.len());
+            binds.push(high.clone());
+            let ph_high = (cfg.ph)(binds.len());
+            format!("{} BETWEEN {} AND {}", (cfg.qi)(col), ph_low, ph_high)
+        }
         WhereClause::Any(clauses) => {
             let parts: Vec<String> = clauses
                 .iter()

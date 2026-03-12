@@ -129,6 +129,14 @@ impl Col {
         }
     }
 
+    pub fn between(self, low: impl Into<Value>, high: impl Into<Value>) -> WhereClause {
+        WhereClause::Between {
+            col: self.name,
+            low: low.into(),
+            high: high.into(),
+        }
+    }
+
     pub fn asc(self) -> OrderByClause {
         OrderByClause {
             col: self.name,
@@ -148,6 +156,7 @@ impl Col {
 #[derive(Debug, Clone)]
 pub enum WhereClause {
     Condition { col: String, op: Op, val: Value },
+    Between { col: String, low: Value, high: Value },
     Any(Vec<WhereClause>),
     All(Vec<WhereClause>),
 }
@@ -1027,5 +1036,54 @@ mod tests {
             "FROM \"employee\" |> WHERE \"active\" = ? |> AGGREGATE COUNT(*) AS \"cnt\" GROUP BY \"dept\" |> WHERE \"cnt\" > ?"
         );
         assert_eq!(binds, vec![Value::Bool(true), Value::Int(5)]);
+    }
+
+    #[test]
+    fn test_between() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").between(20, 30));
+        q.select(&["id", "name"]);
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"age\" BETWEEN ? AND ?"
+        );
+        assert_eq!(binds, vec![Value::Int(20), Value::Int(30)]);
+    }
+
+    #[test]
+    fn test_between_pipe_sql() {
+        let mut q = sqipe("employee");
+        q.and_where(col("age").between(20, 30));
+        q.select(&["id", "name"]);
+
+        let (sql, binds) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            "FROM \"employee\" |> WHERE \"age\" BETWEEN ? AND ? |> SELECT \"id\", \"name\""
+        );
+        assert_eq!(binds, vec![Value::Int(20), Value::Int(30)]);
+    }
+
+    #[test]
+    fn test_between_with_other_conditions() {
+        let mut q = sqipe("employee");
+        q.and_where(("dept", "eng"));
+        q.and_where(col("age").between(20, 30));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT * FROM \"employee\" WHERE \"dept\" = ? AND \"age\" BETWEEN ? AND ?"
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("eng".to_string()),
+                Value::Int(20),
+                Value::Int(30)
+            ]
+        );
     }
 }
