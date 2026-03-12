@@ -7,21 +7,7 @@ name = "sqipe"
 version = "0.1.0"
 
 [[package]]
-name = "sqipe-bigquery"
-version = "0.1.0"
-dependencies = [
- "sqipe",
-]
-
-[[package]]
 name = "sqipe-mysql"
-version = "0.1.0"
-dependencies = [
- "sqipe",
-]
-
-[[package]]
-name = "sqipe-postgresql"
 version = "0.1.0"
 dependencies = [
  "sqipe",
