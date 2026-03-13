@@ -1057,6 +1057,12 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         self
     }
 
+    /// Add an INNER JOIN clause.
+    ///
+    /// The order of `join` relative to `and_where` / `or_where` affects SQL generation.
+    /// If `and_where` is called **before** `join`, standard SQL rendering wraps the
+    /// preceding WHERE in a CTE so the filter is applied before the join.
+    /// Pipe SQL always renders operations in call order without CTEs.
     pub fn join(&mut self, table: impl IntoJoinTable, condition: JoinCondition) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
@@ -1073,6 +1079,10 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         self
     }
 
+    /// Add a LEFT JOIN clause.
+    ///
+    /// See [`join`](Self::join) for how call order relative to `and_where` affects
+    /// CTE generation in standard SQL.
     pub fn left_join(&mut self, table: impl IntoJoinTable, condition: JoinCondition) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
@@ -1091,6 +1101,9 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
 
     /// Add a JOIN clause with a custom join type. Used by dialect crates for
     /// dialect-specific join types (e.g., STRAIGHT_JOIN in MySQL).
+    ///
+    /// See [`join`](Self::join) for how call order relative to `and_where` affects
+    /// CTE generation in standard SQL.
     pub fn add_join(
         &mut self,
         join_type: JoinType,

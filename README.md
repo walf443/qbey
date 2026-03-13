@@ -358,6 +358,30 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\", \"tenant_id\")");
 ```
 
+#### Call order matters: WHERE before JOIN
+
+The order of `and_where` / `or_where` and `join` / `left_join` calls affects the generated SQL.
+In pipe syntax, this naturally produces `FROM ... |> WHERE ... |> JOIN ...`.
+In standard SQL, a CTE (Common Table Expression) is automatically generated to preserve the intended semantics.
+
+```rust
+# use sqipe::{sqipe, col, table};
+let mut q = sqipe("users");
+q.and_where(col("age").gt(25));   // WHERE first
+q.join("orders", table("users").col("id").eq_col("user_id"));  // then JOIN
+q.select(&["id", "name"]);
+
+// Pipe SQL: WHERE before JOIN is natural
+let (sql, _) = q.to_pipe_sql();
+assert_eq!(sql, r#"FROM "users" |> WHERE "age" > ? |> INNER JOIN "orders" ON "users"."id" = "orders"."user_id" |> SELECT "id", "name""#);
+
+// Standard SQL: CTE is generated to filter before joining
+let (sql, _) = q.to_sql();
+assert_eq!(sql, r#"WITH "_cte_0" AS (SELECT * FROM "users" WHERE "age" > ?) SELECT "id", "name" FROM "_cte_0" AS "users" INNER JOIN "orders" ON "users"."id" = "orders"."user_id""#);
+```
+
+When `join` is called before `and_where` (the traditional order), no CTE is generated and standard SQL is produced as usual.
+
 ### Table aliases and qualified columns
 
 ```rust
