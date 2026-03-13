@@ -1,6 +1,6 @@
 use super::{
     RenderConfig, Renderer, append_limit_offset_pipe, append_order_by, render_aggregate_expr,
-    render_from, render_joins, render_select_columns, render_wheres, set_op_keyword,
+    render_from_with_subquery, render_joins, render_select_columns, render_wheres, set_op_keyword,
 };
 use crate::tree::{SelectClause, SelectTree, UnionTree};
 
@@ -15,7 +15,12 @@ impl PipeSqlRenderer {
     ) -> String {
         let mut parts = Vec::new();
 
-        parts.push(render_from(&tree.from, cfg));
+        parts.push(render_from_with_subquery(
+            &tree.from,
+            &tree.from_subquery,
+            cfg,
+            binds,
+        ));
 
         for join_sql in render_joins(&tree.joins, cfg) {
             parts.push(join_sql);

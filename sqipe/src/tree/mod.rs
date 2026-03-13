@@ -31,6 +31,9 @@ pub enum SelectClause {
 #[derive(Debug, Clone)]
 pub struct SelectTree<V: Clone = crate::Value> {
     pub from: FromClause,
+    /// When set, the FROM clause renders this subquery instead of `from.table`.
+    /// The `from.alias` is used as the subquery alias.
+    pub from_subquery: Option<Box<SelectTree<V>>>,
     pub joins: Vec<JoinClause>,
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) havings: Vec<WhereEntry<V>>,
@@ -57,6 +60,7 @@ impl<V: Clone> SelectTree<V> {
     pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectTree<U> {
         SelectTree {
             from: self.from,
+            from_subquery: self.from_subquery.map(|sq| Box::new(sq.map_values(f))),
             joins: self.joins,
             wheres: self.wheres.into_iter().map(|w| w.map_values(f)).collect(),
             havings: self.havings.into_iter().map(|w| w.map_values(f)).collect(),
@@ -87,6 +91,10 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
                 alias: query.table_alias.clone(),
                 table_suffix: Vec::new(),
             },
+            from_subquery: query
+                .from_subquery
+                .as_ref()
+                .map(|sq| Box::new(SelectTree::from_query(sq))),
             joins: query.joins.clone(),
             wheres: query.wheres.clone(),
             havings: query.havings.clone(),
@@ -114,6 +122,9 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
                 alias: query.table_alias,
                 table_suffix: Vec::new(),
             },
+            from_subquery: query
+                .from_subquery
+                .map(|sq| Box::new(SelectTree::from_query_owned(*sq))),
             joins: query.joins,
             wheres: query.wheres,
             havings: query.havings,

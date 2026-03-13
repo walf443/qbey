@@ -112,8 +112,18 @@ pub(super) fn render_aggregate_expr(expr: &AggregateExpr, cfg: &RenderConfig) ->
     }
 }
 
-pub(super) fn render_from(from: &FromClause, cfg: &RenderConfig) -> String {
-    let mut s = format!("FROM {}", (cfg.qi)(&from.table));
+pub(super) fn render_from_with_subquery<V: Clone>(
+    from: &FromClause,
+    from_subquery: &Option<Box<SelectTree<V>>>,
+    cfg: &RenderConfig,
+    binds: &mut Vec<V>,
+) -> String {
+    let mut s = if let Some(sub) = from_subquery {
+        let sub_sql = render_subquery_sql(sub, cfg, binds);
+        format!("FROM ({})", sub_sql)
+    } else {
+        format!("FROM {}", (cfg.qi)(&from.table))
+    };
     if let Some(alias) = &from.alias {
         s.push_str(&format!(" AS {}", (cfg.qi)(alias)));
     }
@@ -238,7 +248,12 @@ pub(super) fn render_select_core<V: Clone>(
         }
     }
 
-    parts.push(render_from(&tree.from, cfg));
+    parts.push(render_from_with_subquery(
+        &tree.from,
+        &tree.from_subquery,
+        cfg,
+        binds,
+    ));
 
     for join_sql in render_joins(&tree.joins, cfg) {
         parts.push(join_sql);
