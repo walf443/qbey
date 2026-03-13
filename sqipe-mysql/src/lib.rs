@@ -1128,10 +1128,7 @@ mod tests {
             sql,
             "DELETE FROM `users` WHERE `dept` = ? ORDER BY `created_at` ASC LIMIT 10"
         );
-        assert_eq!(
-            binds,
-            vec![sqipe::Value::String("eng".to_string())]
-        );
+        assert_eq!(binds, vec![sqipe::Value::String("eng".to_string())]);
     }
 
     #[test]
@@ -1150,14 +1147,8 @@ mod tests {
         d.and_where(col("name").like(sqipe::LikeExpression::starts_with("test")));
 
         let (sql, binds) = d.to_sql();
-        assert_eq!(
-            sql,
-            r"DELETE FROM `users` WHERE `name` LIKE ? ESCAPE '\\'"
-        );
-        assert_eq!(
-            binds,
-            vec![sqipe::Value::String("test%".to_string())]
-        );
+        assert_eq!(sql, r"DELETE FROM `users` WHERE `name` LIKE ? ESCAPE '\\'");
+        assert_eq!(binds, vec![sqipe::Value::String("test%".to_string())]);
     }
 
     #[test]
