@@ -153,6 +153,30 @@ let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT * FROM \"employee\" WHERE (\"role\" = ? AND \"dept\" = ?) OR (\"role\" = ? AND \"dept\" = ?)");
 ```
 
+### Negating conditions with not
+
+```rust
+# use sqipe::{sqipe, col, not, any};
+// Function style
+let mut q = sqipe("employee");
+q.and_where(("name", "Alice"));
+q.and_where(not(col("role").eq("admin")));
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT * FROM \"employee\" WHERE \"name\" = ? AND NOT (\"role\" = ?)");
+
+// Operator style (! operator)
+let mut q = sqipe("employee");
+q.and_where(!col("role").eq("admin"));
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT (\"role\" = ?)");
+
+// Combined with any/all
+let mut q = sqipe("employee");
+q.and_where(not(any(col("role").eq("admin"), col("role").eq("manager"))));
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT ((\"role\" = ? OR \"role\" = ?))");
+```
+
 ### Aggregate / GROUP BY
 
 ```rust

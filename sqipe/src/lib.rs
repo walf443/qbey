@@ -1378,6 +1378,34 @@ mod tests {
     }
 
     #[test]
+    fn test_not_numbered_placeholders() {
+        struct PgDialect;
+        impl Dialect for PgDialect {
+            fn placeholder(&self, index: usize) -> String {
+                format!("${}", index)
+            }
+        }
+
+        let mut q = sqipe("employee");
+        q.and_where(("name", "Alice"));
+        q.and_where(not(col("role").eq("admin")));
+        q.select(&["id", "name"]);
+        let (sql, binds) = q.to_sql_with(&PgDialect);
+
+        assert_eq!(
+            sql,
+            "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = $1 AND NOT (\"role\" = $2)"
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::String("admin".to_string())
+            ]
+        );
+    }
+
+    #[test]
     fn test_order_by() {
         let mut q = sqipe("employee");
         q.select(&["id", "name", "age"]);
