@@ -124,7 +124,9 @@ impl StandardSqlRenderer {
                             for &ji in &pending_joins {
                                 let join = &tree.joins[ji];
                                 let sub_slice = &tree.join_subqueries[ji..ji + 1];
-                                for js in render_joins(std::slice::from_ref(join), sub_slice, cfg, binds) {
+                                for js in
+                                    render_joins(std::slice::from_ref(join), sub_slice, cfg, binds)
+                                {
                                     cte_sql.push(' ');
                                     cte_sql.push_str(&js);
                                 }

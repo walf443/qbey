@@ -264,7 +264,10 @@ impl From<&str> for JoinCol {
 /// A JOIN ON condition.
 #[derive(Debug, Clone)]
 pub enum JoinCondition {
-    ColEq { left: QualifiedCol, right: JoinCol },
+    ColEq {
+        left: QualifiedCol,
+        right: JoinCol,
+    },
     And(Vec<JoinCondition>),
     Using(Vec<String>),
     /// Raw SQL expression for arbitrary ON conditions (e.g., `"a.text LIKE b.pattern"`).
@@ -3822,7 +3825,10 @@ mod tests {
     #[test]
     fn test_join_condition_expr_standard() {
         let mut q = sqipe("texts");
-        q.join("patterns", join::on_expr(r#""texts"."text" LIKE "patterns"."pattern""#));
+        q.join(
+            "patterns",
+            join::on_expr(r#""texts"."text" LIKE "patterns"."pattern""#),
+        );
         q.select(&["id", "text"]);
 
         let (sql, _) = q.to_sql();
@@ -3835,7 +3841,10 @@ mod tests {
     #[test]
     fn test_join_condition_expr_pipe() {
         let mut q = sqipe("texts");
-        q.join("patterns", join::on_expr(r#""texts"."text" LIKE "patterns"."pattern""#));
+        q.join(
+            "patterns",
+            join::on_expr(r#""texts"."text" LIKE "patterns"."pattern""#),
+        );
         q.select(&["id", "text"]);
 
         let (sql, _) = q.to_pipe_sql();
