@@ -3927,6 +3927,120 @@ mod tests {
     }
 
     #[test]
+    fn test_for_update() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update();
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update();
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> WHERE "id" = ? |> SELECT "id", "name" FOR UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_option() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update_with("NOWAIT");
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE NOWAIT"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_option_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update_with("SKIP LOCKED");
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> WHERE "id" = ? |> SELECT "id", "name" FOR UPDATE SKIP LOCKED"#
+        );
+    }
+
+    #[test]
+    fn test_for_with() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_with("NO KEY UPDATE");
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR NO KEY UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_with_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_with("SHARE");
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> WHERE "id" = ? |> SELECT "id", "name" FOR SHARE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_order_by_and_limit() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.order_by(col("id").asc());
+        q.limit(10);
+        q.for_update();
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" ORDER BY "id" ASC LIMIT 10 FOR UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_order_by_and_limit_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.order_by(col("id").asc());
+        q.limit(10);
+        q.for_update();
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> SELECT "id", "name" |> ORDER BY "id" ASC |> LIMIT 10 FOR UPDATE"#
+        );
+    }
+
+    #[test]
     fn test_join_condition_expr_inside_and() {
         let mut q = sqipe("texts");
         q.join(

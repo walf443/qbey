@@ -62,7 +62,7 @@ impl StandardSqlRenderer {
             let mut sql = render_select_core(tree, cfg, binds);
             append_order_by(&mut sql, &tree.order_bys, cfg, " ");
             append_limit_offset_flat(&mut sql, tree.limit, tree.offset);
-            append_lock_clause(&mut sql, &tree.lock_for);
+            append_lock_clause(&mut sql, tree.lock_for.as_deref());
             return sql;
         }
 
@@ -201,7 +201,7 @@ impl StandardSqlRenderer {
         let mut sql = format!("WITH {} {}", cte_parts.join(", "), main_sql);
         append_order_by(&mut sql, &tree.order_bys, cfg, " ");
         append_limit_offset_flat(&mut sql, tree.limit, tree.offset);
-        append_lock_clause(&mut sql, &tree.lock_for);
+        append_lock_clause(&mut sql, tree.lock_for.as_deref());
         sql
     }
 }

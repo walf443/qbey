@@ -133,7 +133,7 @@ impl Renderer for PipeSqlRenderer {
         let mut sql = self.render_core(tree, cfg, &mut binds);
         append_order_by(&mut sql, &tree.order_bys, cfg, " |> ");
         append_limit_offset_pipe(&mut sql, tree.limit, tree.offset);
-        append_lock_clause(&mut sql, &tree.lock_for);
+        append_lock_clause(&mut sql, tree.lock_for.as_deref());
         (sql, binds)
     }
 
