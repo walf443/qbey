@@ -18,6 +18,21 @@ pub struct RenderConfig<'a> {
     pub backslash_escape: bool,
 }
 
+impl<'a> RenderConfig<'a> {
+    /// Build a `RenderConfig` from pre-built closures and a [`Dialect`](crate::Dialect).
+    pub fn from_dialect(
+        ph: &'a dyn Fn(usize) -> String,
+        qi: &'a dyn Fn(&str) -> String,
+        dialect: &dyn crate::Dialect,
+    ) -> Self {
+        Self {
+            ph,
+            qi,
+            backslash_escape: dialect.backslash_escape(),
+        }
+    }
+}
+
 /// Trait for SQL rendering strategies.
 pub trait Renderer {
     fn render_select<V: Clone>(&self, tree: &SelectTree<V>, cfg: &RenderConfig)
