@@ -4312,4 +4312,74 @@ mod tests {
             vec![Value::String("Alice".to_string()), Value::Int(1)]
         );
     }
+
+    #[test]
+    fn test_update_with_multiple_set_exprs() {
+        let mut u = sqipe("employee").update();
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.set_expr(SetExpression::new(r#""updated_at" = NOW()"#));
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1, "updated_at" = NOW() WHERE "id" = ?"#
+        );
+        assert_eq!(binds, vec![Value::Int(1)]);
+    }
+
+    #[test]
+    fn test_update_with_set_expr_without_where() {
+        let mut u = sqipe("employee").update();
+        u.set_expr(SetExpression::new(r#""version" = "version" + 1"#));
+        u.without_where();
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, r#"UPDATE "employee" SET "version" = "version" + 1"#);
+        assert_eq!(binds, vec![]);
+    }
+
+    #[test]
+    fn test_update_with_set_expr_bind_order() {
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.set(col("status"), "active");
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ?, "visit_count" = "visit_count" + 1, "status" = ? WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::String("active".to_string()),
+                Value::Int(1),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_set_expr_dialect() {
+        struct PgDialect;
+        impl Dialect for PgDialect {
+            fn placeholder(&self, index: usize) -> String {
+                format!("${}", index)
+            }
+        }
+
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql_with(&PgDialect);
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = $1, "visit_count" = "visit_count" + 1 WHERE "id" = $2"#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
+        );
+    }
 }
