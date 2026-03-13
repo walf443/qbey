@@ -99,6 +99,8 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
     }
 
     /// Build standard SQL with MySQL dialect.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
     pub fn to_sql(&self) -> (String, Vec<V>) {
         let mut tree = self.inner.to_tree();
         tree.order_bys = self.order_bys.clone();

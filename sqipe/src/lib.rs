@@ -1694,6 +1694,8 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
 
     /// Build standard SQL with `?` placeholders and double-quote identifiers.
     ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    ///
     /// # Panics
     ///
     /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
@@ -1709,6 +1711,8 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     }
 
     /// Build standard SQL with dialect-specific placeholders and quoting.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
     ///
     /// # Panics
     ///
