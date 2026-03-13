@@ -1314,10 +1314,7 @@ mod tests {
         q.and_where(not(col("role").eq("admin")));
 
         let (sql, binds) = q.to_sql();
-        assert_eq!(
-            sql,
-            "SELECT * FROM \"employee\" WHERE NOT (\"role\" = ?)"
-        );
+        assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT (\"role\" = ?)");
         assert_eq!(binds, vec![Value::String("admin".to_string())]);
     }
 
@@ -1365,10 +1362,7 @@ mod tests {
         q.and_where(!col("role").eq("admin"));
 
         let (sql, _) = q.to_sql();
-        assert_eq!(
-            sql,
-            "SELECT * FROM \"employee\" WHERE NOT (\"role\" = ?)"
-        );
+        assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT (\"role\" = ?)");
     }
 
     #[test]
