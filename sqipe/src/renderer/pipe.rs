@@ -2,9 +2,27 @@ use super::{
     RenderConfig, Renderer, append_limit_offset_pipe, append_order_by, render_aggregate_expr,
     render_from, render_joins, render_select_columns, render_wheres, set_op_keyword,
 };
-use crate::tree::{SelectClause, SelectTree, UnionTree};
+use crate::tree::{SelectClause, SelectTree, StageRef, UnionTree};
 
 pub struct PipeSqlRenderer;
+
+/// Render WHERE clauses for the given indices and append to parts as a single WHERE stage.
+fn flush_pending_wheres<V: Clone>(
+    wheres: &[crate::WhereEntry<V>],
+    indices: &mut Vec<usize>,
+    parts: &mut Vec<String>,
+    cfg: &RenderConfig,
+    binds: &mut Vec<V>,
+) {
+    if indices.is_empty() {
+        return;
+    }
+    let entries: Vec<_> = indices.iter().map(|&i| wheres[i].clone()).collect();
+    if let Some(where_sql) = render_wheres(&entries, cfg, binds) {
+        parts.push(format!("WHERE {}", where_sql));
+    }
+    indices.clear();
+}
 
 impl PipeSqlRenderer {
     fn render_core<V: Clone>(
@@ -17,12 +35,46 @@ impl PipeSqlRenderer {
 
         parts.push(render_from(&tree.from, cfg, binds));
 
-        for join_sql in render_joins(&tree.joins, cfg) {
-            parts.push(join_sql);
-        }
+        if !tree.stage_order.is_empty() {
+            // Render in stage_order sequence, grouping consecutive WHEREs
+            let mut pending_where_indices: Vec<usize> = Vec::new();
 
-        if let Some(where_sql) = render_wheres(&tree.wheres, cfg, binds) {
-            parts.push(format!("WHERE {}", where_sql));
+            for stage in &tree.stage_order {
+                match stage {
+                    StageRef::Where(idx) => {
+                        pending_where_indices.push(*idx);
+                    }
+                    StageRef::Join(idx) => {
+                        flush_pending_wheres(
+                            &tree.wheres,
+                            &mut pending_where_indices,
+                            &mut parts,
+                            cfg,
+                            binds,
+                        );
+                        let join = &tree.joins[*idx];
+                        for js in render_joins(std::slice::from_ref(join), cfg) {
+                            parts.push(js);
+                        }
+                    }
+                }
+            }
+            flush_pending_wheres(
+                &tree.wheres,
+                &mut pending_where_indices,
+                &mut parts,
+                cfg,
+                binds,
+            );
+        } else {
+            // Fallback: original behavior (JOINs then WHEREs)
+            for join_sql in render_joins(&tree.joins, cfg) {
+                parts.push(join_sql);
+            }
+
+            if let Some(where_sql) = render_wheres(&tree.wheres, cfg, binds) {
+                parts.push(format!("WHERE {}", where_sql));
+            }
         }
 
         match &tree.select {
