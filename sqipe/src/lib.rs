@@ -615,7 +615,11 @@ impl<V: Clone> IntoRangeClause<V> for RangeToInclusive<V> {
 }
 
 /// Trait for types that can be converted into a `SelectTree` for use as a FROM subquery.
+///
+/// Implement this trait to allow your custom query type (e.g., `MysqlQuery`)
+/// to be passed to `sqipe_from_subquery_with()`.
 pub trait IntoSelectTree<V: Clone> {
+    /// Consume this query and produce a `SelectTree` AST node.
     fn into_select_tree(self) -> tree::SelectTree<V>;
 }
 

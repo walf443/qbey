@@ -5,14 +5,37 @@ pub fn default_quote_identifier(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-/// FROM clause with optional dialect-specific modifiers appended after the table name.
+/// The source of a FROM clause — either a table name or a subquery.
 #[derive(Debug, Clone)]
-pub struct FromClause {
-    pub table: String,
+pub enum FromSource<V: Clone = crate::Value> {
+    /// A simple table name (e.g., `"users"`).
+    Table(String),
+    /// A subquery (e.g., `(SELECT ... FROM orders WHERE ...)`).
+    Subquery(Box<SelectTree<V>>),
+}
+
+/// FROM clause with optional alias and dialect-specific modifiers.
+#[derive(Debug, Clone)]
+pub struct FromClause<V: Clone = crate::Value> {
+    pub source: FromSource<V>,
     pub alias: Option<String>,
-    /// Raw SQL fragments appended after the table name (e.g., "FORCE INDEX (idx)").
+    /// Raw SQL fragments appended after the table/subquery (e.g., "FORCE INDEX (idx)").
     /// Dialect crates populate this via tree transformation.
     pub table_suffix: Vec<String>,
+}
+
+impl<V: Clone> FromClause<V> {
+    /// Transform all bind values in this clause (only relevant for subquery sources).
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> FromClause<U> {
+        FromClause {
+            source: match self.source {
+                FromSource::Table(t) => FromSource::Table(t),
+                FromSource::Subquery(sq) => FromSource::Subquery(Box::new(sq.map_values(f))),
+            },
+            alias: self.alias,
+            table_suffix: self.table_suffix,
+        }
+    }
 }
 
 /// What the SELECT clause looks like.
@@ -30,10 +53,7 @@ pub enum SelectClause {
 /// AST for a single SELECT query, generic over bind value type.
 #[derive(Debug, Clone)]
 pub struct SelectTree<V: Clone = crate::Value> {
-    pub from: FromClause,
-    /// When set, the FROM clause renders this subquery instead of `from.table`.
-    /// The `from.alias` is used as the subquery alias.
-    pub from_subquery: Option<Box<SelectTree<V>>>,
+    pub from: FromClause<V>,
     pub joins: Vec<JoinClause>,
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) havings: Vec<WhereEntry<V>>,
@@ -59,8 +79,7 @@ impl<V: Clone> SelectTree<V> {
     /// references and aggregate expressions, neither of which holds bind values.
     pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectTree<U> {
         SelectTree {
-            from: self.from,
-            from_subquery: self.from_subquery.map(|sq| Box::new(sq.map_values(f))),
+            from: self.from.map_values(f),
             joins: self.joins,
             wheres: self.wheres.into_iter().map(|w| w.map_values(f)).collect(),
             havings: self.havings.into_iter().map(|w| w.map_values(f)).collect(),
@@ -85,13 +104,17 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             SelectClause::Columns(query.selects.clone())
         };
 
+        let source = match &query.from_subquery {
+            Some(sq) => FromSource::Subquery(sq.clone()),
+            None => FromSource::Table(query.table.clone()),
+        };
+
         SelectTree {
             from: FromClause {
-                table: query.table.clone(),
+                source,
                 alias: query.table_alias.clone(),
                 table_suffix: Vec::new(),
             },
-            from_subquery: query.from_subquery.clone(),
             joins: query.joins.clone(),
             wheres: query.wheres.clone(),
             havings: query.havings.clone(),
@@ -113,13 +136,17 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             SelectClause::Columns(query.selects)
         };
 
+        let source = match query.from_subquery {
+            Some(sq) => FromSource::Subquery(sq),
+            None => FromSource::Table(query.table),
+        };
+
         SelectTree {
             from: FromClause {
-                table: query.table,
+                source,
                 alias: query.table_alias,
                 table_suffix: Vec::new(),
             },
-            from_subquery: query.from_subquery,
             joins: query.joins,
             wheres: query.wheres,
             havings: query.havings,
