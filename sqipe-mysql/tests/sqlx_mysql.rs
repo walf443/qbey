@@ -409,7 +409,7 @@ async fn test_from_subquery_with_outer_where() {
 
     let mut q = sqipe_mysql::sqipe_from_subquery_with(sub, "t");
     q.select(&["user_id", "total"]);
-    q.and_where(col("total").gt(60));
+    q.and_where(col("total").gt(60.0));
     let (sql, binds) = q.to_sql();
 
     let rows = bind_params(sqlx::query(&sql), &binds)

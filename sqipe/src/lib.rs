@@ -851,8 +851,10 @@ use tree::{SelectTree, UnionTree, default_quote_identifier};
 /// The query builder, generic over the bind value type `V`.
 #[derive(Debug, Clone)]
 pub struct Query<V: Clone + std::fmt::Debug = Value> {
+    /// Table name for table-based queries. Empty when using `from_subquery`.
     pub(crate) table: String,
     pub(crate) table_alias: Option<String>,
+    /// When set, the query selects from this subquery instead of `table`.
     pub(crate) from_subquery: Option<Box<tree::SelectTree<V>>>,
     pub(crate) selects: Vec<ColRef>,
     pub(crate) wheres: Vec<WhereEntry<V>>,
@@ -2959,6 +2961,30 @@ mod tests {
         assert_eq!(
             sql,
             r#"SELECT "user_id" FROM (SELECT "user_id", "amount" FROM "orders" LIMIT 10) AS "t""#
+        );
+    }
+
+    #[test]
+    fn test_from_subquery_nested() {
+        let mut inner = sqipe("orders");
+        inner.select(&["user_id", "amount"]);
+        inner.and_where(col("status").eq("completed"));
+
+        let mut mid = sqipe_from_subquery(inner, "t1");
+        mid.select(&["user_id", "amount"]);
+        mid.and_where(col("amount").gt(100));
+
+        let mut outer = sqipe_from_subquery(mid, "t2");
+        outer.select(&["user_id"]);
+
+        let (sql, binds) = outer.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "user_id" FROM (SELECT "user_id", "amount" FROM (SELECT "user_id", "amount" FROM "orders" WHERE "status" = ?) AS "t1" WHERE "amount" > ?) AS "t2""#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::String("completed".to_string()), Value::Int(100),]
         );
     }
 }
