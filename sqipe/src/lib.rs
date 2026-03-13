@@ -1038,7 +1038,6 @@ pub enum SetOp {
     UnionAll,
 }
 
-
 /// Trait for types that can be used as a source in union operations.
 pub trait AsUnionParts {
     type Query: Clone;
