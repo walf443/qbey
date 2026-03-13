@@ -56,6 +56,8 @@ pub enum Op {
     Lt,
     Gte,
     Lte,
+    Like,
+    NotLike,
 }
 
 impl Op {
@@ -67,7 +69,67 @@ impl Op {
             Op::Lt => "<",
             Op::Gte => ">=",
             Op::Lte => "<=",
+            Op::Like => "LIKE",
+            Op::NotLike => "NOT LIKE",
         }
+    }
+}
+
+/// A safe LIKE pattern expression.
+///
+/// Wildcards (`%`, `_`) in user input are escaped automatically, so the
+/// resulting pattern matches the literal text.  Use the constructor methods
+/// to add wildcards in controlled positions.
+///
+/// ```
+/// use sqipe::LikeExpression;
+///
+/// assert_eq!(LikeExpression::contains("foo").to_pattern(), "%foo%");
+/// assert_eq!(LikeExpression::starts_with("foo").to_pattern(), "foo%");
+/// assert_eq!(LikeExpression::ends_with("foo").to_pattern(), "%foo");
+/// assert_eq!(LikeExpression::contains("100%").to_pattern(), "%100\\%%");
+/// ```
+#[derive(Debug, Clone, PartialEq)]
+pub struct LikeExpression {
+    pattern: String,
+}
+
+impl LikeExpression {
+    /// Escape LIKE wildcards in user input.
+    fn escape(input: &str) -> String {
+        input.replace('\\', "\\\\").replace('%', "\\%").replace('_', "\\_")
+    }
+
+    /// Match rows that contain the given text anywhere.
+    ///
+    /// `LikeExpression::contains("foo")` → pattern `%foo%`
+    pub fn contains(input: &str) -> Self {
+        Self {
+            pattern: format!("%{}%", Self::escape(input)),
+        }
+    }
+
+    /// Match rows that start with the given text.
+    ///
+    /// `LikeExpression::starts_with("foo")` → pattern `foo%`
+    pub fn starts_with(input: &str) -> Self {
+        Self {
+            pattern: format!("{}%", Self::escape(input)),
+        }
+    }
+
+    /// Match rows that end with the given text.
+    ///
+    /// `LikeExpression::ends_with("foo")` → pattern `%foo`
+    pub fn ends_with(input: &str) -> Self {
+        Self {
+            pattern: format!("%{}", Self::escape(input)),
+        }
+    }
+
+    /// Return the constructed LIKE pattern string.
+    pub fn to_pattern(&self) -> String {
+        self.pattern.clone()
     }
 }
 
@@ -251,6 +313,42 @@ macro_rules! impl_col_methods {
                     col: self.into_col_ref(),
                     op: Op::Lte,
                     val,
+                }
+            }
+
+            /// Generate a `LIKE` condition.
+            ///
+            /// Accepts a [`LikeExpression`] to ensure safe pattern construction:
+            /// - `col("name").like(LikeExpression::contains("foo"))` → `"name" LIKE '%foo%'`
+            /// - `col("name").like(LikeExpression::starts_with("foo"))` → `"name" LIKE 'foo%'`
+            /// - `col("name").like(LikeExpression::ends_with("foo"))` → `"name" LIKE '%foo'`
+            ///
+            /// User input is automatically escaped (`%` and `_` are treated as literals).
+            ///
+            /// Returns `WhereClause<String>`.  When the query uses a different
+            /// value type `V` (e.g. `Value`), the clause is converted
+            /// automatically via [`IntoWhereClause`] as long as `String: Into<V>`.
+            pub fn like(self, expr: LikeExpression) -> WhereClause<String> {
+                WhereClause::Condition {
+                    col: self.into_col_ref(),
+                    op: Op::Like,
+                    val: expr.to_pattern(),
+                }
+            }
+
+            /// Generate a `NOT LIKE` condition.
+            ///
+            /// Accepts a [`LikeExpression`] to ensure safe pattern construction:
+            /// - `col("name").not_like(LikeExpression::contains("foo"))` → `"name" NOT LIKE '%foo%'`
+            ///
+            /// User input is automatically escaped (`%` and `_` are treated as literals).
+            ///
+            /// Returns `WhereClause<String>`.  See [`like`](Self::like) for details.
+            pub fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
+                WhereClause::Condition {
+                    col: self.into_col_ref(),
+                    op: Op::NotLike,
+                    val: expr.to_pattern(),
                 }
             }
 
@@ -3230,5 +3328,67 @@ mod tests {
             binds,
             vec![Value::String("completed".to_string()), Value::Int(100),]
         );
+    }
+
+    #[test]
+    fn test_like_contains() {
+        let mut q = sqipe("users");
+        q.and_where(col("name").like(LikeExpression::contains("Ali")));
+        q.select(&["id", "name"]);
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "name" LIKE ?"#
+        );
+        assert_eq!(binds, vec![Value::String("%Ali%".to_string())]);
+    }
+
+    #[test]
+    fn test_like_starts_with() {
+        let mut q = sqipe("users");
+        q.and_where(col("name").like(LikeExpression::starts_with("Ali")));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ?"#);
+        assert_eq!(binds, vec![Value::String("Ali%".to_string())]);
+    }
+
+    #[test]
+    fn test_like_ends_with() {
+        let mut q = sqipe("users");
+        q.and_where(col("name").like(LikeExpression::ends_with("ice")));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ?"#);
+        assert_eq!(binds, vec![Value::String("%ice".to_string())]);
+    }
+
+    #[test]
+    fn test_not_like() {
+        let mut q = sqipe("users");
+        q.and_where(col("name").not_like(LikeExpression::contains("Bob")));
+
+        let (sql, binds) = q.to_sql();
+        assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" NOT LIKE ?"#);
+        assert_eq!(binds, vec![Value::String("%Bob%".to_string())]);
+    }
+
+    #[test]
+    fn test_like_escapes_wildcards() {
+        let mut q = sqipe("products");
+        q.and_where(col("name").like(LikeExpression::contains("100%")));
+
+        let (_, binds) = q.to_sql();
+        assert_eq!(binds, vec![Value::String("%100\\%%".to_string())]);
+    }
+
+    #[test]
+    fn test_like_escapes_underscore() {
+        let mut q = sqipe("products");
+        q.and_where(col("name").like(LikeExpression::starts_with("a_b")));
+
+        let (_, binds) = q.to_sql();
+        assert_eq!(binds, vec![Value::String("a\\_b%".to_string())]);
     }
 }
