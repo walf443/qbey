@@ -246,7 +246,14 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        StandardSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
+        StandardSqlRenderer.render_select(
+            &tree,
+            &RenderConfig {
+                ph: &ph,
+                qi: &qi,
+                backslash_escape: MySQL.backslash_escape(),
+            },
+        )
     }
 
     /// Build pipe syntax SQL with MySQL dialect.
@@ -254,7 +261,14 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        PipeSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
+        PipeSqlRenderer.render_select(
+            &tree,
+            &RenderConfig {
+                ph: &ph,
+                qi: &qi,
+                backslash_escape: MySQL.backslash_escape(),
+            },
+        )
     }
 
     fn apply_index_hints(&self, tree: &mut SelectTree<V>) {
@@ -327,14 +341,28 @@ impl<V: Clone + std::fmt::Debug> sqipe::UnionQueryOps<V> for MysqlUnionQuery<V> 
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        StandardSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
+        StandardSqlRenderer.render_union(
+            &tree,
+            &RenderConfig {
+                ph: &ph,
+                qi: &qi,
+                backslash_escape: MySQL.backslash_escape(),
+            },
+        )
     }
 
     fn to_pipe_sql(&self) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        PipeSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
+        PipeSqlRenderer.render_union(
+            &tree,
+            &RenderConfig {
+                ph: &ph,
+                qi: &qi,
+                backslash_escape: MySQL.backslash_escape(),
+            },
+        )
     }
 }
 
