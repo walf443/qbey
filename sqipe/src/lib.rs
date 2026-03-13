@@ -1617,8 +1617,9 @@ pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value> {
 impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// Add a SET clause: `SET "col" = ?`.
     ///
-    /// Use [`col()`] to create a column reference for the first argument,
-    /// preventing SQL injection via column names.
+    /// Use [`col()`] to create a column reference for the first argument.
+    /// Column names are quoted as identifiers but **not** parameterized,
+    /// so never pass external (user-supplied) input as a column name.
     ///
     /// ```
     /// use sqipe::{sqipe, col};

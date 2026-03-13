@@ -57,6 +57,9 @@ pub struct MysqlUpdateQuery<V: Clone + std::fmt::Debug = Value> {
 
 impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
     /// Add a SET clause: `` SET `col` = ? ``.
+    ///
+    /// Column names are quoted as identifiers but **not** parameterized,
+    /// so never pass external (user-supplied) input as a column name.
     pub fn set(&mut self, col: sqipe::Col, val: impl Into<V>) -> &mut Self {
         self.inner.set(col, val);
         self
