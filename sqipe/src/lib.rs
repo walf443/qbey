@@ -1038,6 +1038,7 @@ pub enum SetOp {
     UnionAll,
 }
 
+
 /// Trait for types that can be used as a source in union operations.
 pub trait AsUnionParts {
     type Query: Clone;
@@ -1084,6 +1085,8 @@ pub struct Query<V: Clone + std::fmt::Debug = Value> {
     pub(crate) offset_val: Option<u64>,
     /// Records the order of WHERE and JOIN operations for CTE generation.
     pub(crate) stage_order: Vec<tree::StageRef>,
+    /// Row-level locking clause (e.g., `"UPDATE"` → `FOR UPDATE`).
+    pub(crate) lock_for: Option<String>,
 }
 
 /// A combined query built from UNION / UNION ALL operations.
@@ -1182,6 +1185,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             limit_val: None,
             offset_val: None,
             stage_order: Vec::new(),
+            lock_for: None,
         }
     }
 
@@ -1219,6 +1223,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             limit_val: None,
             offset_val: None,
             stage_order: Vec::new(),
+            lock_for: None,
         }
     }
 
@@ -1455,6 +1460,70 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     pub fn offset(&mut self, n: u64) -> &mut Self {
         self.offset_val = Some(n);
         self
+    }
+
+    /// Append a `FOR <clause>` locking clause to the generated SQL.
+    ///
+    /// This is the base method for row-level locking. Use [`for_update`](Self::for_update)
+    /// for the common case.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("users");
+    /// q.select(&["id", "name"]);
+    /// q.and_where(col("id").eq(1));
+    /// q.for_with("NO KEY UPDATE");
+    ///
+    /// let (sql, _binds) = q.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR NO KEY UPDATE"#
+    /// );
+    /// ```
+    pub fn for_with(&mut self, clause: &str) -> &mut Self {
+        self.lock_for = Some(clause.to_string());
+        self
+    }
+
+    /// Append `FOR UPDATE` to the generated SQL.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("users");
+    /// q.select(&["id", "name"]);
+    /// q.and_where(col("id").eq(1));
+    /// q.for_update();
+    ///
+    /// let (sql, _binds) = q.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE"#
+    /// );
+    /// ```
+    pub fn for_update(&mut self) -> &mut Self {
+        self.for_with("UPDATE")
+    }
+
+    /// Append `FOR UPDATE` with an option (e.g., `NOWAIT`, `SKIP LOCKED`).
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("users");
+    /// q.select(&["id", "name"]);
+    /// q.and_where(col("id").eq(1));
+    /// q.for_update_with("NOWAIT");
+    ///
+    /// let (sql, _binds) = q.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE NOWAIT"#
+    /// );
+    /// ```
+    pub fn for_update_with(&mut self, option: &str) -> &mut Self {
+        self.for_with(&format!("UPDATE {}", option))
     }
 
     /// Build a SelectTree from this query.

@@ -498,6 +498,81 @@ async fn test_not_like() {
 }
 
 #[tokio::test]
+async fn test_for_update() {
+    let (_container, pool) = setup_container().await;
+
+    let mut q = sqipe_with::<MysqlValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_update();
+    let (sql, binds) = q.to_sql();
+
+    assert!(sql.ends_with("FOR UPDATE"));
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Alice");
+}
+
+#[tokio::test]
+async fn test_for_update_with_nowait() {
+    let (_container, pool) = setup_container().await;
+
+    let mut q = sqipe_with::<MysqlValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_update_with("NOWAIT");
+    let (sql, binds) = q.to_sql();
+
+    assert!(sql.ends_with("FOR UPDATE NOWAIT"));
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Alice");
+}
+
+#[tokio::test]
+async fn test_for_update_skip_locked() {
+    let (_container, pool) = setup_container().await;
+
+    let mut q = sqipe_with::<MysqlValue>("users");
+    q.select(&["id", "name"]);
+    q.for_update_with("SKIP LOCKED");
+    let (sql, _) = q.to_sql();
+
+    assert!(sql.ends_with("FOR UPDATE SKIP LOCKED"));
+
+    let rows = sqlx::query(&sql).fetch_all(&pool).await.unwrap();
+    assert_eq!(rows.len(), 3);
+}
+
+#[tokio::test]
+async fn test_for_with_share() {
+    let (_container, pool) = setup_container().await;
+
+    let mut q = sqipe_with::<MysqlValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_with("SHARE");
+    let (sql, binds) = q.to_sql();
+
+    assert!(sql.ends_with("FOR SHARE"));
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Alice");
+}
+
+#[tokio::test]
 async fn test_like_custom_escape_char() {
     let (_container, pool) = setup_container().await;
 

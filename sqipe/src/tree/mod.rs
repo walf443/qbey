@@ -78,6 +78,8 @@ pub struct SelectTree<V: Clone = crate::Value> {
     /// Records the order in which WHERE and JOIN operations were added.
     /// Used to detect CTE boundaries when WHERE appears before JOIN.
     pub stage_order: Vec<StageRef>,
+    /// Row-level locking clause (e.g., `"UPDATE"` → `FOR UPDATE`).
+    pub lock_for: Option<String>,
 }
 
 /// AST for a UNION query, generic over bind value type.
@@ -110,6 +112,7 @@ impl<V: Clone> SelectTree<V> {
             limit: self.limit,
             offset: self.offset,
             stage_order: self.stage_order,
+            lock_for: self.lock_for,
         }
     }
 }
@@ -154,6 +157,7 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             limit: query.limit_val,
             offset: query.offset_val,
             stage_order: query.stage_order.clone(),
+            lock_for: query.lock_for.clone(),
         }
     }
 
@@ -196,6 +200,7 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             limit: query.limit_val,
             offset: query.offset_val,
             stage_order: query.stage_order,
+            lock_for: query.lock_for,
         }
     }
 }

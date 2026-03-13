@@ -433,6 +433,86 @@ pg_test!(test_not_like, |client| {
     assert_eq!(rows[0].get::<_, String>("name"), "Bob");
 });
 
+pg_test!(test_for_update, |client| {
+    let mut q = sqipe_with::<PgValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_update();
+    let (sql, binds) = q.to_sql_with(&PostgresDialect);
+
+    assert!(sql.ends_with("FOR UPDATE"));
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, String>("name"), "Alice");
+});
+
+pg_test!(test_for_update_with_option, |client| {
+    let mut q = sqipe_with::<PgValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_update_with("NOWAIT");
+    let (sql, binds) = q.to_sql_with(&PostgresDialect);
+
+    assert!(sql.ends_with("FOR UPDATE NOWAIT"));
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, String>("name"), "Alice");
+});
+
+pg_test!(test_for_with_share, |client| {
+    let mut q = sqipe_with::<PgValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_with("SHARE");
+    let (sql, binds) = q.to_sql_with(&PostgresDialect);
+
+    assert!(sql.ends_with("FOR SHARE"));
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, String>("name"), "Alice");
+});
+
+pg_test!(test_for_with_no_key_update, |client| {
+    let mut q = sqipe_with::<PgValue>("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("id").eq(1));
+    q.for_with("NO KEY UPDATE");
+    let (sql, binds) = q.to_sql_with(&PostgresDialect);
+
+    assert!(sql.ends_with("FOR NO KEY UPDATE"));
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, String>("name"), "Alice");
+});
+
+pg_test!(test_for_update_skip_locked, |client| {
+    let mut q = sqipe_with::<PgValue>("users");
+    q.select(&["id", "name"]);
+    q.for_update_with("SKIP LOCKED");
+    let (sql, _) = q.to_sql_with(&PostgresDialect);
+
+    assert!(sql.ends_with("FOR UPDATE SKIP LOCKED"));
+
+    let rows = client.query(&sql, &[]).unwrap();
+    assert_eq!(rows.len(), 3);
+});
+
 pg_test!(test_like_custom_escape_char, |client| {
     let mut q = sqipe_with::<PgValue>("users");
     q.and_where(col("name").like(LikeExpression::contains_escaped_by('!', "li")));
