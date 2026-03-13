@@ -1,6 +1,7 @@
 use super::{
-    RenderConfig, Renderer, append_limit_offset_pipe, append_order_by, render_aggregate_expr,
-    render_from, render_joins, render_select_columns, render_wheres, set_op_keyword,
+    RenderConfig, Renderer, append_limit_offset_pipe, append_lock_clause, append_order_by,
+    render_aggregate_expr, render_from, render_joins, render_select_columns, render_wheres,
+    set_op_keyword,
 };
 use crate::tree::{SelectClause, SelectTree, StageRef, UnionTree};
 
@@ -132,6 +133,7 @@ impl Renderer for PipeSqlRenderer {
         let mut sql = self.render_core(tree, cfg, &mut binds);
         append_order_by(&mut sql, &tree.order_bys, cfg, " |> ");
         append_limit_offset_pipe(&mut sql, tree.limit, tree.offset);
+        append_lock_clause(&mut sql, tree.lock_for.as_deref());
         (sql, binds)
     }
 

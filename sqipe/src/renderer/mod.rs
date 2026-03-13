@@ -487,3 +487,10 @@ fn render_limit_offset(
         offset.map(|n| format!("OFFSET {}", n)),
     )
 }
+
+pub fn append_lock_clause(sql: &mut String, lock_for: Option<&str>) {
+    if let Some(clause) = lock_for {
+        sql.push_str(" FOR ");
+        sql.push_str(clause);
+    }
+}

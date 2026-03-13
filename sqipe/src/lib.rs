@@ -1084,6 +1084,8 @@ pub struct Query<V: Clone + std::fmt::Debug = Value> {
     pub(crate) offset_val: Option<u64>,
     /// Records the order of WHERE and JOIN operations for CTE generation.
     pub(crate) stage_order: Vec<tree::StageRef>,
+    /// Row-level locking clause (e.g., `"UPDATE"` → `FOR UPDATE`).
+    pub(crate) lock_for: Option<String>,
 }
 
 /// A combined query built from UNION / UNION ALL operations.
@@ -1182,6 +1184,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             limit_val: None,
             offset_val: None,
             stage_order: Vec::new(),
+            lock_for: None,
         }
     }
 
@@ -1219,6 +1222,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             limit_val: None,
             offset_val: None,
             stage_order: Vec::new(),
+            lock_for: None,
         }
     }
 
@@ -1455,6 +1459,71 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     pub fn offset(&mut self, n: u64) -> &mut Self {
         self.offset_val = Some(n);
         self
+    }
+
+    /// Append a `FOR <clause>` locking clause to the generated SQL.
+    ///
+    /// This is the base method for row-level locking. Use [`for_update`](Self::for_update)
+    /// for the common case.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("users");
+    /// q.select(&["id", "name"]);
+    /// q.and_where(col("id").eq(1));
+    /// q.for_with("NO KEY UPDATE");
+    ///
+    /// let (sql, _binds) = q.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR NO KEY UPDATE"#
+    /// );
+    /// ```
+    pub fn for_with(&mut self, clause: &str) -> &mut Self {
+        debug_assert!(!clause.is_empty(), "lock clause must not be empty");
+        self.lock_for = Some(clause.to_string());
+        self
+    }
+
+    /// Append `FOR UPDATE` to the generated SQL.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("users");
+    /// q.select(&["id", "name"]);
+    /// q.and_where(col("id").eq(1));
+    /// q.for_update();
+    ///
+    /// let (sql, _binds) = q.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE"#
+    /// );
+    /// ```
+    pub fn for_update(&mut self) -> &mut Self {
+        self.for_with("UPDATE")
+    }
+
+    /// Append `FOR UPDATE` with an option (e.g., `NOWAIT`, `SKIP LOCKED`).
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("users");
+    /// q.select(&["id", "name"]);
+    /// q.and_where(col("id").eq(1));
+    /// q.for_update_with("NOWAIT");
+    ///
+    /// let (sql, _binds) = q.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE NOWAIT"#
+    /// );
+    /// ```
+    pub fn for_update_with(&mut self, option: &str) -> &mut Self {
+        self.for_with(&format!("UPDATE {}", option))
     }
 
     /// Build a SelectTree from this query.
@@ -3855,6 +3924,120 @@ mod tests {
         assert_eq!(
             sql,
             r#"FROM "texts" |> INNER JOIN "patterns" ON "texts"."text" LIKE "patterns"."pattern" |> SELECT "id", "text""#
+        );
+    }
+
+    #[test]
+    fn test_for_update() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update();
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update();
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> WHERE "id" = ? |> SELECT "id", "name" FOR UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_option() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update_with("NOWAIT");
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR UPDATE NOWAIT"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_option_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_update_with("SKIP LOCKED");
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> WHERE "id" = ? |> SELECT "id", "name" FOR UPDATE SKIP LOCKED"#
+        );
+    }
+
+    #[test]
+    fn test_for_with() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_with("NO KEY UPDATE");
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" WHERE "id" = ? FOR NO KEY UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_with_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.and_where(col("id").eq(1));
+        q.for_with("SHARE");
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> WHERE "id" = ? |> SELECT "id", "name" FOR SHARE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_order_by_and_limit() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.order_by(col("id").asc());
+        q.limit(10);
+        q.for_update();
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "name" FROM "users" ORDER BY "id" ASC LIMIT 10 FOR UPDATE"#
+        );
+    }
+
+    #[test]
+    fn test_for_update_with_order_by_and_limit_pipe() {
+        let mut q = sqipe("users");
+        q.select(&["id", "name"]);
+        q.order_by(col("id").asc());
+        q.limit(10);
+        q.for_update();
+
+        let (sql, _) = q.to_pipe_sql();
+        assert_eq!(
+            sql,
+            r#"FROM "users" |> SELECT "id", "name" |> ORDER BY "id" ASC |> LIMIT 10 FOR UPDATE"#
         );
     }
 
