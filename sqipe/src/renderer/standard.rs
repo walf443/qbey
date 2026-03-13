@@ -123,7 +123,7 @@ impl StandardSqlRenderer {
                             ));
                             for &ji in &pending_joins {
                                 let join = &tree.joins[ji];
-                                let sub_slice = &tree.join_subqueries[ji..ji + 1];
+                                let sub_slice = tree.join_subqueries.get(ji..ji + 1).unwrap_or(&[]);
                                 for js in
                                     render_joins(std::slice::from_ref(join), sub_slice, cfg, binds)
                                 {
@@ -170,7 +170,7 @@ impl StandardSqlRenderer {
         // Pending joins go to the main query
         for &ji in &pending_joins {
             let join = &tree.joins[ji];
-            let sub_slice = &tree.join_subqueries[ji..ji + 1];
+            let sub_slice = tree.join_subqueries.get(ji..ji + 1).unwrap_or(&[]);
             for js in render_joins(std::slice::from_ref(join), sub_slice, cfg, binds) {
                 main_sql.push(' ');
                 main_sql.push_str(&js);

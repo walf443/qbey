@@ -290,6 +290,12 @@ pub mod join {
 
     /// Create a raw SQL ON condition for arbitrary join expressions.
     ///
+    /// # Safety
+    ///
+    /// The `raw` string is embedded directly into the SQL output without escaping.
+    /// **Never** interpolate user input into this string — doing so creates a SQL
+    /// injection vulnerability.
+    ///
     /// ```
     /// use sqipe::{sqipe, join};
     ///
@@ -3851,6 +3857,25 @@ mod tests {
         assert_eq!(
             sql,
             r#"FROM "texts" |> INNER JOIN "patterns" ON "texts"."text" LIKE "patterns"."pattern" |> SELECT "id", "text""#
+        );
+    }
+
+    #[test]
+    fn test_join_condition_expr_inside_and() {
+        let mut q = sqipe("texts");
+        q.join(
+            "patterns",
+            JoinCondition::And(vec![
+                table("texts").col("category").eq_col("category"),
+                join::on_expr(r#""texts"."text" LIKE "patterns"."pattern""#),
+            ]),
+        );
+        q.select(&["id", "text"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            r#"SELECT "id", "text" FROM "texts" INNER JOIN "patterns" ON "texts"."category" = "patterns"."category" AND "texts"."text" LIKE "patterns"."pattern""#
         );
     }
 }

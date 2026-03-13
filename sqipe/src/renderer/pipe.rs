@@ -53,7 +53,7 @@ impl PipeSqlRenderer {
                             binds,
                         );
                         let join = &tree.joins[*idx];
-                        let sub_slice = &tree.join_subqueries[*idx..*idx + 1];
+                        let sub_slice = tree.join_subqueries.get(*idx..*idx + 1).unwrap_or(&[]);
                         for js in render_joins(std::slice::from_ref(join), sub_slice, cfg, binds) {
                             parts.push(js);
                         }
