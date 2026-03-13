@@ -132,13 +132,12 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             None => FromSource::Table(query.table.clone()),
         };
 
+        debug_assert!(
+            query.join_subqueries.len() <= query.joins.len(),
+            "join_subqueries must not exceed joins length"
+        );
         let mut join_subqueries = query.join_subqueries.clone();
         join_subqueries.resize_with(query.joins.len(), || None);
-        debug_assert_eq!(
-            query.joins.len(),
-            join_subqueries.len(),
-            "joins and join_subqueries must have the same length"
-        );
 
         SelectTree {
             from: FromClause {
@@ -175,13 +174,12 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
         };
 
         let join_count = query.joins.len();
+        debug_assert!(
+            query.join_subqueries.len() <= join_count,
+            "join_subqueries must not exceed joins length"
+        );
         let mut join_subqueries = query.join_subqueries;
         join_subqueries.resize_with(join_count, || None);
-        debug_assert_eq!(
-            join_count,
-            join_subqueries.len(),
-            "joins and join_subqueries must have the same length"
-        );
 
         SelectTree {
             from: FromClause {

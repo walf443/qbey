@@ -290,8 +290,6 @@ pub mod join {
 
     /// Create a raw SQL ON condition for arbitrary join expressions.
     ///
-    /// # Safety
-    ///
     /// The `raw` string is embedded directly into the SQL output without escaping.
     /// **Never** interpolate user input into this string — doing so creates a SQL
     /// injection vulnerability.
