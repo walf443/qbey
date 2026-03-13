@@ -91,12 +91,7 @@ impl<V: Clone + std::fmt::Debug> sqipe::AsUnionParts for MysqlUnionQuery<V> {
 
 /// Create a MySQL-specific query builder for the given table.
 pub fn sqipe(table: &str) -> MysqlQuery<Value> {
-    MysqlQuery {
-        inner: sqipe::sqipe(table),
-        force_indexes: Vec::new(),
-        use_indexes: Vec::new(),
-        ignore_indexes: Vec::new(),
-    }
+    MysqlQuery::wrap(sqipe::sqipe(table))
 }
 
 fn apply_index_hints_to<V: Clone>(
@@ -127,12 +122,7 @@ pub fn sqipe_from_subquery(
     sub: impl sqipe::IntoSelectTree<Value>,
     alias: &str,
 ) -> MysqlQuery<Value> {
-    MysqlQuery {
-        inner: sqipe::Query::from_subquery(sub, alias),
-        force_indexes: Vec::new(),
-        use_indexes: Vec::new(),
-        ignore_indexes: Vec::new(),
-    }
+    MysqlQuery::wrap(sqipe::Query::from_subquery(sub, alias))
 }
 
 /// Create a MySQL-specific query that selects from a subquery with a custom value type.
@@ -140,25 +130,24 @@ pub fn sqipe_from_subquery_with<V: Clone + std::fmt::Debug>(
     sub: impl sqipe::IntoSelectTree<V>,
     alias: &str,
 ) -> MysqlQuery<V> {
-    MysqlQuery {
-        inner: sqipe::Query::from_subquery(sub, alias),
-        force_indexes: Vec::new(),
-        use_indexes: Vec::new(),
-        ignore_indexes: Vec::new(),
-    }
+    MysqlQuery::wrap(sqipe::Query::from_subquery(sub, alias))
 }
 
 /// Create a MySQL-specific query builder with a custom value type.
 pub fn sqipe_with<V: Clone + std::fmt::Debug>(table: &str) -> MysqlQuery<V> {
-    MysqlQuery {
-        inner: sqipe::sqipe_with(table),
-        force_indexes: Vec::new(),
-        use_indexes: Vec::new(),
-        ignore_indexes: Vec::new(),
-    }
+    MysqlQuery::wrap(sqipe::sqipe_with(table))
 }
 
 impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
+    fn wrap(inner: sqipe::Query<V>) -> Self {
+        MysqlQuery {
+            inner,
+            force_indexes: Vec::new(),
+            use_indexes: Vec::new(),
+            ignore_indexes: Vec::new(),
+        }
+    }
+
     pub fn force_index(&mut self, indexes: &[&str]) -> &mut Self {
         self.force_indexes = indexes.iter().map(|s| s.to_string()).collect();
         self
