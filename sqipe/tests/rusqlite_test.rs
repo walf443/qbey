@@ -573,3 +573,92 @@ fn test_like_custom_escape_char() {
 
     assert_eq!(names, vec!["Alice", "Charlie"]);
 }
+
+#[test]
+fn test_update_basic() {
+    let conn = setup_db();
+
+    let mut u = sqipe_with::<SqliteValue>("users").update();
+    u.set(col("name"), "Alicia");
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    // Verify the update
+    let mut stmt = conn
+        .prepare(r#"SELECT "name" FROM "users" WHERE "id" = 1"#)
+        .unwrap();
+    let name: String = stmt.query_row([], |row| row.get(0)).unwrap();
+    assert_eq!(name, "Alicia");
+}
+
+#[test]
+fn test_update_multiple_sets() {
+    let conn = setup_db();
+
+    let mut u = sqipe_with::<SqliteValue>("users").update();
+    u.set(col("name"), "Alicia");
+    u.set(col("age"), 31);
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    let mut stmt = conn
+        .prepare(r#"SELECT "name", "age" FROM "users" WHERE "id" = 1"#)
+        .unwrap();
+    let (name, age): (String, i64) = stmt
+        .query_row([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap();
+    assert_eq!(name, "Alicia");
+    assert_eq!(age, 31);
+}
+
+#[test]
+fn test_update_from_query_with_where() {
+    let conn = setup_db();
+
+    let mut q = sqipe_with::<SqliteValue>("users");
+    q.and_where(col("id").eq(2));
+    let mut u = q.update();
+    u.set(col("name"), "Bobby");
+    let (sql, binds) = u.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    let mut stmt = conn
+        .prepare(r#"SELECT "name" FROM "users" WHERE "id" = 2"#)
+        .unwrap();
+    let name: String = stmt.query_row([], |row| row.get(0)).unwrap();
+    assert_eq!(name, "Bobby");
+}
+
+#[test]
+fn test_update_without_where() {
+    let conn = setup_db();
+
+    let mut u = sqipe_with::<SqliteValue>("users").update();
+    u.set(col("age"), 99);
+    u.without_where();
+    let (sql, binds) = u.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    // All rows should be updated
+    let mut stmt = conn.prepare(r#"SELECT "age" FROM "users""#).unwrap();
+    let ages: Vec<i64> = stmt
+        .query_map([], |row| row.get(0))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert!(ages.iter().all(|&a| a == 99));
+}

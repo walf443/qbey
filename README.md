@@ -443,6 +443,75 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"name\" AS \"user_name\" FROM \"users\"");
 ```
 
+### UPDATE
+
+`Query::update()` converts a SELECT query builder into an UPDATE statement builder.
+
+```rust
+# use sqipe::{sqipe, col};
+// Basic UPDATE
+let mut u = sqipe("employee").update();
+u.set(col("name"), "Alice");
+u.and_where(col("id").eq(1));
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+```
+
+WHERE conditions can be built first, then converted to UPDATE:
+
+```rust
+# use sqipe::{sqipe, col};
+let mut q = sqipe("employee");
+q.and_where(col("id").eq(1));
+let mut u = q.update();
+u.set(col("name"), "Alice");
+u.set(col("age"), 31);
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, r#"UPDATE "employee" SET "name" = ?, "age" = ? WHERE "id" = ?"#);
+```
+
+By default, calling `to_sql()` without any WHERE conditions will panic to prevent accidental full-table updates. Use `without_where()` to explicitly opt in:
+
+```rust
+# use sqipe::{sqipe, col};
+let mut u = sqipe("employee").update();
+u.set(col("status"), "inactive");
+u.without_where();
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, r#"UPDATE "employee" SET "status" = ?"#);
+```
+
+Dialect support works via `to_sql_with`:
+
+```rust
+# use sqipe::{sqipe, col, Dialect};
+# struct PgDialect;
+# impl Dialect for PgDialect {
+#     fn placeholder(&self, index: usize) -> String { format!("${}", index) }
+# }
+let mut u = sqipe("employee").update();
+u.set(col("name"), "Alice");
+u.and_where(col("id").eq(1));
+
+let (sql, binds) = u.to_sql_with(&PgDialect);
+assert_eq!(sql, r#"UPDATE "employee" SET "name" = $1 WHERE "id" = $2"#);
+```
+
+For raw SQL expressions in SET clauses (e.g. incrementing a counter), use `SetExpression`:
+
+```rust
+# use sqipe::{sqipe, col, SetExpression};
+let mut u = sqipe("employee").update();
+u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+u.and_where(col("id").eq(1));
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE "id" = ?"#);
+```
+
 ### MySQL dialect
 
 See [sqipe-mysql](./sqipe-mysql/README.md) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).

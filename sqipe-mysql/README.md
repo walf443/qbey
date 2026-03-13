@@ -58,3 +58,47 @@ q.select(&["id", "name"]);
 let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT `id`, `name` FROM `users` STRAIGHT_JOIN `orders` ON `users`.`id` = `orders`.`user_id`");
 ```
+
+## UPDATE
+
+```rust
+use sqipe_mysql::sqipe;
+use sqipe::col;
+
+let mut u = sqipe("users").update();
+u.set(col("name"), "Alice");
+u.and_where(col("id").eq(1));
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
+```
+
+By default, UPDATE without WHERE will panic. Use `without_where()` to explicitly allow full-table updates:
+
+```rust
+use sqipe_mysql::sqipe;
+use sqipe::col;
+
+let mut u = sqipe("users").update();
+u.set(col("age"), 99);
+u.without_where();
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, "UPDATE `users` SET `age` = ?");
+```
+
+MySQL supports `ORDER BY` and `LIMIT` in UPDATE statements (not available in standard SQL):
+
+```rust
+use sqipe_mysql::sqipe;
+use sqipe::col;
+
+let mut u = sqipe("users").update();
+u.set(col("status"), "inactive");
+u.and_where(col("dept").eq("eng"));
+u.order_by(col("created_at").asc());
+u.limit(10);
+
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY `created_at` ASC LIMIT 10");
+```

@@ -44,6 +44,85 @@ pub struct MysqlUnionQuery<V: Clone + std::fmt::Debug = Value> {
     offset_val: Option<u64>,
 }
 
+/// MySQL-specific UPDATE query builder.
+///
+/// Extends the core `UpdateQuery` with MySQL-specific features like
+/// `ORDER BY` and `LIMIT` in UPDATE statements.
+#[derive(Debug, Clone)]
+pub struct MysqlUpdateQuery<V: Clone + std::fmt::Debug = Value> {
+    inner: sqipe::UpdateQuery<V>,
+    order_bys: Vec<sqipe::OrderByClause>,
+    limit_val: Option<u64>,
+}
+
+impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
+    /// Add a SET clause: `` SET `col` = ? ``.
+    ///
+    /// Column names are quoted as identifiers but **not** parameterized,
+    /// so never pass external (user-supplied) input as a column name.
+    pub fn set(&mut self, col: sqipe::Col, val: impl Into<V>) -> &mut Self {
+        self.inner.set(col, val);
+        self
+    }
+
+    /// Add a raw SQL expression to the SET clause.
+    ///
+    /// Use [`sqipe::SetExpression::new()`] to create the expression, making it explicit
+    /// that raw SQL is being injected.
+    pub fn set_expr(&mut self, expr: sqipe::SetExpression) -> &mut Self {
+        self.inner.set_expr(expr);
+        self
+    }
+
+    /// Add an AND WHERE condition.
+    pub fn and_where(&mut self, cond: impl sqipe::IntoWhereClause<V>) -> &mut Self {
+        self.inner.and_where(cond);
+        self
+    }
+
+    /// Add an OR WHERE condition.
+    pub fn or_where(&mut self, cond: impl sqipe::IntoWhereClause<V>) -> &mut Self {
+        self.inner.or_where(cond);
+        self
+    }
+
+    /// Explicitly allow UPDATE without WHERE clause.
+    ///
+    /// By default, calling [`to_sql()`](MysqlUpdateQuery::to_sql) without any WHERE
+    /// conditions will panic. Call this method to opt in to full-table updates.
+    pub fn without_where(&mut self) -> &mut Self {
+        self.inner.without_where();
+        self
+    }
+
+    /// Add an ORDER BY clause (MySQL extension).
+    pub fn order_by(&mut self, clause: sqipe::OrderByClause) -> &mut Self {
+        self.order_bys.push(clause);
+        self
+    }
+
+    /// Set the LIMIT value (MySQL extension).
+    pub fn limit(&mut self, n: u64) -> &mut Self {
+        self.limit_val = Some(n);
+        self
+    }
+
+    /// Build standard SQL with MySQL dialect.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    pub fn to_sql(&self) -> (String, Vec<V>) {
+        let mut tree = self.inner.to_tree();
+        tree.order_bys = self.order_bys.clone();
+        tree.limit = self.limit_val;
+        let ph = |_: usize| "?".to_string();
+        let qi = |name: &str| MySQL.quote_identifier(name);
+        sqipe::renderer::update::render_update(
+            &tree,
+            &sqipe::renderer::RenderConfig::from_dialect(&ph, &qi, &MySQL),
+        )
+    }
+}
+
 impl<V: Clone + std::fmt::Debug> Deref for MysqlQuery<V> {
     type Target = sqipe::Query<V>;
     fn deref(&self) -> &Self::Target {
@@ -271,6 +350,18 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
         PipeSqlRenderer.render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySQL))
+    }
+
+    /// Convert this MySQL query builder into an UPDATE query builder.
+    ///
+    /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
+    /// The generated SQL uses MySQL dialect (backtick quoting, `?` placeholders).
+    pub fn update(self) -> MysqlUpdateQuery<V> {
+        MysqlUpdateQuery {
+            inner: self.inner.update(),
+            order_bys: Vec::new(),
+            limit_val: None,
+        }
     }
 
     fn apply_index_hints(&self, tree: &mut SelectTree<V>) {
@@ -768,6 +859,149 @@ mod tests {
             "SELECT `id`, `name` FROM `users` INNER JOIN (SELECT `user_id`, `total` FROM `orders` WHERE `status` = ?) AS `o` ON `users`.`id` = `o`.`user_id`"
         );
         assert_eq!(binds, vec![sqipe::Value::String("shipped".to_string())]);
+    }
+
+    #[test]
+    fn test_update_basic() {
+        let mut u = sqipe("users").update();
+        u.set(col("name"), "Alicia");
+        u.and_where(col("id").eq(1));
+
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
+        assert_eq!(
+            binds,
+            vec![
+                sqipe::Value::String("Alicia".to_string()),
+                sqipe::Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_multiple_sets() {
+        let mut u = sqipe("users").update();
+        u.set(col("name"), "Alicia");
+        u.set(col("age"), 31);
+        u.and_where(col("id").eq(1));
+
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            "UPDATE `users` SET `name` = ?, `age` = ? WHERE `id` = ?"
+        );
+        assert_eq!(
+            binds,
+            vec![
+                sqipe::Value::String("Alicia".to_string()),
+                sqipe::Value::Int(31),
+                sqipe::Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_from_query_with_where() {
+        let mut q = sqipe("users");
+        q.and_where(col("id").eq(1));
+        let mut u = q.update();
+        u.set(col("name"), "Alicia");
+
+        let (sql, _) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
+    }
+
+    #[test]
+    fn test_update_without_where() {
+        let mut u = sqipe("users").update();
+        u.set(col("age"), 99);
+        u.without_where();
+
+        let (sql, _) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `age` = ?");
+    }
+
+    #[test]
+    fn test_update_with_table_alias() {
+        let mut q = sqipe("users");
+        q.as_("u");
+        let mut u = q.update();
+        u.set(col("name"), "Alicia");
+        u.and_where(col("id").eq(1));
+
+        let (sql, _) = u.to_sql();
+        // MySQL does not support AS in UPDATE table alias
+        assert_eq!(sql, "UPDATE `users` `u` SET `name` = ? WHERE `id` = ?");
+    }
+
+    #[test]
+    fn test_update_with_order_by_and_limit() {
+        let mut u = sqipe("users").update();
+        u.set(col("status"), "inactive");
+        u.and_where(col("dept").eq("eng"));
+        u.order_by(col("created_at").asc());
+        u.limit(10);
+
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY `created_at` ASC LIMIT 10"
+        );
+        assert_eq!(
+            binds,
+            vec![
+                sqipe::Value::String("inactive".to_string()),
+                sqipe::Value::String("eng".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_limit_only() {
+        let mut u = sqipe("users").update();
+        u.set(col("flagged"), true);
+        u.without_where();
+        u.limit(100);
+
+        let (sql, _) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `flagged` = ? LIMIT 100");
+    }
+
+    #[test]
+    fn test_update_with_like() {
+        let mut u = sqipe("users").update();
+        u.set(col("flagged"), true);
+        u.and_where(col("name").like(sqipe::LikeExpression::starts_with("test")));
+
+        let (sql, binds) = u.to_sql();
+        // MySQL doubles backslash in ESCAPE clause due to backslash_escape
+        assert_eq!(
+            sql,
+            r"UPDATE `users` SET `flagged` = ? WHERE `name` LIKE ? ESCAPE '\\'"
+        );
+        assert_eq!(
+            binds,
+            vec![
+                sqipe::Value::Bool(true),
+                sqipe::Value::String("test%".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_set_expr() {
+        let mut u = sqipe("users").update();
+        u.set_expr(sqipe::SetExpression::new(
+            "`visit_count` = `visit_count` + 1",
+        ));
+        u.and_where(col("id").eq(1));
+
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            "UPDATE `users` SET `visit_count` = `visit_count` + 1 WHERE `id` = ?"
+        );
+        assert_eq!(binds, vec![sqipe::Value::Int(1)]);
     }
 
     #[test]

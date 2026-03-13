@@ -5,6 +5,7 @@ use crate::{
 
 pub mod pipe;
 pub mod standard;
+pub mod update;
 
 use crate::tree::{FromClause, FromSource, SelectTree, UnionTree};
 

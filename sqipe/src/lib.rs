@@ -1657,6 +1657,238 @@ impl<V: Clone + std::fmt::Debug> UnionQuery<V> {
     }
 }
 
+/// An UPDATE query builder, generic over the bind value type `V`.
+///
+/// Created via [`Query::update()`] to convert a SELECT query builder into an UPDATE statement.
+///
+/// By default, WHERE clause is required. Calling `to_sql()` or `to_sql_with()` without
+/// any WHERE conditions will panic to prevent accidental full-table updates.
+/// Use [`without_where()`](UpdateQuery::without_where) to explicitly allow WHERE-less updates.
+///
+/// ```
+/// use sqipe::{sqipe, col};
+///
+/// let mut u = sqipe("employee").update();
+/// u.set(col("name"), "Alice");
+/// u.and_where(col("id").eq(1));
+/// let (sql, _) = u.to_sql();
+/// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+/// ```
+/// A raw SQL expression for use in SET clauses.
+///
+/// This type exists to make it explicit that the caller is injecting raw SQL.
+/// The expression is inserted verbatim — it is **not** parameterized or quoted.
+///
+/// ```
+/// use sqipe::{sqipe, col, SetExpression};
+///
+/// let mut u = sqipe("employee").update();
+/// u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+/// u.and_where(col("id").eq(1));
+/// let (sql, _) = u.to_sql();
+/// assert_eq!(sql, r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE "id" = ?"#);
+/// ```
+#[derive(Debug, Clone)]
+pub struct SetExpression(String);
+
+impl SetExpression {
+    /// Create a new raw SQL SET expression.
+    pub fn new(expr: &str) -> Self {
+        Self(expr.to_string())
+    }
+}
+
+/// A single SET clause entry in an UPDATE statement.
+#[derive(Debug, Clone)]
+pub enum SetClause<V: Clone> {
+    /// `"col" = ?` — identifier-quoted column with a bind value.
+    Value(String, V),
+    /// Raw SQL expression via [`SetExpression`].
+    Expr(SetExpression),
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value> {
+    table: String,
+    table_alias: Option<String>,
+    sets: Vec<SetClause<V>>,
+    wheres: Vec<WhereEntry<V>>,
+    allow_without_where: bool,
+}
+
+impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
+    /// Add a SET clause: `SET "col" = ?`.
+    ///
+    /// Use [`col()`] to create a column reference for the first argument.
+    /// Column names are quoted as identifiers but **not** parameterized,
+    /// so never pass external (user-supplied) input as a column name.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut u = sqipe("employee").update();
+    /// u.set(col("name"), "Alice");
+    /// u.and_where(col("id").eq(1));
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+    /// ```
+    pub fn set(&mut self, col: Col, val: impl Into<V>) -> &mut Self {
+        self.sets.push(SetClause::Value(col.name, val.into()));
+        self
+    }
+
+    /// Add a raw SQL expression to the SET clause.
+    ///
+    /// Use [`SetExpression::new()`] to create the expression, making it explicit
+    /// that raw SQL is being injected.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col, SetExpression};
+    ///
+    /// let mut u = sqipe("employee").update();
+    /// u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+    /// u.and_where(col("id").eq(1));
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE "id" = ?"#);
+    /// ```
+    pub fn set_expr(&mut self, expr: SetExpression) -> &mut Self {
+        self.sets.push(SetClause::Expr(expr));
+        self
+    }
+
+    /// Add an AND WHERE condition.
+    pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
+        self.wheres.push(WhereEntry::And(cond.into_where_clause()));
+        self
+    }
+
+    /// Add an OR WHERE condition.
+    pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
+        self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
+        self
+    }
+
+    /// Explicitly allow this UPDATE to have no WHERE clause.
+    ///
+    /// By default, `to_sql()` and `to_sql_with()` panic if no WHERE conditions are set,
+    /// to prevent accidental full-table updates. Call this method to opt in to WHERE-less updates.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut u = sqipe("employee").update();
+    /// u.set(col("status"), "inactive");
+    /// u.without_where();
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "status" = ?"#);
+    /// ```
+    pub fn without_where(&mut self) -> &mut Self {
+        self.allow_without_where = true;
+        self
+    }
+
+    /// Build an UpdateTree AST from this query.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
+    /// has not been called.
+    pub fn to_tree(&self) -> tree::UpdateTree<V> {
+        self.assert_where_present();
+        tree::UpdateTree {
+            table: self.table.clone(),
+            table_alias: self.table_alias.clone(),
+            sets: self.sets.clone(),
+            wheres: self.wheres.clone(),
+            order_bys: Vec::new(),
+            limit: None,
+        }
+    }
+
+    fn assert_where_present(&self) {
+        assert!(
+            self.allow_without_where || !self.wheres.is_empty(),
+            "UPDATE without WHERE is dangerous and not allowed by default. \
+             Use .without_where() to explicitly allow full-table updates."
+        );
+    }
+
+    /// Build standard SQL with `?` placeholders and double-quote identifiers.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
+    /// has not been called.
+    pub fn to_sql(&self) -> (String, Vec<V>) {
+        let tree = self.to_tree();
+        let cfg = RenderConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+            backslash_escape: false,
+        };
+        renderer::update::render_update(&tree, &cfg)
+    }
+
+    /// Build standard SQL with dialect-specific placeholders and quoting.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
+    /// has not been called.
+    pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
+        let tree = self.to_tree();
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        renderer::update::render_update(&tree, &RenderConfig::from_dialect(&ph, &qi, dialect))
+    }
+}
+
+impl<V: Clone + std::fmt::Debug> Query<V> {
+    /// Convert this SELECT query builder into an UPDATE query builder.
+    ///
+    /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("employee");
+    /// q.and_where(col("id").eq(1));
+    /// let mut u = q.update();
+    /// u.set(col("name"), "Alice");
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+    /// ```
+    pub fn update(self) -> UpdateQuery<V> {
+        assert!(
+            self.joins.is_empty(),
+            "Query has JOINs which are not supported in UPDATE and will be discarded"
+        );
+        assert!(
+            self.aggregates.is_empty(),
+            "Query has aggregates which are not supported in UPDATE and will be discarded"
+        );
+        assert!(
+            self.order_bys.is_empty(),
+            "Query has ORDER BY which is not supported in UPDATE and will be discarded"
+        );
+        assert!(
+            self.limit_val.is_none(),
+            "Query has LIMIT which is not supported in UPDATE and will be discarded"
+        );
+        UpdateQuery {
+            table: self.table,
+            table_alias: self.table_alias,
+            sets: Vec::new(),
+            wheres: self.wheres,
+            allow_without_where: false,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4057,6 +4289,284 @@ mod tests {
         assert_eq!(
             sql,
             r#"SELECT "id", "text" FROM "texts" INNER JOIN "patterns" ON "texts"."category" = "patterns"."category" AND "texts"."text" LIKE "patterns"."pattern""#
+        );
+    }
+
+    // ── UPDATE tests ──
+
+    #[test]
+    fn test_update_basic() {
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
+        );
+    }
+
+    #[test]
+    fn test_update_multiple_sets() {
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set(col("age"), 30);
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ?, "age" = ? WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::Int(30),
+                Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_without_where() {
+        let mut u = sqipe("employee").update();
+        u.set(col("status"), "inactive");
+        u.without_where();
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, r#"UPDATE "employee" SET "status" = ?"#);
+        assert_eq!(binds, vec![Value::String("inactive".to_string())]);
+    }
+
+    #[test]
+    fn test_update_from_query_with_where() {
+        let mut q = sqipe("employee");
+        q.and_where(col("id").eq(1));
+        let mut u = q.update();
+        u.set(col("name"), "Alice");
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
+        );
+    }
+
+    #[test]
+    fn test_update_with_dialect() {
+        struct PgDialect;
+        impl Dialect for PgDialect {
+            fn placeholder(&self, index: usize) -> String {
+                format!("${}", index)
+            }
+        }
+
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set(col("age"), 30);
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql_with(&PgDialect);
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = $1, "age" = $2 WHERE "id" = $3"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::Int(30),
+                Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_complex_where() {
+        let mut u = sqipe("employee").update();
+        u.set(col("status"), "active");
+        u.and_where(col("age").between(20, 60));
+        u.and_where(col("role").included(&["admin", "manager"]));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "status" = ? WHERE "age" BETWEEN ? AND ? AND "role" IN (?, ?)"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("active".to_string()),
+                Value::Int(20),
+                Value::Int(60),
+                Value::String("admin".to_string()),
+                Value::String("manager".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_or_where() {
+        let mut u = sqipe("employee").update();
+        u.set(col("reviewed"), true);
+        u.and_where(col("status").eq("pending"));
+        u.or_where(col("status").eq("draft"));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "reviewed" = ? WHERE "status" = ? OR "status" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::Bool(true),
+                Value::String("pending".to_string()),
+                Value::String("draft".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_like() {
+        let mut u = sqipe("employee").update();
+        u.set(col("flagged"), true);
+        u.and_where(col("name").like(LikeExpression::starts_with("test")));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "flagged" = ? WHERE "name" LIKE ? ESCAPE '\'"#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::Bool(true), Value::String("test%".to_string()),]
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "UPDATE requires at least one SET clause")]
+    fn test_update_empty_sets_panics() {
+        let mut u = sqipe("employee").update();
+        u.without_where();
+        let _ = u.to_sql();
+    }
+
+    #[test]
+    #[should_panic(expected = "UPDATE without WHERE is dangerous")]
+    fn test_update_no_where_panics() {
+        let mut u = sqipe("employee").update();
+        u.set(col("status"), "inactive");
+        let _ = u.to_sql();
+    }
+
+    #[test]
+    fn test_update_with_table_alias() {
+        let mut q = sqipe("employee");
+        q.as_("e");
+        let mut u = q.update();
+        u.set(col("name"), "Alice");
+        u.and_where(col("id").eq(1));
+        let (sql, _) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" "e" SET "name" = ? WHERE "id" = ?"#
+        );
+    }
+
+    #[test]
+    fn test_update_with_set_expr() {
+        let mut u = sqipe("employee").update();
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE "id" = ?"#
+        );
+        assert_eq!(binds, vec![Value::Int(1)]);
+    }
+
+    #[test]
+    fn test_update_with_set_and_set_expr_mixed() {
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ?, "visit_count" = "visit_count" + 1 WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
+        );
+    }
+
+    #[test]
+    fn test_update_with_multiple_set_exprs() {
+        let mut u = sqipe("employee").update();
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.set_expr(SetExpression::new(r#""updated_at" = NOW()"#));
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1, "updated_at" = NOW() WHERE "id" = ?"#
+        );
+        assert_eq!(binds, vec![Value::Int(1)]);
+    }
+
+    #[test]
+    fn test_update_with_set_expr_without_where() {
+        let mut u = sqipe("employee").update();
+        u.set_expr(SetExpression::new(r#""version" = "version" + 1"#));
+        u.without_where();
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, r#"UPDATE "employee" SET "version" = "version" + 1"#);
+        assert_eq!(binds, vec![]);
+    }
+
+    #[test]
+    fn test_update_with_set_expr_bind_order() {
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.set(col("status"), "active");
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ?, "visit_count" = "visit_count" + 1, "status" = ? WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::String("active".to_string()),
+                Value::Int(1),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_set_expr_dialect() {
+        struct PgDialect;
+        impl Dialect for PgDialect {
+            fn placeholder(&self, index: usize) -> String {
+                format!("${}", index)
+            }
+        }
+
+        let mut u = sqipe("employee").update();
+        u.set(col("name"), "Alice");
+        u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql_with(&PgDialect);
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = $1, "visit_count" = "visit_count" + 1 WHERE "id" = $2"#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
         );
     }
 }

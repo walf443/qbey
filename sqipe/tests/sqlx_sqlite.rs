@@ -513,3 +513,91 @@ async fn test_like_custom_escape_char() {
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
     assert_eq!(rows[1].get::<String, _>("name"), "Charlie");
 }
+
+#[tokio::test]
+async fn test_update_basic() {
+    let pool = setup_db().await;
+
+    let mut u = sqipe_with::<SqliteValue>("users").update();
+    u.set(col("name"), "Alicia");
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Verify the update
+    let rows = sqlx::query(r#"SELECT "name" FROM "users" WHERE "id" = 1"#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Alicia");
+}
+
+#[tokio::test]
+async fn test_update_multiple_sets() {
+    let pool = setup_db().await;
+
+    let mut u = sqipe_with::<SqliteValue>("users").update();
+    u.set(col("name"), "Alicia");
+    u.set(col("age"), 31);
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rows = sqlx::query(r#"SELECT "name", "age" FROM "users" WHERE "id" = 1"#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Alicia");
+    assert_eq!(rows[0].get::<i64, _>("age"), 31);
+}
+
+#[tokio::test]
+async fn test_update_from_query_with_where() {
+    let pool = setup_db().await;
+
+    let mut q = sqipe_with::<SqliteValue>("users");
+    q.and_where(col("id").eq(2));
+    let mut u = q.update();
+    u.set(col("name"), "Bobby");
+    let (sql, binds) = u.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rows = sqlx::query(r#"SELECT "name" FROM "users" WHERE "id" = 2"#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Bobby");
+}
+
+#[tokio::test]
+async fn test_update_without_where() {
+    let pool = setup_db().await;
+
+    let mut u = sqipe_with::<SqliteValue>("users").update();
+    u.set(col("age"), 99);
+    u.without_where();
+    let (sql, binds) = u.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rows = sqlx::query(r#"SELECT "age" FROM "users""#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert!(rows.iter().all(|r| r.get::<i64, _>("age") == 99));
+}
