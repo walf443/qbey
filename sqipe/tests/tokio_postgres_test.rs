@@ -581,3 +581,20 @@ async fn test_update_from_query_with_where() {
         .unwrap();
     assert_eq!(rows[0].get::<_, String>("name"), "Bobby");
 }
+
+#[tokio::test]
+async fn test_update_without_where() {
+    let (_container, client) = setup_container().await;
+
+    let mut u = sqipe_with::<PgValue>("users").update();
+    u.set("age", 99);
+    u.without_where();
+    let (sql, binds) = u.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    client.execute(&sql, &param_refs).await.unwrap();
+
+    let rows = client.query("SELECT age FROM users", &[]).await.unwrap();
+    assert!(rows.iter().all(|r| r.get::<_, i32>("age") == 99));
+}

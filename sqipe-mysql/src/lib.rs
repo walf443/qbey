@@ -45,6 +45,7 @@ pub struct MysqlUnionQuery<V: Clone + std::fmt::Debug = Value> {
 }
 
 /// MySQL-specific UPDATE query builder.
+#[derive(Debug, Clone)]
 pub struct MysqlUpdateQuery<V: Clone + std::fmt::Debug = Value> {
     inner: sqipe::UpdateQuery<V>,
 }

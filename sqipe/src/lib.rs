@@ -1653,7 +1653,13 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     }
 
     /// Build an UpdateTree AST from this query.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
+    /// has not been called.
     pub fn to_tree(&self) -> tree::UpdateTree<V> {
+        self.assert_where_present();
         tree::UpdateTree {
             table: self.table.clone(),
             table_alias: self.table_alias.clone(),
