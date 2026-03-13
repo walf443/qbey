@@ -122,6 +122,32 @@ fn apply_index_hints_to<V: Clone>(
     }
 }
 
+/// Create a MySQL-specific query that selects from a subquery.
+pub fn sqipe_from_subquery(
+    sub: impl sqipe::IntoSelectTree<Value>,
+    alias: &str,
+) -> MysqlQuery<Value> {
+    MysqlQuery {
+        inner: sqipe::Query::from_subquery(sub, alias),
+        force_indexes: Vec::new(),
+        use_indexes: Vec::new(),
+        ignore_indexes: Vec::new(),
+    }
+}
+
+/// Create a MySQL-specific query that selects from a subquery with a custom value type.
+pub fn sqipe_from_subquery_with<V: Clone + std::fmt::Debug>(
+    sub: impl sqipe::IntoSelectTree<V>,
+    alias: &str,
+) -> MysqlQuery<V> {
+    MysqlQuery {
+        inner: sqipe::Query::from_subquery(sub, alias),
+        force_indexes: Vec::new(),
+        use_indexes: Vec::new(),
+        ignore_indexes: Vec::new(),
+    }
+}
+
 /// Create a MySQL-specific query builder with a custom value type.
 pub fn sqipe_with<V: Clone + std::fmt::Debug>(table: &str) -> MysqlQuery<V> {
     MysqlQuery {

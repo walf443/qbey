@@ -384,10 +384,10 @@ async fn test_from_subquery() {
     sub.select(&["user_id", "total"]);
     sub.and_where(col("status").eq("shipped"));
 
-    let mut q = sqipe::sqipe_from_subquery_with(sub, "t");
+    let mut q = sqipe_mysql::sqipe_from_subquery_with(sub, "t");
     q.select(&["user_id", "total"]);
     q.order_by(col("total").desc());
-    let (sql, binds) = q.to_sql_with(&sqipe_mysql::MySQL);
+    let (sql, binds) = q.to_sql();
 
     let rows = bind_params(sqlx::query(&sql), &binds)
         .fetch_all(&pool)
@@ -407,10 +407,10 @@ async fn test_from_subquery_with_outer_where() {
     sub.select(&["user_id", "total"]);
     sub.and_where(col("status").eq("shipped"));
 
-    let mut q = sqipe::sqipe_from_subquery_with(sub, "t");
+    let mut q = sqipe_mysql::sqipe_from_subquery_with(sub, "t");
     q.select(&["user_id", "total"]);
     q.and_where(col("total").gt(60));
-    let (sql, binds) = q.to_sql_with(&sqipe_mysql::MySQL);
+    let (sql, binds) = q.to_sql();
 
     let rows = bind_params(sqlx::query(&sql), &binds)
         .fetch_all(&pool)
