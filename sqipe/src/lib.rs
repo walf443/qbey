@@ -4816,4 +4816,39 @@ mod tests {
         let (sql, _) = d.to_sql();
         assert_eq!(sql, r#"DELETE FROM "employee" "e" WHERE "id" = ?"#);
     }
+
+    #[test]
+    #[should_panic(expected = "JOINs which are not supported in DELETE")]
+    fn test_delete_from_query_with_joins_panics() {
+        let mut q = sqipe("employee");
+        q.join("department", table("employee").col("dept_id").eq_col("id"));
+        let _ = q.delete();
+    }
+
+    #[test]
+    #[should_panic(expected = "aggregates which are not supported in DELETE")]
+    fn test_delete_from_query_with_aggregates_panics() {
+        let mut q = sqipe("employee");
+        q.aggregate(&[aggregate::count_all()]);
+        let _ = q.delete();
+    }
+
+    #[test]
+    #[should_panic(expected = "ORDER BY which is not supported in DELETE")]
+    fn test_delete_from_query_with_order_by_panics() {
+        let mut q = sqipe("employee");
+        q.order_by(OrderByClause {
+            col: "id".to_string(),
+            dir: SortDir::Asc,
+        });
+        let _ = q.delete();
+    }
+
+    #[test]
+    #[should_panic(expected = "LIMIT which is not supported in DELETE")]
+    fn test_delete_from_query_with_limit_panics() {
+        let mut q = sqipe("employee");
+        q.limit(10);
+        let _ = q.delete();
+    }
 }
