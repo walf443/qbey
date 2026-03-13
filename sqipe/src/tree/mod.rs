@@ -209,6 +209,22 @@ pub struct UpdateTree<V: Clone = crate::Value> {
     pub(crate) wheres: Vec<WhereEntry<V>>,
 }
 
+impl<V: Clone> UpdateTree<V> {
+    /// Transform all bind values in this tree.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> UpdateTree<U> {
+        UpdateTree {
+            table: self.table,
+            table_alias: self.table_alias,
+            sets: self
+                .sets
+                .into_iter()
+                .map(|(col, val)| (col, f(val)))
+                .collect(),
+            wheres: self.wheres.into_iter().map(|w| w.map_values(f)).collect(),
+        }
+    }
+}
+
 impl<V: Clone + std::fmt::Debug> UnionTree<V> {
     pub fn from_union_query(union: &crate::UnionQuery<V>) -> Self {
         let parts = union

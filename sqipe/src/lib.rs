@@ -1592,6 +1592,10 @@ impl<V: Clone + std::fmt::Debug> UnionQuery<V> {
 ///
 /// Created via [`Query::update()`] to convert a SELECT query builder into an UPDATE statement.
 ///
+/// By default, WHERE clause is required. Calling `to_sql()` or `to_sql_with()` without
+/// any WHERE conditions will panic to prevent accidental full-table updates.
+/// Use [`without_where()`](UpdateQuery::without_where) to explicitly allow WHERE-less updates.
+///
 /// ```
 /// use sqipe::{sqipe, col};
 ///
@@ -1607,6 +1611,7 @@ pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value> {
     table_alias: Option<String>,
     sets: Vec<(String, V)>,
     wheres: Vec<WhereEntry<V>>,
+    allow_without_where: bool,
 }
 
 impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
@@ -1628,6 +1633,25 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
         self
     }
 
+    /// Explicitly allow this UPDATE to have no WHERE clause.
+    ///
+    /// By default, `to_sql()` and `to_sql_with()` panic if no WHERE conditions are set,
+    /// to prevent accidental full-table updates. Call this method to opt in to WHERE-less updates.
+    ///
+    /// ```
+    /// use sqipe::sqipe;
+    ///
+    /// let mut u = sqipe("employee").update();
+    /// u.set("status", "inactive");
+    /// u.without_where();
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "status" = ?"#);
+    /// ```
+    pub fn without_where(&mut self) -> &mut Self {
+        self.allow_without_where = true;
+        self
+    }
+
     /// Build an UpdateTree AST from this query.
     pub fn to_tree(&self) -> tree::UpdateTree<V> {
         tree::UpdateTree {
@@ -1638,8 +1662,22 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
         }
     }
 
+    fn assert_where_present(&self) {
+        assert!(
+            self.allow_without_where || !self.wheres.is_empty(),
+            "UPDATE without WHERE is dangerous and not allowed by default. \
+             Use .without_where() to explicitly allow full-table updates."
+        );
+    }
+
     /// Build standard SQL with `?` placeholders and double-quote identifiers.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
+    /// has not been called.
     pub fn to_sql(&self) -> (String, Vec<V>) {
+        self.assert_where_present();
         let tree = self.to_tree();
         let cfg = RenderConfig {
             ph: &|_| "?".to_string(),
@@ -1650,7 +1688,13 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     }
 
     /// Build standard SQL with dialect-specific placeholders and quoting.
+    ///
+    /// # Panics
+    ///
+    /// Panics if no WHERE conditions are set and [`without_where()`](UpdateQuery::without_where)
+    /// has not been called.
     pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
+        self.assert_where_present();
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
@@ -1679,6 +1723,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             table_alias: self.table_alias,
             sets: Vec::new(),
             wheres: self.wheres,
+            allow_without_where: false,
         }
     }
 }
@@ -4012,6 +4057,7 @@ mod tests {
     fn test_update_without_where() {
         let mut u = sqipe("employee").update();
         u.set("status", "inactive");
+        u.without_where();
         let (sql, binds) = u.to_sql();
         assert_eq!(sql, r#"UPDATE "employee" SET "status" = ?"#);
         assert_eq!(binds, vec![Value::String("inactive".to_string())]);
@@ -4116,6 +4162,36 @@ mod tests {
         assert_eq!(
             binds,
             vec![Value::Bool(true), Value::String("test%".to_string()),]
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "UPDATE requires at least one SET clause")]
+    fn test_update_empty_sets_panics() {
+        let mut u = sqipe("employee").update();
+        u.without_where();
+        let _ = u.to_sql();
+    }
+
+    #[test]
+    #[should_panic(expected = "UPDATE without WHERE is dangerous")]
+    fn test_update_no_where_panics() {
+        let mut u = sqipe("employee").update();
+        u.set("status", "inactive");
+        let _ = u.to_sql();
+    }
+
+    #[test]
+    fn test_update_with_table_alias() {
+        let mut q = sqipe("employee");
+        q.as_("e");
+        let mut u = q.update();
+        u.set("name", "Alice");
+        u.and_where(col("id").eq(1));
+        let (sql, _) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" "e" SET "name" = ? WHERE "id" = ?"#
         );
     }
 }

@@ -68,6 +68,15 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         self
     }
 
+    /// Explicitly allow UPDATE without WHERE clause.
+    ///
+    /// By default, calling [`to_sql()`](MysqlUpdateQuery::to_sql) without any WHERE
+    /// conditions will panic. Call this method to opt in to full-table updates.
+    pub fn without_where(&mut self) -> &mut Self {
+        self.inner.without_where();
+        self
+    }
+
     /// Build standard SQL with MySQL dialect.
     pub fn to_sql(&self) -> (String, Vec<V>) {
         self.inner.to_sql_with(&MySQL)
@@ -864,9 +873,23 @@ mod tests {
     fn test_update_without_where() {
         let mut u = sqipe("users").update();
         u.set("age", 99);
+        u.without_where();
 
         let (sql, _) = u.to_sql();
         assert_eq!(sql, "UPDATE `users` SET `age` = ?");
+    }
+
+    #[test]
+    fn test_update_with_table_alias() {
+        let mut q = sqipe("users");
+        q.as_("u");
+        let mut u = q.update();
+        u.set("name", "Alicia");
+        u.and_where(col("id").eq(1));
+
+        let (sql, _) = u.to_sql();
+        // MySQL does not support AS in UPDATE table alias
+        assert_eq!(sql, "UPDATE `users` `u` SET `name` = ? WHERE `id` = ?");
     }
 
     #[test]

@@ -588,6 +588,7 @@ async fn test_update_without_where() {
 
     let mut u = sqipe_with::<MysqlValue>("users").update();
     u.set("age", 99);
+    u.without_where();
     let (sql, binds) = u.to_sql();
 
     bind_params(sqlx::query(&sql), &binds)
