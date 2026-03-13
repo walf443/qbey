@@ -21,6 +21,10 @@ impl sqipe::Dialect for MySQL {
     fn quote_identifier(&self, name: &str) -> String {
         format!("`{}`", name.replace('`', "``"))
     }
+
+    fn backslash_escape(&self) -> bool {
+        true
+    }
 }
 
 /// MySQL-specific query builder wrapping the core Query.
@@ -242,7 +246,7 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        StandardSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi })
+        StandardSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
     }
 
     /// Build pipe syntax SQL with MySQL dialect.
@@ -250,7 +254,7 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        PipeSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi })
+        PipeSqlRenderer.render_select(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
     }
 
     fn apply_index_hints(&self, tree: &mut SelectTree<V>) {
@@ -323,14 +327,14 @@ impl<V: Clone + std::fmt::Debug> sqipe::UnionQueryOps<V> for MysqlUnionQuery<V> 
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        StandardSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
+        StandardSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
     }
 
     fn to_pipe_sql(&self) -> (String, Vec<V>) {
         let tree = self.to_tree();
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
-        PipeSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi })
+        PipeSqlRenderer.render_union(&tree, &RenderConfig { ph: &ph, qi: &qi, backslash_escape: MySQL.backslash_escape() })
     }
 }
 

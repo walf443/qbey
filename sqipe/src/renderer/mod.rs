@@ -12,6 +12,10 @@ use crate::tree::{FromClause, FromSource, SelectTree, UnionTree};
 pub struct RenderConfig<'a> {
     pub ph: &'a dyn Fn(usize) -> String,
     pub qi: &'a dyn Fn(&str) -> String,
+    /// When true, backslashes inside SQL string literals are doubled (`\\`).
+    /// MySQL requires this because `\` is an escape character in string literals
+    /// by default (when `NO_BACKSLASH_ESCAPES` is not set).
+    pub backslash_escape: bool,
 }
 
 /// Trait for SQL rendering strategies.
@@ -382,12 +386,18 @@ fn render_where_clause<V: Clone>(
             } else {
                 "NOT LIKE"
             };
+            let esc = expr.escape_char();
+            let escaped = if cfg.backslash_escape && esc == '\\' {
+                "\\\\".to_string()
+            } else {
+                esc.to_string()
+            };
             format!(
                 "{} {} {} ESCAPE '{}'",
                 render_col_ref(col, cfg),
                 keyword,
                 placeholder,
-                expr.escape_char()
+                escaped
             )
         }
         WhereClause::Any(clauses) => {
