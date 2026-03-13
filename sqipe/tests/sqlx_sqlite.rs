@@ -1,6 +1,6 @@
 #![cfg(feature = "test-sqlx")]
 
-use sqipe::{col, sqipe_with, table};
+use sqipe::{col, not, sqipe_with, table};
 use sqlx::{Row, SqlitePool};
 
 #[derive(Debug, Clone)]
@@ -333,4 +333,44 @@ async fn test_not_in_subquery() {
     // Charlie (id=3) is not in shipped orders (user_id 1,2)
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].get::<String, _>("name"), "Charlie");
+}
+
+#[tokio::test]
+async fn test_not_where() {
+    let pool = setup_db().await;
+
+    let mut q = sqipe_with::<SqliteValue>("users");
+    q.and_where(not(col("name").eq("Alice")));
+    q.select(&["id", "name"]);
+    q.order_by(col("name").asc());
+    let (sql, binds) = q.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].get::<String, _>("name"), "Bob");
+    assert_eq!(rows[1].get::<String, _>("name"), "Charlie");
+}
+
+#[tokio::test]
+async fn test_not_where_with_and() {
+    let pool = setup_db().await;
+
+    let mut q = sqipe_with::<SqliteValue>("users");
+    q.and_where(col("age").gt(24));
+    q.and_where(not(col("name").eq("Alice")));
+    q.select(&["id", "name"]);
+    q.order_by(col("name").asc());
+    let (sql, binds) = q.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    // Bob (age=25 > 24, not Alice), Charlie (age=35 > 24, not Alice)
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].get::<String, _>("name"), "Bob");
+    assert_eq!(rows[1].get::<String, _>("name"), "Charlie");
 }
