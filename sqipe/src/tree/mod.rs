@@ -200,6 +200,15 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
     }
 }
 
+/// AST for an UPDATE statement, generic over bind value type.
+#[derive(Debug, Clone)]
+pub struct UpdateTree<V: Clone = crate::Value> {
+    pub table: String,
+    pub table_alias: Option<String>,
+    pub sets: Vec<(String, V)>,
+    pub(crate) wheres: Vec<WhereEntry<V>>,
+}
+
 impl<V: Clone + std::fmt::Debug> UnionTree<V> {
     pub fn from_union_query(union: &crate::UnionQuery<V>) -> Self {
         let parts = union

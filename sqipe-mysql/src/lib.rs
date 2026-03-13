@@ -44,6 +44,36 @@ pub struct MysqlUnionQuery<V: Clone + std::fmt::Debug = Value> {
     offset_val: Option<u64>,
 }
 
+/// MySQL-specific UPDATE query builder.
+pub struct MysqlUpdateQuery<V: Clone + std::fmt::Debug = Value> {
+    inner: sqipe::UpdateQuery<V>,
+}
+
+impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
+    /// Add a SET clause: `` SET `col` = ? ``.
+    pub fn set(&mut self, col: &str, val: impl Into<V>) -> &mut Self {
+        self.inner.set(col, val);
+        self
+    }
+
+    /// Add an AND WHERE condition.
+    pub fn and_where(&mut self, cond: impl sqipe::IntoWhereClause<V>) -> &mut Self {
+        self.inner.and_where(cond);
+        self
+    }
+
+    /// Add an OR WHERE condition.
+    pub fn or_where(&mut self, cond: impl sqipe::IntoWhereClause<V>) -> &mut Self {
+        self.inner.or_where(cond);
+        self
+    }
+
+    /// Build standard SQL with MySQL dialect.
+    pub fn to_sql(&self) -> (String, Vec<V>) {
+        self.inner.to_sql_with(&MySQL)
+    }
+}
+
 impl<V: Clone + std::fmt::Debug> Deref for MysqlQuery<V> {
     type Target = sqipe::Query<V>;
     fn deref(&self) -> &Self::Target {
@@ -271,6 +301,16 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
         PipeSqlRenderer.render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySQL))
+    }
+
+    /// Convert this MySQL query builder into an UPDATE query builder.
+    ///
+    /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
+    /// The generated SQL uses MySQL dialect (backtick quoting, `?` placeholders).
+    pub fn update(self) -> MysqlUpdateQuery<V> {
+        MysqlUpdateQuery {
+            inner: self.inner.update(),
+        }
     }
 
     fn apply_index_hints(&self, tree: &mut SelectTree<V>) {
@@ -768,6 +808,65 @@ mod tests {
             "SELECT `id`, `name` FROM `users` INNER JOIN (SELECT `user_id`, `total` FROM `orders` WHERE `status` = ?) AS `o` ON `users`.`id` = `o`.`user_id`"
         );
         assert_eq!(binds, vec![sqipe::Value::String("shipped".to_string())]);
+    }
+
+    #[test]
+    fn test_update_basic() {
+        let mut u = sqipe("users").update();
+        u.set("name", "Alicia");
+        u.and_where(col("id").eq(1));
+
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
+        assert_eq!(
+            binds,
+            vec![
+                sqipe::Value::String("Alicia".to_string()),
+                sqipe::Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_multiple_sets() {
+        let mut u = sqipe("users").update();
+        u.set("name", "Alicia");
+        u.set("age", 31);
+        u.and_where(col("id").eq(1));
+
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            "UPDATE `users` SET `name` = ?, `age` = ? WHERE `id` = ?"
+        );
+        assert_eq!(
+            binds,
+            vec![
+                sqipe::Value::String("Alicia".to_string()),
+                sqipe::Value::Int(31),
+                sqipe::Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_from_query_with_where() {
+        let mut q = sqipe("users");
+        q.and_where(col("id").eq(1));
+        let mut u = q.update();
+        u.set("name", "Alicia");
+
+        let (sql, _) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
+    }
+
+    #[test]
+    fn test_update_without_where() {
+        let mut u = sqipe("users").update();
+        u.set("age", 99);
+
+        let (sql, _) = u.to_sql();
+        assert_eq!(sql, "UPDATE `users` SET `age` = ?");
     }
 
     #[test]

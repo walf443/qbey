@@ -1588,6 +1588,101 @@ impl<V: Clone + std::fmt::Debug> UnionQuery<V> {
     }
 }
 
+/// An UPDATE query builder, generic over the bind value type `V`.
+///
+/// Created via [`Query::update()`] to convert a SELECT query builder into an UPDATE statement.
+///
+/// ```
+/// use sqipe::{sqipe, col};
+///
+/// let mut u = sqipe("employee").update();
+/// u.set("name", "Alice");
+/// u.and_where(col("id").eq(1));
+/// let (sql, _) = u.to_sql();
+/// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+/// ```
+#[derive(Debug, Clone)]
+pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value> {
+    table: String,
+    table_alias: Option<String>,
+    sets: Vec<(String, V)>,
+    wheres: Vec<WhereEntry<V>>,
+}
+
+impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
+    /// Add a SET clause: `SET "col" = ?`.
+    pub fn set(&mut self, col: &str, val: impl Into<V>) -> &mut Self {
+        self.sets.push((col.to_string(), val.into()));
+        self
+    }
+
+    /// Add an AND WHERE condition.
+    pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
+        self.wheres.push(WhereEntry::And(cond.into_where_clause()));
+        self
+    }
+
+    /// Add an OR WHERE condition.
+    pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
+        self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
+        self
+    }
+
+    /// Build an UpdateTree AST from this query.
+    pub fn to_tree(&self) -> tree::UpdateTree<V> {
+        tree::UpdateTree {
+            table: self.table.clone(),
+            table_alias: self.table_alias.clone(),
+            sets: self.sets.clone(),
+            wheres: self.wheres.clone(),
+        }
+    }
+
+    /// Build standard SQL with `?` placeholders and double-quote identifiers.
+    pub fn to_sql(&self) -> (String, Vec<V>) {
+        let tree = self.to_tree();
+        let cfg = RenderConfig {
+            ph: &|_| "?".to_string(),
+            qi: &default_quote_identifier,
+            backslash_escape: false,
+        };
+        renderer::update::render_update(&tree, &cfg)
+    }
+
+    /// Build standard SQL with dialect-specific placeholders and quoting.
+    pub fn to_sql_with(&self, dialect: &dyn Dialect) -> (String, Vec<V>) {
+        let tree = self.to_tree();
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        renderer::update::render_update(&tree, &RenderConfig::from_dialect(&ph, &qi, dialect))
+    }
+}
+
+impl<V: Clone + std::fmt::Debug> Query<V> {
+    /// Convert this SELECT query builder into an UPDATE query builder.
+    ///
+    /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
+    ///
+    /// ```
+    /// use sqipe::{sqipe, col};
+    ///
+    /// let mut q = sqipe("employee");
+    /// q.and_where(col("id").eq(1));
+    /// let mut u = q.update();
+    /// u.set("name", "Alice");
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+    /// ```
+    pub fn update(self) -> UpdateQuery<V> {
+        UpdateQuery {
+            table: self.table,
+            table_alias: self.table_alias,
+            sets: Vec::new(),
+            wheres: self.wheres,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -3874,6 +3969,162 @@ mod tests {
         assert_eq!(
             sql,
             r#"SELECT "id", "text" FROM "texts" INNER JOIN "patterns" ON "texts"."category" = "patterns"."category" AND "texts"."text" LIKE "patterns"."pattern""#
+        );
+    }
+
+    // ── UPDATE tests ──
+
+    #[test]
+    fn test_update_basic() {
+        let mut u = sqipe("employee").update();
+        u.set("name", "Alice");
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
+        );
+    }
+
+    #[test]
+    fn test_update_multiple_sets() {
+        let mut u = sqipe("employee").update();
+        u.set("name", "Alice");
+        u.set("age", 30);
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ?, "age" = ? WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::Int(30),
+                Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_without_where() {
+        let mut u = sqipe("employee").update();
+        u.set("status", "inactive");
+        let (sql, binds) = u.to_sql();
+        assert_eq!(sql, r#"UPDATE "employee" SET "status" = ?"#);
+        assert_eq!(binds, vec![Value::String("inactive".to_string())]);
+    }
+
+    #[test]
+    fn test_update_from_query_with_where() {
+        let mut q = sqipe("employee");
+        q.and_where(col("id").eq(1));
+        let mut u = q.update();
+        u.set("name", "Alice");
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![Value::String("Alice".to_string()), Value::Int(1)]
+        );
+    }
+
+    #[test]
+    fn test_update_with_dialect() {
+        struct PgDialect;
+        impl Dialect for PgDialect {
+            fn placeholder(&self, index: usize) -> String {
+                format!("${}", index)
+            }
+        }
+
+        let mut u = sqipe("employee").update();
+        u.set("name", "Alice");
+        u.set("age", 30);
+        u.and_where(col("id").eq(1));
+        let (sql, binds) = u.to_sql_with(&PgDialect);
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "name" = $1, "age" = $2 WHERE "id" = $3"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("Alice".to_string()),
+                Value::Int(30),
+                Value::Int(1)
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_complex_where() {
+        let mut u = sqipe("employee").update();
+        u.set("status", "active");
+        u.and_where(col("age").between(20, 60));
+        u.and_where(col("role").included(&["admin", "manager"]));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "status" = ? WHERE "age" BETWEEN ? AND ? AND "role" IN (?, ?)"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::String("active".to_string()),
+                Value::Int(20),
+                Value::Int(60),
+                Value::String("admin".to_string()),
+                Value::String("manager".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_or_where() {
+        let mut u = sqipe("employee").update();
+        u.set("reviewed", true);
+        u.and_where(col("status").eq("pending"));
+        u.or_where(col("status").eq("draft"));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "reviewed" = ? WHERE "status" = ? OR "status" = ?"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::Bool(true),
+                Value::String("pending".to_string()),
+                Value::String("draft".to_string()),
+            ]
+        );
+    }
+
+    #[test]
+    fn test_update_with_like() {
+        let mut u = sqipe("employee").update();
+        u.set("flagged", true);
+        u.and_where(col("name").like(LikeExpression::starts_with("test")));
+        let (sql, binds) = u.to_sql();
+        assert_eq!(
+            sql,
+            r#"UPDATE "employee" SET "flagged" = ? WHERE "name" LIKE ? ESCAPE '\'"#
+        );
+        assert_eq!(
+            binds,
+            vec![
+                Value::Bool(true),
+                Value::String("test%".to_string()),
+            ]
         );
     }
 }

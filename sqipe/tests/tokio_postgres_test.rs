@@ -518,3 +518,57 @@ async fn test_like_custom_escape_char() {
     assert_eq!(rows[0].get::<_, String>("name"), "Alice");
     assert_eq!(rows[1].get::<_, String>("name"), "Charlie");
 }
+
+#[tokio::test]
+async fn test_update_basic() {
+    let (_container, client) = setup_container().await;
+
+    let mut u = sqipe_with::<PgValue>("users").update();
+    u.set("name", "Alicia");
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    client.execute(&sql, &param_refs).await.unwrap();
+
+    let rows = client.query("SELECT name FROM users WHERE id = 1", &[]).await.unwrap();
+    assert_eq!(rows[0].get::<_, String>("name"), "Alicia");
+}
+
+#[tokio::test]
+async fn test_update_multiple_sets() {
+    let (_container, client) = setup_container().await;
+
+    let mut u = sqipe_with::<PgValue>("users").update();
+    u.set("name", "Alicia");
+    u.set("age", 31);
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    client.execute(&sql, &param_refs).await.unwrap();
+
+    let rows = client.query("SELECT name, age FROM users WHERE id = 1", &[]).await.unwrap();
+    assert_eq!(rows[0].get::<_, String>("name"), "Alicia");
+    assert_eq!(rows[0].get::<_, i32>("age"), 31);
+}
+
+#[tokio::test]
+async fn test_update_from_query_with_where() {
+    let (_container, client) = setup_container().await;
+
+    let mut q = sqipe_with::<PgValue>("users");
+    q.and_where(col("id").eq(2));
+    let mut u = q.update();
+    u.set("name", "Bobby");
+    let (sql, binds) = u.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    client.execute(&sql, &param_refs).await.unwrap();
+
+    let rows = client.query("SELECT name FROM users WHERE id = 2", &[]).await.unwrap();
+    assert_eq!(rows[0].get::<_, String>("name"), "Bobby");
+}
