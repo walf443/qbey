@@ -331,25 +331,25 @@ assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" WHERE \"id\" NOT IN (SEL
 let (sql, _) = sqipe("users")
     .and_where(col("name").like(LikeExpression::contains("Ali")))
     .to_sql();
-assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ?"#);
+assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ? ESCAPE '\'"#);
 
 // starts_with: ...%
 let (sql, _) = sqipe("users")
     .and_where(col("name").like(LikeExpression::starts_with("Ali")))
     .to_sql();
-assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ?"#);
+assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ? ESCAPE '\'"#);
 
 // ends_with: %...
 let (sql, _) = sqipe("users")
     .and_where(col("name").like(LikeExpression::ends_with("ice")))
     .to_sql();
-assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ?"#);
+assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" LIKE ? ESCAPE '\'"#);
 
 // NOT LIKE
 let (sql, _) = sqipe("users")
     .and_where(col("name").not_like(LikeExpression::contains("Bob")))
     .to_sql();
-assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" NOT LIKE ?"#);
+assert_eq!(sql, r#"SELECT * FROM "users" WHERE "name" NOT LIKE ? ESCAPE '\'"#);
 ```
 
 Raw strings are not accepted — `LikeExpression` must be used to prevent wildcard injection.
