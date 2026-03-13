@@ -464,6 +464,23 @@ async fn test_like_starts_with() {
 }
 
 #[tokio::test]
+async fn test_like_ends_with() {
+    let (_container, pool) = setup_container().await;
+
+    let mut q = sqipe_with::<MysqlValue>("users");
+    q.and_where(col("name").like(LikeExpression::ends_with("ob")));
+    q.select(&["id", "name"]);
+    let (sql, binds) = q.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Bob");
+}
+
+#[tokio::test]
 async fn test_not_like() {
     let (_container, pool) = setup_container().await;
 
