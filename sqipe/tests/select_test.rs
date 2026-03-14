@@ -298,10 +298,7 @@ fn test_add_select_expr_without_alias() {
     q.add_select_expr("COALESCE(\"nickname\", \"name\")", None);
 
     let (sql, _) = q.to_sql();
-    assert_eq!(
-        sql,
-        r#"SELECT COALESCE("nickname", "name") FROM "users""#
-    );
+    assert_eq!(sql, r#"SELECT COALESCE("nickname", "name") FROM "users""#);
 }
 
 #[test]

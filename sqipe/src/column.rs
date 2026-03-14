@@ -82,7 +82,6 @@ pub fn col(name: &str) -> Col {
     }
 }
 
-
 impl Col {
     pub fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {

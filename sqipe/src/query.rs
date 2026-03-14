@@ -293,7 +293,10 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     }
 
     /// Set select columns from `Col` values (e.g., from `table("o").cols(&["id"])`).
-    #[deprecated(since = "0.2.0", note = "Use `select()` instead, which now accepts both `&str` and `Col`.")]
+    #[deprecated(
+        since = "0.2.0",
+        note = "Use `select()` instead, which now accepts both `&str` and `Col`."
+    )]
     pub fn select_cols(&mut self, cols: &[Col]) -> &mut Self {
         self.selects = cols.iter().map(|c| SelectItem::Col(c.clone())).collect();
         self
