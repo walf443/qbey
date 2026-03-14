@@ -545,12 +545,12 @@ let (sql, binds) = u.to_sql_with(&PgDialect);
 assert_eq!(sql, r#"UPDATE "employee" SET "name" = $1 WHERE "id" = $2"#);
 ```
 
-For raw SQL expressions in SET clauses (e.g. incrementing a counter), use `SetExpression`:
+For raw SQL expressions in SET clauses (e.g. incrementing a counter), use `RawSql`:
 
 ```rust
-# use sqipe::{sqipe, col, SetExpression};
+# use sqipe::{sqipe, col, RawSql};
 let mut u = sqipe("employee").into_update();
-u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
+u.set_expr(RawSql::new(r#""visit_count" = "visit_count" + 1"#));
 u.and_where(col("id").eq(1));
 
 let (sql, binds) = u.to_sql();
