@@ -65,7 +65,7 @@ assert_eq!(sql, "SELECT `id`, `name` FROM `users` STRAIGHT_JOIN `orders` ON `use
 use sqipe_mysql::sqipe;
 use sqipe::col;
 
-let mut u = sqipe("users").update();
+let mut u = sqipe("users").into_update();
 u.set(col("name"), "Alice");
 u.and_where(col("id").eq(1));
 
@@ -79,7 +79,7 @@ By default, UPDATE without WHERE will panic. Use `allow_without_where()` to expl
 use sqipe_mysql::sqipe;
 use sqipe::col;
 
-let mut u = sqipe("users").update();
+let mut u = sqipe("users").into_update();
 u.set(col("age"), 99);
 u.allow_without_where();
 
@@ -93,7 +93,7 @@ MySQL supports `ORDER BY` and `LIMIT` in UPDATE statements (not available in sta
 use sqipe_mysql::sqipe;
 use sqipe::col;
 
-let mut u = sqipe("users").update();
+let mut u = sqipe("users").into_update();
 u.set(col("status"), "inactive");
 u.and_where(col("dept").eq("eng"));
 u.order_by(col("created_at").asc());
@@ -109,7 +109,7 @@ assert_eq!(sql, "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY `crea
 use sqipe_mysql::sqipe;
 use sqipe::col;
 
-let mut d = sqipe("users").delete();
+let mut d = sqipe("users").into_delete();
 d.and_where(col("id").eq(1));
 
 let (sql, binds) = d.to_sql();
@@ -121,7 +121,7 @@ By default, DELETE without WHERE will panic. Use `allow_without_where()` to expl
 ```rust
 use sqipe_mysql::sqipe;
 
-let mut d = sqipe("users").delete();
+let mut d = sqipe("users").into_delete();
 d.allow_without_where();
 
 let (sql, binds) = d.to_sql();
@@ -134,7 +134,7 @@ MySQL supports `ORDER BY` and `LIMIT` in DELETE statements (not available in sta
 use sqipe_mysql::sqipe;
 use sqipe::col;
 
-let mut d = sqipe("users").delete();
+let mut d = sqipe("users").into_delete();
 d.and_where(col("dept").eq("eng"));
 d.order_by(col("created_at").asc());
 d.limit(10);

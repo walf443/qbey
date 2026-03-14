@@ -559,7 +559,7 @@ pg_test!(test_like_custom_escape_char, |client| {
 });
 
 pg_test!(test_update_basic, |client| {
-    let mut u = sqipe_with::<PgValue>("users").update();
+    let mut u = sqipe_with::<PgValue>("users").into_update();
     u.set(col("name"), "Alicia");
     u.and_where(col("id").eq(1));
     let (sql, binds) = u.to_sql_with(&PostgresDialect);
@@ -575,7 +575,7 @@ pg_test!(test_update_basic, |client| {
 });
 
 pg_test!(test_update_multiple_sets, |client| {
-    let mut u = sqipe_with::<PgValue>("users").update();
+    let mut u = sqipe_with::<PgValue>("users").into_update();
     u.set(col("name"), "Alicia");
     u.set(col("age"), 31);
     u.and_where(col("id").eq(1));
@@ -595,7 +595,7 @@ pg_test!(test_update_multiple_sets, |client| {
 pg_test!(test_update_from_query_with_where, |client| {
     let mut q = sqipe_with::<PgValue>("users");
     q.and_where(col("id").eq(2));
-    let mut u = q.update();
+    let mut u = q.into_update();
     u.set(col("name"), "Bobby");
     let (sql, binds) = u.to_sql_with(&PostgresDialect);
 
@@ -610,7 +610,7 @@ pg_test!(test_update_from_query_with_where, |client| {
 });
 
 pg_test!(test_update_allow_without_where, |client| {
-    let mut u = sqipe_with::<PgValue>("users").update();
+    let mut u = sqipe_with::<PgValue>("users").into_update();
     u.set(col("age"), 99);
     u.allow_without_where();
     let (sql, binds) = u.to_sql_with(&PostgresDialect);
@@ -624,7 +624,7 @@ pg_test!(test_update_allow_without_where, |client| {
 });
 
 pg_test!(test_delete_basic, |client| {
-    let mut d = sqipe_with::<PgValue>("users").delete();
+    let mut d = sqipe_with::<PgValue>("users").into_delete();
     d.and_where(col("id").eq(1));
     let (sql, binds) = d.to_sql_with(&PostgresDialect);
 
@@ -640,7 +640,7 @@ pg_test!(test_delete_basic, |client| {
 pg_test!(test_delete_from_query_with_where, |client| {
     let mut q = sqipe_with::<PgValue>("users");
     q.and_where(col("age").lt(30));
-    let d = q.delete();
+    let d = q.into_delete();
     let (sql, binds) = d.to_sql_with(&PostgresDialect);
 
     let params = to_pg_params(&binds);
@@ -656,7 +656,7 @@ pg_test!(test_delete_from_query_with_where, |client| {
 });
 
 pg_test!(test_delete_allow_without_where, |client| {
-    let mut d = sqipe_with::<PgValue>("users").delete();
+    let mut d = sqipe_with::<PgValue>("users").into_delete();
     d.allow_without_where();
     let (sql, binds) = d.to_sql_with(&PostgresDialect);
 

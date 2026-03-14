@@ -627,7 +627,7 @@ async fn test_like_custom_escape_char() {
 async fn test_update_basic() {
     let pool = setup_pool().await;
 
-    let mut u = sqipe_with::<MysqlValue>("users").update();
+    let mut u = sqipe_with::<MysqlValue>("users").into_update();
     u.set(col("name"), "Alicia");
     u.and_where(col("id").eq(1));
     let (sql, binds) = u.to_sql();
@@ -648,7 +648,7 @@ async fn test_update_basic() {
 async fn test_update_multiple_sets() {
     let pool = setup_pool().await;
 
-    let mut u = sqipe_with::<MysqlValue>("users").update();
+    let mut u = sqipe_with::<MysqlValue>("users").into_update();
     u.set(col("name"), "Alicia");
     u.set(col("age"), 31);
     u.and_where(col("id").eq(1));
@@ -673,7 +673,7 @@ async fn test_update_from_query_with_where() {
 
     let mut q = sqipe_with::<MysqlValue>("users");
     q.and_where(col("id").eq(2));
-    let mut u = q.update();
+    let mut u = q.into_update();
     u.set(col("name"), "Bobby");
     let (sql, binds) = u.to_sql();
 
@@ -693,7 +693,7 @@ async fn test_update_from_query_with_where() {
 async fn test_update_allow_without_where() {
     let pool = setup_pool().await;
 
-    let mut u = sqipe_with::<MysqlValue>("users").update();
+    let mut u = sqipe_with::<MysqlValue>("users").into_update();
     u.set(col("age"), 99);
     u.allow_without_where();
     let (sql, binds) = u.to_sql();
@@ -714,7 +714,7 @@ async fn test_update_allow_without_where() {
 async fn test_delete_basic() {
     let pool = setup_pool().await;
 
-    let mut d = sqipe_with::<MysqlValue>("users").delete();
+    let mut d = sqipe_with::<MysqlValue>("users").into_delete();
     d.and_where(col("id").eq(1));
     let (sql, binds) = d.to_sql();
 
@@ -738,7 +738,7 @@ async fn test_delete_from_query_with_where() {
 
     let mut q = sqipe_with::<MysqlValue>("users");
     q.and_where(col("age").lt(30));
-    let d = q.delete();
+    let d = q.into_delete();
     let (sql, binds) = d.to_sql();
 
     bind_params(sqlx::query(&sql), &binds)
@@ -760,7 +760,7 @@ async fn test_delete_from_query_with_where() {
 async fn test_delete_allow_without_where() {
     let pool = setup_pool().await;
 
-    let mut d = sqipe_with::<MysqlValue>("users").delete();
+    let mut d = sqipe_with::<MysqlValue>("users").into_delete();
     d.allow_without_where();
     let (sql, binds) = d.to_sql();
 
@@ -781,7 +781,7 @@ async fn test_delete_with_order_by_and_limit() {
     let pool = setup_pool().await;
 
     // Delete the oldest user only
-    let mut d = sqipe_with::<MysqlValue>("users").delete();
+    let mut d = sqipe_with::<MysqlValue>("users").into_delete();
     d.allow_without_where();
     d.order_by(col("age").desc());
     d.limit(1);

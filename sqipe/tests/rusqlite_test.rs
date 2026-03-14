@@ -578,7 +578,7 @@ fn test_like_custom_escape_char() {
 fn test_update_basic() {
     let conn = setup_db();
 
-    let mut u = sqipe_with::<SqliteValue>("users").update();
+    let mut u = sqipe_with::<SqliteValue>("users").into_update();
     u.set(col("name"), "Alicia");
     u.and_where(col("id").eq(1));
     let (sql, binds) = u.to_sql();
@@ -599,7 +599,7 @@ fn test_update_basic() {
 fn test_update_multiple_sets() {
     let conn = setup_db();
 
-    let mut u = sqipe_with::<SqliteValue>("users").update();
+    let mut u = sqipe_with::<SqliteValue>("users").into_update();
     u.set(col("name"), "Alicia");
     u.set(col("age"), 31);
     u.and_where(col("id").eq(1));
@@ -625,7 +625,7 @@ fn test_update_from_query_with_where() {
 
     let mut q = sqipe_with::<SqliteValue>("users");
     q.and_where(col("id").eq(2));
-    let mut u = q.update();
+    let mut u = q.into_update();
     u.set(col("name"), "Bobby");
     let (sql, binds) = u.to_sql();
 
@@ -644,7 +644,7 @@ fn test_update_from_query_with_where() {
 fn test_update_allow_without_where() {
     let conn = setup_db();
 
-    let mut u = sqipe_with::<SqliteValue>("users").update();
+    let mut u = sqipe_with::<SqliteValue>("users").into_update();
     u.set(col("age"), 99);
     u.allow_without_where();
     let (sql, binds) = u.to_sql();
@@ -667,7 +667,7 @@ fn test_update_allow_without_where() {
 fn test_delete_basic() {
     let conn = setup_db();
 
-    let mut d = sqipe_with::<SqliteValue>("users").delete();
+    let mut d = sqipe_with::<SqliteValue>("users").into_delete();
     d.and_where(col("id").eq(1));
     let (sql, binds) = d.to_sql();
 
@@ -692,7 +692,7 @@ fn test_delete_from_query_with_where() {
 
     let mut q = sqipe_with::<SqliteValue>("users");
     q.and_where(col("age").lt(30));
-    let d = q.delete();
+    let d = q.into_delete();
     let (sql, binds) = d.to_sql();
 
     let params = to_rusqlite_params(&binds);
@@ -715,7 +715,7 @@ fn test_delete_from_query_with_where() {
 fn test_delete_allow_without_where() {
     let conn = setup_db();
 
-    let mut d = sqipe_with::<SqliteValue>("users").delete();
+    let mut d = sqipe_with::<SqliteValue>("users").into_delete();
     d.allow_without_where();
     let (sql, binds) = d.to_sql();
 

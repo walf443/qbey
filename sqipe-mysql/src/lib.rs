@@ -415,9 +415,9 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
     ///
     /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
     /// The generated SQL uses MySQL dialect (backtick quoting, `?` placeholders).
-    pub fn update(self) -> MysqlUpdateQuery<V> {
+    pub fn into_update(self) -> MysqlUpdateQuery<V> {
         MysqlUpdateQuery {
-            inner: self.inner.update(),
+            inner: self.inner.into_update(),
             order_bys: Vec::new(),
             limit_val: None,
         }
@@ -427,9 +427,9 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
     ///
     /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
     /// The generated SQL uses MySQL dialect (backtick quoting, `?` placeholders).
-    pub fn delete(self) -> MysqlDeleteQuery<V> {
+    pub fn into_delete(self) -> MysqlDeleteQuery<V> {
         MysqlDeleteQuery {
-            inner: self.inner.delete(),
+            inner: self.inner.into_delete(),
             order_bys: Vec::new(),
             limit_val: None,
         }
@@ -934,7 +934,7 @@ mod tests {
 
     #[test]
     fn test_update_basic() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set(col("name"), "Alicia");
         u.and_where(col("id").eq(1));
 
@@ -951,7 +951,7 @@ mod tests {
 
     #[test]
     fn test_update_multiple_sets() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set(col("name"), "Alicia");
         u.set(col("age"), 31);
         u.and_where(col("id").eq(1));
@@ -975,7 +975,7 @@ mod tests {
     fn test_update_from_query_with_where() {
         let mut q = sqipe("users");
         q.and_where(col("id").eq(1));
-        let mut u = q.update();
+        let mut u = q.into_update();
         u.set(col("name"), "Alicia");
 
         let (sql, _) = u.to_sql();
@@ -984,7 +984,7 @@ mod tests {
 
     #[test]
     fn test_update_allow_without_where() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set(col("age"), 99);
         u.allow_without_where();
 
@@ -996,7 +996,7 @@ mod tests {
     fn test_update_with_table_alias() {
         let mut q = sqipe("users");
         q.as_("u");
-        let mut u = q.update();
+        let mut u = q.into_update();
         u.set(col("name"), "Alicia");
         u.and_where(col("id").eq(1));
 
@@ -1007,7 +1007,7 @@ mod tests {
 
     #[test]
     fn test_update_with_order_by_and_limit() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set(col("status"), "inactive");
         u.and_where(col("dept").eq("eng"));
         u.order_by(col("created_at").asc());
@@ -1029,7 +1029,7 @@ mod tests {
 
     #[test]
     fn test_update_with_limit_only() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set(col("flagged"), true);
         u.allow_without_where();
         u.limit(100);
@@ -1040,7 +1040,7 @@ mod tests {
 
     #[test]
     fn test_update_with_like() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set(col("flagged"), true);
         u.and_where(col("name").like(sqipe::LikeExpression::starts_with("test")));
 
@@ -1061,7 +1061,7 @@ mod tests {
 
     #[test]
     fn test_update_with_set_expr() {
-        let mut u = sqipe("users").update();
+        let mut u = sqipe("users").into_update();
         u.set_expr(sqipe::SetExpression::new(
             "`visit_count` = `visit_count` + 1",
         ));
@@ -1077,7 +1077,7 @@ mod tests {
 
     #[test]
     fn test_delete_basic() {
-        let mut d = sqipe("users").delete();
+        let mut d = sqipe("users").into_delete();
         d.and_where(col("id").eq(1));
 
         let (sql, binds) = d.to_sql();
@@ -1089,7 +1089,7 @@ mod tests {
     fn test_delete_from_query_with_where() {
         let mut q = sqipe("users");
         q.and_where(col("id").eq(1));
-        let d = q.delete();
+        let d = q.into_delete();
 
         let (sql, _) = d.to_sql();
         assert_eq!(sql, "DELETE FROM `users` WHERE `id` = ?");
@@ -1097,7 +1097,7 @@ mod tests {
 
     #[test]
     fn test_delete_allow_without_where() {
-        let mut d = sqipe("users").delete();
+        let mut d = sqipe("users").into_delete();
         d.allow_without_where();
 
         let (sql, binds) = d.to_sql();
@@ -1109,7 +1109,7 @@ mod tests {
     fn test_delete_with_table_alias() {
         let mut q = sqipe("users");
         q.as_("u");
-        let mut d = q.delete();
+        let mut d = q.into_delete();
         d.and_where(col("id").eq(1));
 
         let (sql, _) = d.to_sql();
@@ -1118,7 +1118,7 @@ mod tests {
 
     #[test]
     fn test_delete_with_order_by_and_limit() {
-        let mut d = sqipe("users").delete();
+        let mut d = sqipe("users").into_delete();
         d.and_where(col("dept").eq("eng"));
         d.order_by(col("created_at").asc());
         d.limit(10);
@@ -1133,7 +1133,7 @@ mod tests {
 
     #[test]
     fn test_delete_with_limit_only() {
-        let mut d = sqipe("users").delete();
+        let mut d = sqipe("users").into_delete();
         d.allow_without_where();
         d.limit(100);
 
@@ -1143,7 +1143,7 @@ mod tests {
 
     #[test]
     fn test_delete_with_like() {
-        let mut d = sqipe("users").delete();
+        let mut d = sqipe("users").into_delete();
         d.and_where(col("name").like(sqipe::LikeExpression::starts_with("test")));
 
         let (sql, binds) = d.to_sql();
@@ -1153,7 +1153,7 @@ mod tests {
 
     #[test]
     fn test_delete_with_or_where() {
-        let mut d = sqipe("users").delete();
+        let mut d = sqipe("users").into_delete();
         d.and_where(col("status").eq("pending"));
         d.or_where(col("status").eq("draft"));
 

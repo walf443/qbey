@@ -47,7 +47,7 @@ impl<V: Clone + std::fmt::Debug> DeleteQuery<V> {
     /// ```
     /// use sqipe::sqipe;
     ///
-    /// let mut d = sqipe("employee").delete();
+    /// let mut d = sqipe("employee").into_delete();
     /// d.allow_without_where();
     /// let (sql, _) = d.to_sql();
     /// assert_eq!(sql, r#"DELETE FROM "employee""#);

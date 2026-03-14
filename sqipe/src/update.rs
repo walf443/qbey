@@ -14,7 +14,7 @@ use crate::tree::default_quote_identifier;
 /// ```
 /// use sqipe::{sqipe, col, SetExpression};
 ///
-/// let mut u = sqipe("employee").update();
+/// let mut u = sqipe("employee").into_update();
 /// u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
 /// u.and_where(col("id").eq(1));
 /// let (sql, _) = u.to_sql();
@@ -41,7 +41,7 @@ pub enum SetClause<V: Clone> {
 
 /// An UPDATE query builder, generic over the bind value type `V`.
 ///
-/// Created via [`Query::update()`] to convert a SELECT query builder into an UPDATE statement.
+/// Created via [`Query::into_update()`] to convert a SELECT query builder into an UPDATE statement.
 ///
 /// By default, WHERE clause is required. Calling `to_sql()` or `to_sql_with()` without
 /// any WHERE conditions will panic to prevent accidental full-table updates.
@@ -50,7 +50,7 @@ pub enum SetClause<V: Clone> {
 /// ```
 /// use sqipe::{sqipe, col};
 ///
-/// let mut u = sqipe("employee").update();
+/// let mut u = sqipe("employee").into_update();
 /// u.set(col("name"), "Alice");
 /// u.and_where(col("id").eq(1));
 /// let (sql, _) = u.to_sql();
@@ -89,7 +89,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// ```
     /// use sqipe::{sqipe, col};
     ///
-    /// let mut u = sqipe("employee").update();
+    /// let mut u = sqipe("employee").into_update();
     /// u.set(col("name"), "Alice");
     /// u.and_where(col("id").eq(1));
     /// let (sql, _) = u.to_sql();
@@ -108,7 +108,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// ```
     /// use sqipe::{sqipe, col, SetExpression};
     ///
-    /// let mut u = sqipe("employee").update();
+    /// let mut u = sqipe("employee").into_update();
     /// u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
     /// u.and_where(col("id").eq(1));
     /// let (sql, _) = u.to_sql();
@@ -139,7 +139,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// ```
     /// use sqipe::{sqipe, col};
     ///
-    /// let mut u = sqipe("employee").update();
+    /// let mut u = sqipe("employee").into_update();
     /// u.set(col("status"), "inactive");
     /// u.allow_without_where();
     /// let (sql, _) = u.to_sql();
