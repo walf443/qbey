@@ -22,13 +22,12 @@ fn test_comparison_operators() {
 fn test_or_where() {
     let mut q = sqipe("employee");
     q.and_where(("name", "Alice"));
-    q.or_where(("name", "Bob"));
-    q.select(&["id", "name"]);
+    q.or_where(col("role").eq("admin"));
 
     let (sql, _) = q.to_sql();
     assert_eq!(
         sql,
-        "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? OR \"name\" = ?"
+        "SELECT * FROM \"employee\" WHERE \"name\" = ? OR \"role\" = ?"
     );
 }
 
