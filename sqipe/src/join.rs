@@ -1,4 +1,4 @@
-use crate::column::QualifiedCol;
+use crate::column::Col;
 
 /// A column reference in a JOIN condition, optionally qualified with a table name.
 /// When `table` is `None`, the table name is inferred from the `join()` / `left_join()` call.
@@ -8,11 +8,11 @@ pub struct JoinCol {
     pub col: String,
 }
 
-impl From<QualifiedCol> for JoinCol {
-    fn from(qc: QualifiedCol) -> Self {
+impl From<Col> for JoinCol {
+    fn from(c: Col) -> Self {
         JoinCol {
-            table: Some(qc.table),
-            col: qc.col,
+            table: c.table,
+            col: c.col,
         }
     }
 }
@@ -30,7 +30,7 @@ impl From<&str> for JoinCol {
 #[derive(Debug, Clone)]
 pub enum JoinCondition {
     ColEq {
-        left: QualifiedCol,
+        left: Col,
         right: JoinCol,
     },
     And(Vec<JoinCondition>),

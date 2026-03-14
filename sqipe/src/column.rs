@@ -34,146 +34,6 @@ impl IntoColRef for ColRef {
     }
 }
 
-macro_rules! impl_col_methods {
-    ($ty:ty) => {
-        impl $ty {
-            pub fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
-                WhereClause::Condition {
-                    col: self.into_col_ref(),
-                    op: Op::Eq,
-                    val,
-                }
-            }
-
-            pub fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
-                WhereClause::Condition {
-                    col: self.into_col_ref(),
-                    op: Op::Ne,
-                    val,
-                }
-            }
-
-            pub fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
-                WhereClause::Condition {
-                    col: self.into_col_ref(),
-                    op: Op::Gt,
-                    val,
-                }
-            }
-
-            pub fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
-                WhereClause::Condition {
-                    col: self.into_col_ref(),
-                    op: Op::Lt,
-                    val,
-                }
-            }
-
-            pub fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
-                WhereClause::Condition {
-                    col: self.into_col_ref(),
-                    op: Op::Gte,
-                    val,
-                }
-            }
-
-            pub fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
-                WhereClause::Condition {
-                    col: self.into_col_ref(),
-                    op: Op::Lte,
-                    val,
-                }
-            }
-
-            /// Generate a `LIKE` condition.
-            ///
-            /// Accepts a [`LikeExpression`] to ensure safe pattern construction:
-            /// - `col("name").like(LikeExpression::contains("foo"))` → `"name" LIKE '%foo%' ESCAPE '\'`
-            /// - `col("name").like(LikeExpression::starts_with("foo"))` → `"name" LIKE 'foo%' ESCAPE '\'`
-            /// - `col("name").like(LikeExpression::ends_with("foo"))` → `"name" LIKE '%foo' ESCAPE '\'`
-            ///
-            /// User input is automatically escaped (`%` and `_` are treated as literals).
-            /// The `ESCAPE` clause is derived from the [`LikeExpression`].
-            pub fn like(self, expr: LikeExpression) -> WhereClause<String> {
-                let val = expr.to_pattern();
-                WhereClause::Like {
-                    col: self.into_col_ref(),
-                    expr,
-                    val,
-                }
-            }
-
-            /// Generate a `NOT LIKE` condition.
-            ///
-            /// Accepts a [`LikeExpression`] to ensure safe pattern construction:
-            /// - `col("name").not_like(LikeExpression::contains("foo"))` → `"name" NOT LIKE '%foo%' ESCAPE '\'`
-            ///
-            /// User input is automatically escaped (`%` and `_` are treated as literals).
-            /// The `ESCAPE` clause is derived from the [`LikeExpression`].
-            pub fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
-                let val = expr.to_pattern();
-                WhereClause::NotLike {
-                    col: self.into_col_ref(),
-                    expr,
-                    val,
-                }
-            }
-
-            /// Generate an `IN (...)` condition.
-            ///
-            /// Accepts a slice of values or a `&Query` for subqueries:
-            /// - `col("id").included(&[1, 2, 3])` → `"id" IN (?, ?, ?)`
-            /// - `col("id").included(sub_query)` → `"id" IN (SELECT ...)`
-            ///
-            /// When a value list is empty, this produces `1 = 0` (always false) instead of
-            /// invalid SQL. If you need to distinguish "no filter" from "match nothing",
-            /// check that the slice is non-empty before calling this method.
-            pub fn included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
-                source.into_in_clause(self.into_col_ref())
-            }
-
-            /// Generate a `NOT IN (...)` condition.
-            ///
-            /// Accepts a slice of values or a `Query` for subqueries:
-            /// - `col("id").not_included(&[1, 2, 3])` → `"id" NOT IN (?, ?, ?)`
-            /// - `col("id").not_included(sub_query)` → `"id" NOT IN (SELECT ...)`
-            ///
-            /// When a value list is empty, this produces `1 = 1` (always true) instead of
-            /// invalid SQL.
-            pub fn not_included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
-                source.into_not_in_clause(self.into_col_ref())
-            }
-
-            pub fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
-                WhereClause::Between {
-                    col: self.into_col_ref(),
-                    low,
-                    high,
-                }
-            }
-
-            pub fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
-                WhereClause::NotBetween {
-                    col: self.into_col_ref(),
-                    low,
-                    high,
-                }
-            }
-
-            /// Convert a Rust range into SQL conditions.
-            ///
-            /// - `20..=30` → `BETWEEN 20 AND 30`
-            /// - `20..30`  → `col >= 20 AND col < 30`
-            /// - `20..`    → `col >= 20`
-            /// - `..30`    → `col < 30`
-            /// - `..=30`   → `col <= 30`
-            pub fn in_range<V: Clone>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
-                range.into_where_clause(self.into_col_ref())
-            }
-        }
-    };
-}
-
 /// A table reference for building qualified column references and join targets.
 #[derive(Debug, Clone)]
 pub struct TableRef {
@@ -190,9 +50,9 @@ pub fn table(name: &str) -> TableRef {
 }
 
 impl TableRef {
-    pub fn col(&self, col: &str) -> QualifiedCol {
-        QualifiedCol {
-            table: self.name.clone(),
+    pub fn col(&self, col: &str) -> Col {
+        Col {
+            table: Some(self.name.clone()),
             col: col.to_string(),
         }
     }
@@ -213,69 +73,173 @@ impl TableRef {
     }
 }
 
-/// A column qualified with a table name (e.g., `"users"."id"`).
-#[derive(Debug, Clone)]
-pub struct QualifiedCol {
-    pub table: String,
-    pub col: String,
-}
-
-/// A column reference used to build conditions and order-by clauses.
+/// A column reference, optionally qualified with a table name.
+///
+/// - `col("name")` creates an unqualified column.
+/// - `table("users").col("name")` creates a table-qualified column.
+///
+/// Both forms support the same set of methods (e.g., `eq`, `asc`, `eq_col`).
 #[derive(Debug, Clone)]
 pub struct Col {
-    pub name: String,
+    pub table: Option<String>,
+    pub col: String,
 }
 
 /// Create a column reference.
 pub fn col(name: &str) -> Col {
     Col {
-        name: name.to_string(),
+        table: None,
+        col: name.to_string(),
     }
 }
 
 impl IntoColRef for Col {
     fn into_col_ref(self) -> ColRef {
-        ColRef::Simple(self.name)
+        match self.table {
+            Some(table) => ColRef::Qualified {
+                table,
+                col: self.col,
+            },
+            None => ColRef::Simple(self.col),
+        }
     }
 }
-
-impl_col_methods!(Col);
 
 impl Col {
-    pub fn as_(self, alias: &str) -> ColRef {
-        ColRef::Aliased {
-            col: Box::new(self.into_col_ref()),
-            alias: alias.to_string(),
-        }
-    }
-
-    pub fn asc(self) -> OrderByClause {
-        OrderByClause {
+    pub fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
+        WhereClause::Condition {
             col: self.into_col_ref(),
-            dir: SortDir::Asc,
+            op: Op::Eq,
+            val,
         }
     }
 
-    pub fn desc(self) -> OrderByClause {
-        OrderByClause {
+    pub fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
+        WhereClause::Condition {
             col: self.into_col_ref(),
-            dir: SortDir::Desc,
+            op: Op::Ne,
+            val,
         }
     }
-}
 
-impl IntoColRef for QualifiedCol {
-    fn into_col_ref(self) -> ColRef {
-        ColRef::Qualified {
-            table: self.table,
-            col: self.col,
+    pub fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
+        WhereClause::Condition {
+            col: self.into_col_ref(),
+            op: Op::Gt,
+            val,
         }
     }
-}
 
-impl_col_methods!(QualifiedCol);
+    pub fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
+        WhereClause::Condition {
+            col: self.into_col_ref(),
+            op: Op::Lt,
+            val,
+        }
+    }
 
-impl QualifiedCol {
+    pub fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
+        WhereClause::Condition {
+            col: self.into_col_ref(),
+            op: Op::Gte,
+            val,
+        }
+    }
+
+    pub fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
+        WhereClause::Condition {
+            col: self.into_col_ref(),
+            op: Op::Lte,
+            val,
+        }
+    }
+
+    /// Generate a `LIKE` condition.
+    ///
+    /// Accepts a [`LikeExpression`] to ensure safe pattern construction:
+    /// - `col("name").like(LikeExpression::contains("foo"))` → `"name" LIKE '%foo%' ESCAPE '\'`
+    /// - `col("name").like(LikeExpression::starts_with("foo"))` → `"name" LIKE 'foo%' ESCAPE '\'`
+    /// - `col("name").like(LikeExpression::ends_with("foo"))` → `"name" LIKE '%foo' ESCAPE '\'`
+    ///
+    /// User input is automatically escaped (`%` and `_` are treated as literals).
+    /// The `ESCAPE` clause is derived from the [`LikeExpression`].
+    pub fn like(self, expr: LikeExpression) -> WhereClause<String> {
+        let val = expr.to_pattern();
+        WhereClause::Like {
+            col: self.into_col_ref(),
+            expr,
+            val,
+        }
+    }
+
+    /// Generate a `NOT LIKE` condition.
+    ///
+    /// Accepts a [`LikeExpression`] to ensure safe pattern construction:
+    /// - `col("name").not_like(LikeExpression::contains("foo"))` → `"name" NOT LIKE '%foo%' ESCAPE '\'`
+    ///
+    /// User input is automatically escaped (`%` and `_` are treated as literals).
+    /// The `ESCAPE` clause is derived from the [`LikeExpression`].
+    pub fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
+        let val = expr.to_pattern();
+        WhereClause::NotLike {
+            col: self.into_col_ref(),
+            expr,
+            val,
+        }
+    }
+
+    /// Generate an `IN (...)` condition.
+    ///
+    /// Accepts a slice of values or a `&Query` for subqueries:
+    /// - `col("id").included(&[1, 2, 3])` → `"id" IN (?, ?, ?)`
+    /// - `col("id").included(sub_query)` → `"id" IN (SELECT ...)`
+    ///
+    /// When a value list is empty, this produces `1 = 0` (always false) instead of
+    /// invalid SQL. If you need to distinguish "no filter" from "match nothing",
+    /// check that the slice is non-empty before calling this method.
+    pub fn included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
+        source.into_in_clause(self.into_col_ref())
+    }
+
+    /// Generate a `NOT IN (...)` condition.
+    ///
+    /// Accepts a slice of values or a `Query` for subqueries:
+    /// - `col("id").not_included(&[1, 2, 3])` → `"id" NOT IN (?, ?, ?)`
+    /// - `col("id").not_included(sub_query)` → `"id" NOT IN (SELECT ...)`
+    ///
+    /// When a value list is empty, this produces `1 = 1` (always true) instead of
+    /// invalid SQL.
+    pub fn not_included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
+        source.into_not_in_clause(self.into_col_ref())
+    }
+
+    pub fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
+        WhereClause::Between {
+            col: self.into_col_ref(),
+            low,
+            high,
+        }
+    }
+
+    pub fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
+        WhereClause::NotBetween {
+            col: self.into_col_ref(),
+            low,
+            high,
+        }
+    }
+
+    /// Convert a Rust range into SQL conditions.
+    ///
+    /// - `20..=30` → `BETWEEN 20 AND 30`
+    /// - `20..30`  → `col >= 20 AND col < 30`
+    /// - `20..`    → `col >= 20`
+    /// - `..30`    → `col < 30`
+    /// - `..=30`   → `col <= 30`
+    pub fn in_range<V: Clone>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
+        range.into_where_clause(self.into_col_ref())
+    }
+
     pub fn as_(self, alias: &str) -> ColRef {
         ColRef::Aliased {
             col: Box::new(self.into_col_ref()),
@@ -304,3 +268,6 @@ impl QualifiedCol {
         }
     }
 }
+
+/// Backwards-compatible alias for `Col`.
+pub type QualifiedCol = Col;

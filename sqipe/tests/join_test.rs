@@ -330,6 +330,19 @@ fn test_join_subquery_mixed_with_table_join() {
 }
 
 #[test]
+fn test_join_with_unqualified_col_eq_col() {
+    let mut q = sqipe("users");
+    q.join("orders", col("id").eq_col("user_id"));
+    q.select(&["id", "name"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" INNER JOIN "orders" ON "id" = "orders"."user_id""#
+    );
+}
+
+#[test]
 fn test_join_condition_expr_standard() {
     let mut q = sqipe("texts");
     q.join(
