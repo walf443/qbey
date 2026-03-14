@@ -1,5 +1,5 @@
-use crate::column::OrderByClause;
 use crate::aggregate::AggregateExpr;
+use crate::column::OrderByClause;
 use crate::column::{ColRef, IntoColRef, TableRef};
 use crate::delete::DeleteQuery;
 use crate::join::{JoinClause, JoinCondition, JoinType};
