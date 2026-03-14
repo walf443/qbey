@@ -177,6 +177,19 @@ fn test_update_with_table_alias() {
 }
 
 #[test]
+fn test_update_set_with_qualified_col() {
+    let mut u = sqipe("employee").into_update();
+    u.set(table("employee").col("name"), "Alice");
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+    assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
+    assert_eq!(
+        binds,
+        vec![Value::String("Alice".to_string()), Value::Int(1)]
+    );
+}
+
+#[test]
 fn test_update_with_set_expr() {
     let mut u = sqipe("employee").into_update();
     u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
