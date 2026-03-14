@@ -2,7 +2,18 @@ use crate::join::{JoinCol, JoinCondition};
 use crate::like::LikeExpression;
 use crate::value::Op;
 use crate::where_clause::{IntoIncluded, IntoRangeClause, WhereClause};
-use crate::{OrderByClause, SortDir};
+
+#[derive(Debug, Clone)]
+pub enum SortDir {
+    Asc,
+    Desc,
+}
+
+#[derive(Debug, Clone)]
+pub struct OrderByClause {
+    pub col: String,
+    pub dir: SortDir,
+}
 
 /// Column reference — simple, table-qualified, or aliased.
 #[derive(Debug, Clone)]

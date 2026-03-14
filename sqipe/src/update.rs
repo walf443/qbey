@@ -1,5 +1,5 @@
 use crate::column::Col;
-use crate::query::Dialect;
+use crate::Dialect;
 use crate::value::Value;
 use crate::where_clause::{IntoWhereClause, WhereEntry};
 

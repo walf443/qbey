@@ -14,26 +14,29 @@ pub mod update;
 pub mod value;
 pub mod where_clause;
 
-#[derive(Debug, Clone)]
-pub enum SortDir {
-    Asc,
-    Desc,
-}
+/// Trait for SQL dialect placeholder and quoting styles.
+pub trait Dialect {
+    fn placeholder(&self, index: usize) -> String;
 
-#[derive(Debug, Clone)]
-pub struct OrderByClause {
-    pub col: String,
-    pub dir: SortDir,
+    fn quote_identifier(&self, name: &str) -> String {
+        format!("\"{}\"", name.replace('"', "\"\""))
+    }
+
+    /// Whether backslashes must be doubled inside SQL string literals.
+    /// MySQL requires this by default (when `NO_BACKSLASH_ESCAPES` is not set).
+    fn backslash_escape(&self) -> bool {
+        false
+    }
 }
 
 // Re-export all public types at the crate root for backwards compatibility.
 pub use aggregate::AggregateExpr;
-pub use column::{Col, ColRef, IntoColRef, QualifiedCol, TableRef, col, table};
+pub use column::{Col, ColRef, IntoColRef, OrderByClause, QualifiedCol, SortDir, TableRef, col, table};
 pub use delete::DeleteQuery;
 pub use join::{JoinClause, JoinCol, JoinCondition, JoinType};
 pub use like::LikeExpression;
 pub use query::{
-    AsUnionParts, Dialect, IntoJoinTable, IntoSelectTree, Query, SetOp, UnionQuery, UnionQueryOps,
+    AsUnionParts, IntoJoinTable, IntoSelectTree, Query, SetOp, UnionQuery, UnionQueryOps,
     sqipe, sqipe_from_subquery, sqipe_from_subquery_with, sqipe_with,
 };
 pub use update::{SetClause, SetExpression, UpdateQuery};

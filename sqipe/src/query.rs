@@ -1,4 +1,4 @@
-use crate::OrderByClause;
+use crate::column::OrderByClause;
 use crate::aggregate::AggregateExpr;
 use crate::column::{ColRef, IntoColRef, TableRef};
 use crate::delete::DeleteQuery;
@@ -12,20 +12,7 @@ use crate::renderer::standard::StandardSqlRenderer;
 use crate::renderer::{RenderConfig, Renderer};
 use crate::tree::{SelectTree, UnionTree, default_quote_identifier};
 
-/// Trait for SQL dialect placeholder and quoting styles.
-pub trait Dialect {
-    fn placeholder(&self, index: usize) -> String;
-
-    fn quote_identifier(&self, name: &str) -> String {
-        format!("\"{}\"", name.replace('"', "\"\""))
-    }
-
-    /// Whether backslashes must be doubled inside SQL string literals.
-    /// MySQL requires this by default (when `NO_BACKSLASH_ESCAPES` is not set).
-    fn backslash_escape(&self) -> bool {
-        false
-    }
-}
+use crate::Dialect;
 
 #[derive(Debug, Clone)]
 pub enum SetOp {
