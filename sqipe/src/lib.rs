@@ -8,6 +8,7 @@ pub mod delete;
 pub mod join;
 pub mod like;
 pub mod query;
+pub mod raw_sql;
 pub mod renderer;
 pub mod tree;
 pub mod update;
@@ -44,6 +45,7 @@ pub use query::{
     AsUnionParts, IntoFromTable, IntoJoinTable, IntoSelectTree, Query, SetOp, UnionQuery,
     UnionQueryOps, sqipe, sqipe_from_subquery, sqipe_from_subquery_with, sqipe_with,
 };
+pub use raw_sql::RawSql;
 pub use update::{SetClause, SetExpression, UpdateQuery};
 pub use value::{Op, Value};
 pub use where_clause::{
