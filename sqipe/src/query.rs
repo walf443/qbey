@@ -673,12 +673,12 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     ///
     /// let mut q = sqipe("employee");
     /// q.and_where(col("id").eq(1));
-    /// let mut u = q.update();
+    /// let mut u = q.into_update();
     /// u.set(col("name"), "Alice");
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
     /// ```
-    pub fn update(self) -> UpdateQuery<V> {
+    pub fn into_update(self) -> UpdateQuery<V> {
         assert!(
             self.joins.is_empty(),
             "Query has JOINs which are not supported in UPDATE and will be discarded"
@@ -707,11 +707,11 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     ///
     /// let mut q = sqipe("employee");
     /// q.and_where(col("id").eq(1));
-    /// let d = q.delete();
+    /// let d = q.into_delete();
     /// let (sql, _) = d.to_sql();
     /// assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ?"#);
     /// ```
-    pub fn delete(self) -> DeleteQuery<V> {
+    pub fn into_delete(self) -> DeleteQuery<V> {
         assert!(
             self.joins.is_empty(),
             "Query has JOINs which are not supported in DELETE and will be discarded"

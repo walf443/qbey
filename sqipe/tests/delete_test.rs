@@ -2,7 +2,7 @@ use sqipe::*;
 
 #[test]
 fn test_delete_basic() {
-    let mut d = sqipe("employee").delete();
+    let mut d = sqipe("employee").into_delete();
     d.and_where(col("id").eq(1));
     let (sql, binds) = d.to_sql();
     assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ?"#);
@@ -11,7 +11,7 @@ fn test_delete_basic() {
 
 #[test]
 fn test_delete_allow_without_where() {
-    let mut d = sqipe("employee").delete();
+    let mut d = sqipe("employee").into_delete();
     d.allow_without_where();
     let (sql, binds) = d.to_sql();
     assert_eq!(sql, r#"DELETE FROM "employee""#);
@@ -22,7 +22,7 @@ fn test_delete_allow_without_where() {
 fn test_delete_from_query_with_where() {
     let mut q = sqipe("employee");
     q.and_where(col("id").eq(1));
-    let d = q.delete();
+    let d = q.into_delete();
     let (sql, binds) = d.to_sql();
     assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ?"#);
     assert_eq!(binds, vec![Value::Int(1)]);
@@ -37,7 +37,7 @@ fn test_delete_with_dialect() {
         }
     }
 
-    let mut d = sqipe("employee").delete();
+    let mut d = sqipe("employee").into_delete();
     d.and_where(col("id").eq(1));
     let (sql, binds) = d.to_sql_with(&PgDialect);
     assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = $1"#);
@@ -46,7 +46,7 @@ fn test_delete_with_dialect() {
 
 #[test]
 fn test_delete_with_complex_where() {
-    let mut d = sqipe("employee").delete();
+    let mut d = sqipe("employee").into_delete();
     d.and_where(col("age").between(20, 60));
     d.and_where(col("role").included(&["admin", "manager"]));
     let (sql, binds) = d.to_sql();
@@ -67,7 +67,7 @@ fn test_delete_with_complex_where() {
 
 #[test]
 fn test_delete_with_or_where() {
-    let mut d = sqipe("employee").delete();
+    let mut d = sqipe("employee").into_delete();
     d.and_where(col("status").eq("pending"));
     d.or_where(col("status").eq("draft"));
     let (sql, binds) = d.to_sql();
@@ -86,7 +86,7 @@ fn test_delete_with_or_where() {
 
 #[test]
 fn test_delete_with_like() {
-    let mut d = sqipe("employee").delete();
+    let mut d = sqipe("employee").into_delete();
     d.and_where(col("name").like(LikeExpression::starts_with("test")));
     let (sql, binds) = d.to_sql();
     assert_eq!(
@@ -99,7 +99,7 @@ fn test_delete_with_like() {
 #[test]
 #[should_panic(expected = "DELETE without WHERE is dangerous")]
 fn test_delete_no_where_panics() {
-    let d = sqipe("employee").delete();
+    let d = sqipe("employee").into_delete();
     let _ = d.to_sql();
 }
 
@@ -107,7 +107,7 @@ fn test_delete_no_where_panics() {
 fn test_delete_with_table_alias() {
     let mut q = sqipe("employee");
     q.as_("e");
-    let mut d = q.delete();
+    let mut d = q.into_delete();
     d.and_where(col("id").eq(1));
     let (sql, _) = d.to_sql();
     assert_eq!(sql, r#"DELETE FROM "employee" "e" WHERE "id" = ?"#);
@@ -118,7 +118,7 @@ fn test_delete_with_table_alias() {
 fn test_delete_from_query_with_joins_panics() {
     let mut q = sqipe("employee");
     q.join("department", table("employee").col("dept_id").eq_col("id"));
-    let _ = q.delete();
+    let _ = q.into_delete();
 }
 
 #[test]
@@ -126,7 +126,7 @@ fn test_delete_from_query_with_joins_panics() {
 fn test_delete_from_query_with_aggregates_panics() {
     let mut q = sqipe("employee");
     q.aggregate(&[aggregate::count_all()]);
-    let _ = q.delete();
+    let _ = q.into_delete();
 }
 
 #[test]
@@ -137,7 +137,7 @@ fn test_delete_from_query_with_order_by_panics() {
         col: "id".to_string(),
         dir: SortDir::Asc,
     });
-    let _ = q.delete();
+    let _ = q.into_delete();
 }
 
 #[test]
@@ -145,5 +145,5 @@ fn test_delete_from_query_with_order_by_panics() {
 fn test_delete_from_query_with_limit_panics() {
     let mut q = sqipe("employee");
     q.limit(10);
-    let _ = q.delete();
+    let _ = q.into_delete();
 }

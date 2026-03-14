@@ -445,12 +445,12 @@ assert_eq!(sql, "SELECT \"name\" AS \"user_name\" FROM \"users\"");
 
 ### UPDATE
 
-`Query::update()` converts a SELECT query builder into an UPDATE statement builder.
+`Query::into_update()` converts a SELECT query builder into an UPDATE statement builder.
 
 ```rust
 # use sqipe::{sqipe, col};
 // Basic UPDATE
-let mut u = sqipe("employee").update();
+let mut u = sqipe("employee").into_update();
 u.set(col("name"), "Alice");
 u.and_where(col("id").eq(1));
 
@@ -464,7 +464,7 @@ WHERE conditions can be built first, then converted to UPDATE:
 # use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
 q.and_where(col("id").eq(1));
-let mut u = q.update();
+let mut u = q.into_update();
 u.set(col("name"), "Alice");
 u.set(col("age"), 31);
 
@@ -476,7 +476,7 @@ By default, calling `to_sql()` without any WHERE conditions will panic to preven
 
 ```rust
 # use sqipe::{sqipe, col};
-let mut u = sqipe("employee").update();
+let mut u = sqipe("employee").into_update();
 u.set(col("status"), "inactive");
 u.allow_without_where();
 
@@ -492,7 +492,7 @@ Dialect support works via `to_sql_with`:
 # impl Dialect for PgDialect {
 #     fn placeholder(&self, index: usize) -> String { format!("${}", index) }
 # }
-let mut u = sqipe("employee").update();
+let mut u = sqipe("employee").into_update();
 u.set(col("name"), "Alice");
 u.and_where(col("id").eq(1));
 
@@ -504,7 +504,7 @@ For raw SQL expressions in SET clauses (e.g. incrementing a counter), use `SetEx
 
 ```rust
 # use sqipe::{sqipe, col, SetExpression};
-let mut u = sqipe("employee").update();
+let mut u = sqipe("employee").into_update();
 u.set_expr(SetExpression::new(r#""visit_count" = "visit_count" + 1"#));
 u.and_where(col("id").eq(1));
 
@@ -514,12 +514,12 @@ assert_eq!(sql, r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE
 
 ### DELETE
 
-`Query::delete()` converts a SELECT query builder into a DELETE statement builder.
+`Query::into_delete()` converts a SELECT query builder into a DELETE statement builder.
 
 ```rust
 # use sqipe::{sqipe, col};
 // Basic DELETE
-let mut d = sqipe("employee").delete();
+let mut d = sqipe("employee").into_delete();
 d.and_where(col("id").eq(1));
 
 let (sql, binds) = d.to_sql();
@@ -532,7 +532,7 @@ WHERE conditions can be built first, then converted to DELETE:
 # use sqipe::{sqipe, col};
 let mut q = sqipe("employee");
 q.and_where(col("id").eq(1));
-let d = q.delete();
+let d = q.into_delete();
 
 let (sql, binds) = d.to_sql();
 assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ?"#);
@@ -542,7 +542,7 @@ By default, calling `to_sql()` without any WHERE conditions will panic to preven
 
 ```rust
 # use sqipe::sqipe;
-let mut d = sqipe("employee").delete();
+let mut d = sqipe("employee").into_delete();
 d.allow_without_where();
 
 let (sql, binds) = d.to_sql();
