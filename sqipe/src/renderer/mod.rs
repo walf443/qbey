@@ -125,7 +125,7 @@ pub(super) fn render_aggregate_expr(expr: &AggregateExpr, cfg: &RenderConfig) ->
         AggregateFunc::Avg(col) => format!("AVG({})", (cfg.qi)(col)),
         AggregateFunc::Min(col) => format!("MIN({})", (cfg.qi)(col)),
         AggregateFunc::Max(col) => format!("MAX({})", (cfg.qi)(col)),
-        AggregateFunc::Expr(raw) => raw.clone(),
+        AggregateFunc::Expr(raw) => raw.to_string(),
     };
     match &expr.alias {
         Some(alias) => format!("{} AS {}", func_str, (cfg.qi)(alias)),
