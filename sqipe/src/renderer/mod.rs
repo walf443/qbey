@@ -165,12 +165,11 @@ fn render_join_col(col: &crate::JoinCol, cfg: &RenderConfig) -> String {
 pub(super) fn render_join_condition(cond: &JoinCondition, cfg: &RenderConfig) -> String {
     match cond {
         JoinCondition::ColEq { left, right } => {
-            format!(
-                "{}.{} = {}",
-                (cfg.qi)(&left.table),
-                (cfg.qi)(&left.col),
-                render_join_col(right, cfg)
-            )
+            let left_str = match &left.table {
+                Some(table) => format!("{}.{}", (cfg.qi)(table), (cfg.qi)(&left.column)),
+                None => (cfg.qi)(&left.column),
+            };
+            format!("{} = {}", left_str, render_join_col(right, cfg))
         }
         JoinCondition::And(conditions) => {
             let parts: Vec<String> = conditions
@@ -474,7 +473,7 @@ fn render_order_by(order_bys: &[OrderByClause], cfg: &RenderConfig) -> Option<St
                 SortDir::Asc => "ASC",
                 SortDir::Desc => "DESC",
             };
-            format!("{} {}", (cfg.qi)(&o.col), dir)
+            format!("{} {}", render_col_ref(&o.col, cfg), dir)
         })
         .collect();
     Some(format!("ORDER BY {}", clauses.join(", ")))

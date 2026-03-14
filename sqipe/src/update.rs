@@ -86,6 +86,10 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// Column names are quoted as identifiers but **not** parameterized,
     /// so never pass external (user-supplied) input as a column name.
     ///
+    /// If a table-qualified column (e.g., `table("t").col("name")`) is passed,
+    /// the table qualifier is ignored and only the column name is used in the
+    /// SET clause, since standard SQL does not allow qualified columns in SET.
+    ///
     /// ```
     /// use sqipe::{sqipe, col};
     ///
@@ -96,7 +100,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
     /// ```
     pub fn set(&mut self, col: Col, val: impl Into<V>) -> &mut Self {
-        self.sets.push(SetClause::Value(col.name, val.into()));
+        self.sets.push(SetClause::Value(col.column, val.into()));
         self
     }
 
