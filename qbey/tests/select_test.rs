@@ -289,4 +289,3 @@ fn test_order_by_mixed_col_and_expr() {
         r#"SELECT "id", "name" FROM "users" ORDER BY "name" ASC, RAND()"#
     );
 }
-

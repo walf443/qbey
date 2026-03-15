@@ -78,7 +78,7 @@ impl<V: Clone> SelectTree<V> {
     /// Transform all bind values in this tree.
     ///
     /// `select` is not mapped because `SelectClause` contains only column
-    /// references and aggregate expressions, neither of which holds bind values.
+    /// references, neither of which holds bind values.
     pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectTree<U> {
         SelectTree {
             from: self.from.map_values(f),

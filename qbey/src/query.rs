@@ -262,13 +262,11 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     }
 
     pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
-
         self.wheres.push(WhereEntry::And(cond.into_where_clause()));
         self
     }
 
     pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
-
         self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
         self
     }
@@ -596,7 +594,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         let qi = |name: &str| dialect.quote_identifier(name);
         StandardSqlRenderer.render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, dialect))
     }
-
 }
 
 impl<V: Clone + std::fmt::Debug> UnionQueryOps<V> for UnionQuery<V> {
@@ -653,7 +650,6 @@ impl<V: Clone + std::fmt::Debug> UnionQueryOps<V> for UnionQuery<V> {
         };
         StandardSqlRenderer.render_union(&tree, &cfg)
     }
-
 }
 
 impl<V: Clone + std::fmt::Debug> UnionQuery<V> {

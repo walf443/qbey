@@ -230,8 +230,7 @@ fn render_select_item(item: &SelectItem, cfg: &RenderConfig) -> String {
     }
 }
 
-/// Render the SELECT clause (columns or aggregate expressions) as a string.
-/// Shared by `render_select_core` and CTE-aware rendering in `standard.rs`.
+/// Render the SELECT clause as a string.
 pub(super) fn render_select_clause(
     select: &crate::tree::SelectClause,
     cfg: &RenderConfig,

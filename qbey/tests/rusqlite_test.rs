@@ -1,7 +1,7 @@
 #![cfg(feature = "test-rusqlite")]
 
-use rusqlite::{Connection, params_from_iter};
 use qbey::{LikeExpression, col, qbey_from_subquery_with, qbey_with, table};
+use rusqlite::{Connection, params_from_iter};
 
 #[derive(Debug, Clone)]
 enum SqliteValue {

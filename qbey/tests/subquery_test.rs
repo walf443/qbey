@@ -82,4 +82,3 @@ fn test_from_subquery_with_join() {
         r#"SELECT "user_id" FROM (SELECT "user_id", "amount" FROM "orders" WHERE "status" = ?) AS "t" INNER JOIN "users" ON "t"."user_id" = "users"."id""#
     );
 }
-

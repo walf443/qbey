@@ -273,10 +273,7 @@ fn apply_index_hints_to<V: Clone>(
 }
 
 /// Create a MySQL-specific query that selects from a subquery.
-pub fn qbey_from_subquery(
-    sub: impl qbey::IntoSelectTree<Value>,
-    alias: &str,
-) -> MysqlQuery<Value> {
+pub fn qbey_from_subquery(sub: impl qbey::IntoSelectTree<Value>, alias: &str) -> MysqlQuery<Value> {
     MysqlQuery::wrap(qbey::Query::from_subquery(sub, alias))
 }
 
@@ -519,7 +516,6 @@ impl<V: Clone + std::fmt::Debug> qbey::UnionQueryOps<V> for MysqlUnionQuery<V> {
         let qi = |name: &str| MySQL.quote_identifier(name);
         StandardSqlRenderer.render_union(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySQL))
     }
-
 }
 
 #[cfg(test)]
