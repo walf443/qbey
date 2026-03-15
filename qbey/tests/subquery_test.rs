@@ -83,24 +83,3 @@ fn test_from_subquery_with_join() {
     );
 }
 
-#[test]
-fn test_from_subquery_cte_where_before_join() {
-    let mut sub = qbey("orders");
-    sub.select(&["user_id", "amount"]);
-    sub.and_where(col("status").eq("completed"));
-
-    let mut q = qbey_from_subquery(sub, "t");
-    q.and_where(col("amount").gt(100));
-    q.join("users", table("t").col("user_id").eq_col("id"));
-    q.select(&["user_id"]);
-
-    let (sql, binds) = q.to_sql();
-    assert_eq!(
-        sql,
-        r#"WITH "_cte_0" AS (SELECT * FROM (SELECT "user_id", "amount" FROM "orders" WHERE "status" = ?) AS "t" WHERE "amount" > ?) SELECT "user_id" FROM "_cte_0" AS "t" INNER JOIN "users" ON "t"."user_id" = "users"."id""#
-    );
-    assert_eq!(
-        binds,
-        vec![Value::String("completed".to_string()), Value::Int(100)]
-    );
-}

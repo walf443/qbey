@@ -385,25 +385,6 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\", \"tenant_id\")");
 ```
 
-#### Call order matters: WHERE before JOIN
-
-The order of `and_where` / `or_where` and `join` / `left_join` calls affects the generated SQL.
-If `and_where` is called before `join`, a CTE (Common Table Expression) is automatically generated to preserve the intended semantics.
-
-```rust
-# use qbey::{qbey, col, table};
-let mut q = qbey("users");
-q.and_where(col("age").gt(25));   // WHERE first
-q.join("orders", table("users").col("id").eq_col("user_id"));  // then JOIN
-q.select(&["id", "name"]);
-
-// Standard SQL: CTE is generated to filter before joining
-let (sql, _) = q.to_sql();
-assert_eq!(sql, r#"WITH "_cte_0" AS (SELECT * FROM "users" WHERE "age" > ?) SELECT "id", "name" FROM "_cte_0" AS "users" INNER JOIN "orders" ON "users"."id" = "orders"."user_id""#);
-```
-
-When `join` is called before `and_where` (the traditional order), no CTE is generated and standard SQL is produced as usual.
-
 ### Table aliases and qualified columns
 
 ```rust

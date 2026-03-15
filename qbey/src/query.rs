@@ -93,8 +93,6 @@ pub struct Query<V: Clone + std::fmt::Debug = Value> {
     pub(crate) order_bys: Vec<OrderByClause>,
     pub(crate) limit_val: Option<u64>,
     pub(crate) offset_val: Option<u64>,
-    /// Records the order of WHERE and JOIN operations for CTE generation.
-    pub(crate) stage_order: Vec<crate::tree::StageRef>,
     /// Row-level locking clause (e.g., `"UPDATE"` → `FOR UPDATE`).
     pub(crate) lock_for: Option<String>,
 }
@@ -216,7 +214,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             order_bys: Vec::new(),
             limit_val: None,
             offset_val: None,
-            stage_order: Vec::new(),
+
             lock_for: None,
         }
     }
@@ -253,7 +251,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             order_bys: Vec::new(),
             limit_val: None,
             offset_val: None,
-            stage_order: Vec::new(),
+
             lock_for: None,
         }
     }
@@ -264,15 +262,13 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     }
 
     pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
-        self.stage_order
-            .push(crate::tree::StageRef::Where(self.wheres.len()));
+
         self.wheres.push(WhereEntry::And(cond.into_where_clause()));
         self
     }
 
     pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
-        self.stage_order
-            .push(crate::tree::StageRef::Where(self.wheres.len()));
+
         self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
         self
     }
@@ -327,17 +323,12 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     }
 
     /// Add an INNER JOIN clause.
-    ///
-    /// The order of `join` relative to `and_where` / `or_where` affects SQL generation.
-    /// If `and_where` is called **before** `join`, standard SQL rendering wraps the
-    /// preceding WHERE in a CTE so the filter is applied before the join.
     pub fn join(&mut self, table: impl IntoJoinTable, condition: JoinCondition) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
         let mut condition = condition;
         resolve_join_condition(&mut condition, resolve_name);
-        self.stage_order
-            .push(crate::tree::StageRef::Join(self.joins.len()));
+
         self.joins.push(JoinClause {
             join_type: JoinType::Inner,
             table: name,
@@ -349,16 +340,12 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     }
 
     /// Add a LEFT JOIN clause.
-    ///
-    /// See [`join`](Self::join) for how call order relative to `and_where` affects
-    /// CTE generation in standard SQL.
     pub fn left_join(&mut self, table: impl IntoJoinTable, condition: JoinCondition) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
         let mut condition = condition;
         resolve_join_condition(&mut condition, resolve_name);
-        self.stage_order
-            .push(crate::tree::StageRef::Join(self.joins.len()));
+
         self.joins.push(JoinClause {
             join_type: JoinType::Left,
             table: name,
@@ -371,9 +358,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
 
     /// Add a JOIN clause with a custom join type. Used by dialect crates for
     /// dialect-specific join types (e.g., STRAIGHT_JOIN in MySQL).
-    ///
-    /// See [`join`](Self::join) for how call order relative to `and_where` affects
-    /// CTE generation in standard SQL.
     pub fn add_join(
         &mut self,
         join_type: JoinType,
@@ -384,8 +368,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         let resolve_name = alias.as_deref().unwrap_or(&name);
         let mut condition = condition;
         resolve_join_condition(&mut condition, resolve_name);
-        self.stage_order
-            .push(crate::tree::StageRef::Join(self.joins.len()));
+
         self.joins.push(JoinClause {
             join_type,
             table: name,
@@ -443,8 +426,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         let tree = sub.into_select_tree();
         let mut condition = condition;
         resolve_join_condition(&mut condition, alias);
-        self.stage_order
-            .push(crate::tree::StageRef::Join(self.joins.len()));
+
         self.joins.push(JoinClause {
             join_type,
             table: String::new(),

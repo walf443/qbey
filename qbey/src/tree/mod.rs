@@ -5,16 +5,6 @@ pub fn default_quote_identifier(name: &str) -> String {
     format!("\"{}\"", name.replace('"', "\"\""))
 }
 
-/// Records the order in which WHERE and JOIN operations were added to a query.
-/// Used to detect CTE boundaries (WHERE before JOIN) during rendering.
-#[derive(Debug, Clone)]
-pub enum StageRef {
-    /// A WHERE clause was added; the value is the index into `wheres`.
-    Where(usize),
-    /// A JOIN clause was added; the value is the index into `joins`.
-    Join(usize),
-}
-
 /// The source of a FROM clause — either a table name or a subquery.
 #[derive(Debug, Clone)]
 pub enum FromSource<V: Clone = crate::Value> {
@@ -71,9 +61,6 @@ pub struct SelectTree<V: Clone = crate::Value> {
     pub order_bys: Vec<OrderByClause>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
-    /// Records the order in which WHERE and JOIN operations were added.
-    /// Used to detect CTE boundaries when WHERE appears before JOIN.
-    pub stage_order: Vec<StageRef>,
     /// Row-level locking clause (e.g., `"UPDATE"` → `FOR UPDATE`).
     pub lock_for: Option<String>,
 }
@@ -108,7 +95,6 @@ impl<V: Clone> SelectTree<V> {
             order_bys: self.order_bys,
             limit: self.limit,
             offset: self.offset,
-            stage_order: self.stage_order,
             lock_for: self.lock_for,
         }
     }
@@ -147,7 +133,6 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             order_bys: query.order_bys.clone(),
             limit: query.limit_val,
             offset: query.offset_val,
-            stage_order: query.stage_order.clone(),
             lock_for: query.lock_for.clone(),
         }
     }
@@ -184,7 +169,6 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             order_bys: query.order_bys,
             limit: query.limit_val,
             offset: query.offset_val,
-            stage_order: query.stage_order,
             lock_for: query.lock_for,
         }
     }

@@ -135,34 +135,6 @@ fn test_join_with_qualified_col_on_right() {
 }
 
 #[test]
-fn test_cte_where_then_join() {
-    let mut q = qbey("users");
-    q.and_where(col("age").gt(25));
-    q.join("orders", table("users").col("id").eq_col("user_id"));
-    q.select(&["id", "name"]);
-
-    let (sql, _) = q.to_sql();
-    assert_eq!(
-        sql,
-        "WITH \"_cte_0\" AS (SELECT * FROM \"users\" WHERE \"age\" > ?) SELECT \"id\", \"name\" FROM \"_cte_0\" AS \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\""
-    );
-}
-
-#[test]
-fn test_join_then_where_no_cte() {
-    let mut q = qbey("users");
-    q.join("orders", table("users").col("id").eq_col("user_id"));
-    q.and_where(col("age").gt(25));
-    q.select(&["id", "name"]);
-
-    let (sql, _) = q.to_sql();
-    assert_eq!(
-        sql,
-        "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\" WHERE \"age\" > ?"
-    );
-}
-
-#[test]
 fn test_join_subquery_standard() {
     let mut sub = qbey("orders");
     sub.select(&["user_id", "total"]);
@@ -239,30 +211,12 @@ fn test_join_subquery_numbered_placeholders() {
     let (sql, binds) = q.to_sql_with(&PgDialect);
     assert_eq!(
         sql,
-        r#"WITH "_cte_0" AS (SELECT * FROM "users" WHERE "age" > $1) SELECT "id", "name" FROM "_cte_0" AS "users" INNER JOIN (SELECT "user_id", "total" FROM "orders" WHERE "status" = $2) AS "o" ON "users"."id" = "o"."user_id""#
+        r#"SELECT "id", "name" FROM "users" INNER JOIN (SELECT "user_id", "total" FROM "orders" WHERE "status" = $1) AS "o" ON "users"."id" = "o"."user_id" WHERE "age" > $2"#
     );
     assert_eq!(
         binds,
-        vec![Value::Int(25), Value::String("shipped".to_string())]
+        vec![Value::String("shipped".to_string()), Value::Int(25)]
     );
-}
-
-#[test]
-fn test_cte_where_then_join_subquery() {
-    let mut sub = qbey("orders");
-    sub.select(&["user_id", "total"]);
-
-    let mut q = qbey("users");
-    q.and_where(col("age").gt(25));
-    q.join_subquery(sub, "o", table("users").col("id").eq_col("user_id"));
-    q.select(&["id", "name"]);
-
-    let (sql, binds) = q.to_sql();
-    assert_eq!(
-        sql,
-        r#"WITH "_cte_0" AS (SELECT * FROM "users" WHERE "age" > ?) SELECT "id", "name" FROM "_cte_0" AS "users" INNER JOIN (SELECT "user_id", "total" FROM "orders") AS "o" ON "users"."id" = "o"."user_id""#
-    );
-    assert_eq!(binds, vec![Value::Int(25)]);
 }
 
 #[test]
