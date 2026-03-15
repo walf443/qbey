@@ -231,3 +231,94 @@ fn test_query_union_with_compound_query() {
     );
     assert_eq!(binds.len(), 3);
 }
+
+#[test]
+fn test_add_union_on_non_compound_query() {
+    let mut q1 = qbey("employee");
+    q1.and_where(("dept", "eng"));
+    q1.select(&["id", "name"]);
+
+    let mut q2 = qbey("employee");
+    q2.and_where(("dept", "sales"));
+    q2.select(&["id", "name"]);
+
+    // Calling add_union_all directly on a non-compound query converts it
+    q1.add_union_all(&q2);
+
+    let (sql, binds) = q1.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ? UNION ALL SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = ?"
+    );
+    assert_eq!(binds.len(), 2);
+}
+
+#[test]
+fn test_intersect_with_order_by_and_limit() {
+    let mut q1 = qbey("employee");
+    q1.select(&["dept"]);
+
+    let mut q2 = qbey("contractor");
+    q2.select(&["dept"]);
+
+    let mut q = q1.intersect(&q2);
+    q.order_by(col("dept").asc());
+    q.limit(5);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT \"dept\" FROM \"employee\" INTERSECT SELECT \"dept\" FROM \"contractor\" ORDER BY \"dept\" ASC LIMIT 5"
+    );
+}
+
+#[test]
+fn test_except_with_order_by_and_limit() {
+    let mut q1 = qbey("employee");
+    q1.select(&["dept"]);
+
+    let mut q2 = qbey("contractor");
+    q2.select(&["dept"]);
+
+    let mut q = q1.except(&q2);
+    q.order_by(col("dept").desc());
+    q.limit(3);
+    q.offset(1);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT \"dept\" FROM \"employee\" EXCEPT SELECT \"dept\" FROM \"contractor\" ORDER BY \"dept\" DESC LIMIT 3 OFFSET 1"
+    );
+}
+
+#[test]
+fn test_compound_query_with_dialect() {
+    use qbey::Dialect;
+
+    struct Postgres;
+    impl Dialect for Postgres {
+        fn placeholder(&self, index: usize) -> String {
+            format!("${}", index)
+        }
+    }
+
+    let mut q1 = qbey("employee");
+    q1.and_where(("dept", "eng"));
+    q1.select(&["id", "name"]);
+
+    let mut q2 = qbey("employee");
+    q2.and_where(("dept", "sales"));
+    q2.select(&["id", "name"]);
+
+    let mut uq = q1.union_all(&q2);
+    uq.order_by(col("id").asc());
+    uq.limit(10);
+
+    let (sql, binds) = uq.to_sql_with(&Postgres);
+    assert_eq!(
+        sql,
+        "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = $1 UNION ALL SELECT \"id\", \"name\" FROM \"employee\" WHERE \"dept\" = $2 ORDER BY \"id\" ASC LIMIT 10"
+    );
+    assert_eq!(binds.len(), 2);
+}

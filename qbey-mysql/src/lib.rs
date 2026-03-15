@@ -349,6 +349,8 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
             }
         }
         MysqlQuery {
+            // inner is a dummy Query; for compound queries it only serves as a
+            // container for union-level order_bys / limit / offset via Deref.
             inner: qbey::qbey_with(""),
             force_indexes: Vec::new(),
             use_indexes: Vec::new(),
@@ -360,6 +362,7 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
     fn add_combine(&mut self, op: qbey::SetOp, other: &MysqlQuery<V>) {
         if self.set_operations.is_empty() {
             let first = self.clone();
+            // Replace inner with a dummy; it only holds union-level order_bys / limit / offset.
             self.inner = qbey::qbey_with("");
             self.force_indexes = Vec::new();
             self.use_indexes = Vec::new();
@@ -459,14 +462,14 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         tree
     }
 
-    /// Build a UnionTree from this compound query.
-    fn to_set_operation_tree(&self) -> qbey::tree::UnionTree<V> {
+    /// Build a SetOperationTree from this compound query.
+    fn to_set_operation_tree(&self) -> qbey::tree::SetOperationTree<V> {
         let parts = self
             .set_operations
             .iter()
             .map(|(op, mq)| (op.clone(), mq.to_tree()))
             .collect();
-        qbey::tree::UnionTree {
+        qbey::tree::SetOperationTree {
             parts,
             order_bys: self.inner.order_bys().to_vec(),
             limit: self.inner.limit_val(),
@@ -484,7 +487,7 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
             StandardSqlRenderer.render_select(&tree, &cfg)
         } else {
             let tree = self.to_set_operation_tree();
-            StandardSqlRenderer.render_union(&tree, &cfg)
+            StandardSqlRenderer.render_set_operation(&tree, &cfg)
         }
     }
 

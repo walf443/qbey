@@ -2,12 +2,12 @@ use super::{
     RenderConfig, Renderer, append_limit_offset_flat, append_lock_clause, append_order_by,
     render_select_core, set_op_keyword,
 };
-use crate::tree::{SelectTree, UnionTree};
+use crate::tree::{SelectTree, SetOperationTree};
 
 pub struct StandardSqlRenderer;
 
 impl StandardSqlRenderer {
-    fn render_union_part<V: Clone>(
+    fn render_set_operation_part<V: Clone>(
         &self,
         tree: &SelectTree<V>,
         cfg: &RenderConfig,
@@ -42,7 +42,11 @@ impl Renderer for StandardSqlRenderer {
         (sql, binds)
     }
 
-    fn render_union<V: Clone>(&self, tree: &UnionTree<V>, cfg: &RenderConfig) -> (String, Vec<V>) {
+    fn render_set_operation<V: Clone>(
+        &self,
+        tree: &SetOperationTree<V>,
+        cfg: &RenderConfig,
+    ) -> (String, Vec<V>) {
         let mut binds = Vec::new();
         let mut sql = String::new();
 
@@ -50,7 +54,7 @@ impl Renderer for StandardSqlRenderer {
             if i > 0 {
                 sql.push_str(&format!(" {} ", set_op_keyword(op)));
             }
-            sql.push_str(&self.render_union_part(part, cfg, &mut binds));
+            sql.push_str(&self.render_set_operation_part(part, cfg, &mut binds));
         }
 
         append_order_by(&mut sql, &tree.order_bys, cfg, " ");

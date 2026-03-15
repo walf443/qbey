@@ -65,9 +65,9 @@ pub struct SelectTree<V: Clone = crate::Value> {
     pub lock_for: Option<String>,
 }
 
-/// AST for a UNION query, generic over bind value type.
+/// AST for a compound query using set operations (UNION, INTERSECT, EXCEPT).
 #[derive(Debug, Clone)]
-pub struct UnionTree<V: Clone = crate::Value> {
+pub struct SetOperationTree<V: Clone = crate::Value> {
     pub parts: Vec<(crate::SetOp, SelectTree<V>)>,
     pub order_bys: Vec<OrderByClause>,
     pub limit: Option<u64>,

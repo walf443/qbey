@@ -9,7 +9,7 @@ use crate::where_clause::{IntoIncluded, IntoWhereClause, WhereClause, WhereEntry
 
 use crate::renderer::standard::StandardSqlRenderer;
 use crate::renderer::{RenderConfig, Renderer};
-use crate::tree::{SelectTree, UnionTree, default_quote_identifier};
+use crate::tree::{SelectTree, SetOperationTree, default_quote_identifier};
 
 use crate::Dialect;
 
@@ -677,20 +677,20 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         SelectTree::from_query(self)
     }
 
-    /// Build a UnionTree from this compound query.
+    /// Build a SetOperationTree from this compound query.
     ///
     /// Panics if this is not a compound query.
-    pub fn to_set_operation_tree(&self) -> UnionTree<V> {
+    pub fn to_set_operation_tree(&self) -> SetOperationTree<V> {
         assert!(
             !self.set_operations.is_empty(),
-            "Cannot build UnionTree from a non-compound query; use to_tree()"
+            "Cannot build SetOperationTree from a non-compound query; use to_tree()"
         );
         let parts = self
             .set_operations
             .iter()
             .map(|(op, q)| (op.clone(), SelectTree::from_query(q)))
             .collect();
-        UnionTree {
+        SetOperationTree {
             parts,
             order_bys: self.order_bys.clone(),
             limit: self.limit_val,
@@ -710,7 +710,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             StandardSqlRenderer.render_select(&tree, &cfg)
         } else {
             let tree = self.to_set_operation_tree();
-            StandardSqlRenderer.render_union(&tree, &cfg)
+            StandardSqlRenderer.render_set_operation(&tree, &cfg)
         }
     }
 
@@ -724,7 +724,7 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             StandardSqlRenderer.render_select(&tree, &cfg)
         } else {
             let tree = self.to_set_operation_tree();
-            StandardSqlRenderer.render_union(&tree, &cfg)
+            StandardSqlRenderer.render_set_operation(&tree, &cfg)
         }
     }
 }
