@@ -443,21 +443,10 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     /// If `self` is not yet a compound query, it is converted into one.
     fn add_combine(&mut self, op: SetOp, other: &Query<V>) {
         if self.set_operations.is_empty() {
-            // Convert self into a compound query
+            // Convert self into a compound query: move current state into
+            // set_operations and reset self to an empty shell.
             let first = self.clone();
-            self.table = String::new();
-            self.table_alias = None;
-            self.from_subquery = None;
-            self.selects = Vec::new();
-            self.wheres = Vec::new();
-            self.havings = Vec::new();
-            self.group_bys = Vec::new();
-            self.joins = Vec::new();
-            self.join_subqueries = Vec::new();
-            self.order_bys = Vec::new();
-            self.limit_val = None;
-            self.offset_val = None;
-            self.lock_for = None;
+            *self = Query::new("");
             self.set_operations = vec![(SetOp::Union, first)]; // first part's SetOp is placeholder
         }
         let other_parts = other.as_set_operation_parts();

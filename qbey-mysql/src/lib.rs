@@ -361,12 +361,10 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
 
     fn add_combine(&mut self, op: qbey::SetOp, other: &MysqlQuery<V>) {
         if self.set_operations.is_empty() {
+            // Convert self into a compound query: move current state into
+            // set_operations and reset self to an empty shell.
             let first = self.clone();
-            // Replace inner with a dummy; it only holds union-level order_bys / limit / offset.
-            self.inner = qbey::qbey_with("");
-            self.force_indexes = Vec::new();
-            self.use_indexes = Vec::new();
-            self.ignore_indexes = Vec::new();
+            *self = MysqlQuery::wrap(qbey::qbey_with(""));
             self.set_operations = vec![(qbey::SetOp::Union, first)];
         }
         let other_parts = other.as_set_operation_parts();

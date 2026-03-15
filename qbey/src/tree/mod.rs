@@ -104,6 +104,11 @@ impl<V: Clone> SelectTree<V> {
 
 impl<V: Clone + std::fmt::Debug> SelectTree<V> {
     pub fn from_query(query: &crate::Query<V>) -> Self {
+        debug_assert!(
+            query.set_operations.is_empty(),
+            "SelectTree::from_query called on a compound query; use to_set_operation_tree()"
+        );
+
         let select = SelectClause::Columns(query.selects.clone());
 
         let source = match &query.from_subquery {
@@ -139,6 +144,11 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
 
     /// Convert a Query into a SelectTree by moving fields instead of cloning.
     pub fn from_query_owned(query: crate::Query<V>) -> Self {
+        debug_assert!(
+            query.set_operations.is_empty(),
+            "SelectTree::from_query_owned called on a compound query; use to_set_operation_tree()"
+        );
+
         let select = SelectClause::Columns(query.selects);
 
         let source = match query.from_subquery {
