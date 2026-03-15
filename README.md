@@ -176,34 +176,15 @@ assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT ((\"role\" = ? OR \"role\"
 ### Aggregate / GROUP BY
 
 ```rust
-# use qbey::{qbey, col, aggregate};
+# use qbey::{qbey, col, RawSql};
 let mut q = qbey("employee");
-q.aggregate(&[
-    aggregate::count_all().as_("cnt"),
-    aggregate::sum("salary").as_("total_salary"),
-]);
+q.select(&["dept"]);
+q.add_select_expr(RawSql::new("COUNT(*)"), Some("cnt"));
+q.add_select_expr(RawSql::new("SUM(\"salary\")"), Some("total_salary"));
 q.group_by(&["dept"]);
 
 let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total_salary\" FROM \"employee\" GROUP BY \"dept\"");
-```
-
-Available aggregate functions: `count_all()`, `count(col)`, `sum(col)`, `avg(col)`, `min(col)`, `max(col)`, `expr(raw_sql)`.
-
-### HAVING
-
-`and_where` / `or_where` called after `aggregate()` automatically become HAVING conditions.
-
-```rust
-# use qbey::{qbey, col, aggregate};
-let mut q = qbey("employee");
-q.and_where(col("active").eq(true));       // WHERE (before aggregate)
-q.aggregate(&[aggregate::count_all().as_("cnt")]);
-q.group_by(&["dept"]);
-q.and_where(col("cnt").gt(5));             // HAVING (after aggregate)
-
-let (sql, binds) = q.to_sql();
-assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" WHERE \"active\" = ? GROUP BY \"dept\" HAVING \"cnt\" > ?");
 ```
 
 ### Order By

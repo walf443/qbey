@@ -130,14 +130,6 @@ fn test_delete_from_query_with_joins_panics() {
 }
 
 #[test]
-#[should_panic(expected = "aggregates which are not supported in DELETE")]
-fn test_delete_from_query_with_aggregates_panics() {
-    let mut q = qbey("employee");
-    q.aggregate(&[aggregate::count_all()]);
-    let _ = q.into_delete();
-}
-
-#[test]
 #[should_panic(expected = "ORDER BY which is not supported in DELETE")]
 fn test_delete_from_query_with_order_by_panics() {
     let mut q = qbey("employee");

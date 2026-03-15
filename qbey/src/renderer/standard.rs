@@ -187,10 +187,8 @@ impl StandardSqlRenderer {
         }
 
         // GROUP BY / HAVING
-        if let crate::tree::SelectClause::Aggregate { group_bys, .. } = &tree.select
-            && !group_bys.is_empty()
-        {
-            let cols: Vec<String> = group_bys.iter().map(|c| (cfg.qi)(c)).collect();
+        if !tree.group_bys.is_empty() {
+            let cols: Vec<String> = tree.group_bys.iter().map(|c| (cfg.qi)(c)).collect();
             main_sql.push_str(&format!(" GROUP BY {}", cols.join(", ")));
         }
 

@@ -255,17 +255,6 @@ pg_test!(test_between, |client| {
     assert_eq!(rows[1].get::<_, String>("name"), "Bob");
 });
 
-pg_test!(test_aggregate_count, |client| {
-    let mut q = qbey_with::<PgValue>("orders");
-    q.aggregate(&[qbey::aggregate::count_all().as_("cnt")]);
-    q.group_by(&["status"]);
-    q.select(&["status"]);
-    let (sql, _) = q.to_sql_with(&PostgresDialect);
-
-    let rows = client.query(&sql, &[]).unwrap();
-    assert_eq!(rows.len(), 2);
-});
-
 pg_test!(test_union, |client| {
     let mut q1 = qbey_with::<PgValue>("users");
     q1.and_where(col("age").gt(30));

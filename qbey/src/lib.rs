@@ -48,5 +48,4 @@ pub use where_clause::{
 };
 
 // Crate-internal re-exports used by renderer and tree modules.
-pub(crate) use aggregate::AggregateFunc;
 pub(crate) use where_clause::WhereEntry;

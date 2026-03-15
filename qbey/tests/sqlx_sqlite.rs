@@ -234,20 +234,6 @@ async fn test_not_between() {
 }
 
 #[tokio::test]
-async fn test_aggregate_count() {
-    let pool = setup_db().await;
-
-    let mut q = qbey_with::<SqliteValue>("orders");
-    q.aggregate(&[qbey::aggregate::count_all().as_("cnt")]);
-    q.group_by(&["status"]);
-    q.select(&["status"]);
-    let (sql, _) = q.to_sql();
-
-    let rows = sqlx::query(&sql).fetch_all(&pool).await.unwrap();
-    assert_eq!(rows.len(), 2); // shipped, pending
-}
-
-#[tokio::test]
 async fn test_union() {
     let pool = setup_db().await;
 

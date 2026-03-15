@@ -1,6 +1,6 @@
 use crate::{
-    AggregateExpr, AggregateFunc, Col, JoinClause, JoinCondition, JoinType, OrderByClause,
-    SelectItem, SortDir, WhereClause, WhereEntry,
+    Col, JoinClause, JoinCondition, JoinType, OrderByClause, SelectItem, SortDir, WhereClause,
+    WhereEntry,
 };
 
 pub mod delete;
@@ -99,22 +99,6 @@ pub(super) fn render_wheres<V: Clone>(
     }
 
     Some(sql)
-}
-
-pub(super) fn render_aggregate_expr(expr: &AggregateExpr, cfg: &RenderConfig) -> String {
-    let func_str = match &expr.expr {
-        AggregateFunc::CountAll => "COUNT(*)".to_string(),
-        AggregateFunc::Count(col) => format!("COUNT({})", (cfg.qi)(col)),
-        AggregateFunc::Sum(col) => format!("SUM({})", (cfg.qi)(col)),
-        AggregateFunc::Avg(col) => format!("AVG({})", (cfg.qi)(col)),
-        AggregateFunc::Min(col) => format!("MIN({})", (cfg.qi)(col)),
-        AggregateFunc::Max(col) => format!("MAX({})", (cfg.qi)(col)),
-        AggregateFunc::Expr(raw) => raw.to_string(),
-    };
-    match &expr.alias {
-        Some(alias) => format!("{} AS {}", func_str, (cfg.qi)(alias)),
-        None => func_str,
-    }
 }
 
 pub(super) fn render_from<V: Clone>(
@@ -256,16 +240,6 @@ pub(super) fn render_select_clause(
 
     match select {
         SelectClause::Columns(cols) => render_select_columns(cols, cfg),
-        SelectClause::Aggregate { group_bys, exprs } => {
-            let mut items = Vec::new();
-            for col in group_bys {
-                items.push((cfg.qi)(col));
-            }
-            for expr in exprs {
-                items.push(render_aggregate_expr(expr, cfg));
-            }
-            format!("SELECT {}", items.join(", "))
-        }
     }
 }
 
@@ -290,10 +264,8 @@ pub(super) fn render_select_core<V: Clone>(
         parts.push(format!("WHERE {}", where_sql));
     }
 
-    if let crate::tree::SelectClause::Aggregate { group_bys, .. } = &tree.select
-        && !group_bys.is_empty()
-    {
-        let cols: Vec<String> = group_bys.iter().map(|c| (cfg.qi)(c)).collect();
+    if !tree.group_bys.is_empty() {
+        let cols: Vec<String> = tree.group_bys.iter().map(|c| (cfg.qi)(c)).collect();
         parts.push(format!("GROUP BY {}", cols.join(", ")));
     }
 

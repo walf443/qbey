@@ -234,26 +234,6 @@ fn test_between() {
 }
 
 #[test]
-fn test_aggregate_count() {
-    let conn = setup_db();
-
-    let mut q = qbey_with::<SqliteValue>("orders");
-    q.aggregate(&[qbey::aggregate::count_all().as_("cnt")]);
-    q.group_by(&["status"]);
-    q.select(&["status"]);
-    let (sql, _) = q.to_sql();
-
-    let mut stmt = conn.prepare(&sql).unwrap();
-    let rows: Vec<(String, i64)> = stmt
-        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
-        .unwrap()
-        .map(|r| r.unwrap())
-        .collect();
-
-    assert_eq!(rows.len(), 2);
-}
-
-#[test]
 fn test_union() {
     let conn = setup_db();
 

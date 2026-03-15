@@ -272,20 +272,6 @@ async fn test_between() {
 }
 
 #[tokio::test]
-async fn test_aggregate_count() {
-    let client = setup_client().await;
-
-    let mut q = qbey_with::<PgValue>("orders");
-    q.aggregate(&[qbey::aggregate::count_all().as_("cnt")]);
-    q.group_by(&["status"]);
-    q.select(&["status"]);
-    let (sql, _) = q.to_sql_with(&PostgresDialect);
-
-    let rows = client.query(&sql, &[]).await.unwrap();
-    assert_eq!(rows.len(), 2);
-}
-
-#[tokio::test]
 async fn test_union() {
     let client = setup_client().await;
 

@@ -1,4 +1,4 @@
-use crate::{AggregateExpr, JoinClause, OrderByClause, SelectItem, WhereEntry};
+use crate::{JoinClause, OrderByClause, SelectItem, WhereEntry};
 
 /// Default double-quote identifier quoting (SQL standard).
 pub fn default_quote_identifier(name: &str) -> String {
@@ -53,11 +53,6 @@ impl<V: Clone> FromClause<V> {
 pub enum SelectClause {
     /// SELECT * or SELECT col1, col2, ...
     Columns(Vec<SelectItem>),
-    /// Aggregate: SELECT group_cols..., agg_exprs...
-    Aggregate {
-        group_bys: Vec<String>,
-        exprs: Vec<AggregateExpr>,
-    },
 }
 
 /// AST for a single SELECT query, generic over bind value type.
@@ -72,6 +67,7 @@ pub struct SelectTree<V: Clone = crate::Value> {
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) havings: Vec<WhereEntry<V>>,
     pub select: SelectClause,
+    pub group_bys: Vec<String>,
     pub order_bys: Vec<OrderByClause>,
     pub limit: Option<u64>,
     pub offset: Option<u64>,
@@ -108,6 +104,7 @@ impl<V: Clone> SelectTree<V> {
             wheres: self.wheres.into_iter().map(|w| w.map_values(f)).collect(),
             havings: self.havings.into_iter().map(|w| w.map_values(f)).collect(),
             select: self.select,
+            group_bys: self.group_bys,
             order_bys: self.order_bys,
             limit: self.limit,
             offset: self.offset,
@@ -121,14 +118,7 @@ impl<V: Clone> SelectTree<V> {
 
 impl<V: Clone + std::fmt::Debug> SelectTree<V> {
     pub fn from_query(query: &crate::Query<V>) -> Self {
-        let select = if !query.aggregates.is_empty() {
-            SelectClause::Aggregate {
-                group_bys: query.group_bys.clone(),
-                exprs: query.aggregates.clone(),
-            }
-        } else {
-            SelectClause::Columns(query.selects.clone())
-        };
+        let select = SelectClause::Columns(query.selects.clone());
 
         let source = match &query.from_subquery {
             Some(sq) => FromSource::Subquery(sq.clone()),
@@ -153,6 +143,7 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             wheres: query.wheres.clone(),
             havings: query.havings.clone(),
             select,
+            group_bys: query.group_bys.clone(),
             order_bys: query.order_bys.clone(),
             limit: query.limit_val,
             offset: query.offset_val,
@@ -163,14 +154,7 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
 
     /// Convert a Query into a SelectTree by moving fields instead of cloning.
     pub fn from_query_owned(query: crate::Query<V>) -> Self {
-        let select = if !query.aggregates.is_empty() {
-            SelectClause::Aggregate {
-                group_bys: query.group_bys,
-                exprs: query.aggregates,
-            }
-        } else {
-            SelectClause::Columns(query.selects)
-        };
+        let select = SelectClause::Columns(query.selects);
 
         let source = match query.from_subquery {
             Some(sq) => FromSource::Subquery(sq),
@@ -196,6 +180,7 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
             wheres: query.wheres,
             havings: query.havings,
             select,
+            group_bys: query.group_bys,
             order_bys: query.order_bys,
             limit: query.limit_val,
             offset: query.offset_val,

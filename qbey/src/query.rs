@@ -1,4 +1,3 @@
-use crate::aggregate::AggregateExpr;
 use crate::column::OrderByClause;
 use crate::column::{Col, SelectItem, TableRef};
 use crate::delete::DeleteQuery;
@@ -87,7 +86,6 @@ pub struct Query<V: Clone + std::fmt::Debug = Value> {
     pub(crate) selects: Vec<SelectItem>,
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) havings: Vec<WhereEntry<V>>,
-    pub(crate) aggregates: Vec<AggregateExpr>,
     pub(crate) group_bys: Vec<String>,
     pub(crate) joins: Vec<JoinClause>,
     /// Subquery sources for joins, aligned with `joins` by index.
@@ -212,7 +210,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             selects: Vec::new(),
             wheres: Vec::new(),
             havings: Vec::new(),
-            aggregates: Vec::new(),
             group_bys: Vec::new(),
             joins: Vec::new(),
             join_subqueries: Vec::new(),
@@ -250,7 +247,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             selects: Vec::new(),
             wheres: Vec::new(),
             havings: Vec::new(),
-            aggregates: Vec::new(),
             group_bys: Vec::new(),
             joins: Vec::new(),
             join_subqueries: Vec::new(),
@@ -268,24 +264,16 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
     }
 
     pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
-        if self.aggregates.is_empty() {
-            self.stage_order
-                .push(crate::tree::StageRef::Where(self.wheres.len()));
-            self.wheres.push(WhereEntry::And(cond.into_where_clause()));
-        } else {
-            self.havings.push(WhereEntry::And(cond.into_where_clause()));
-        }
+        self.stage_order
+            .push(crate::tree::StageRef::Where(self.wheres.len()));
+        self.wheres.push(WhereEntry::And(cond.into_where_clause()));
         self
     }
 
     pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
-        if self.aggregates.is_empty() {
-            self.stage_order
-                .push(crate::tree::StageRef::Where(self.wheres.len()));
-            self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
-        } else {
-            self.havings.push(WhereEntry::Or(cond.into_where_clause()));
-        }
+        self.stage_order
+            .push(crate::tree::StageRef::Where(self.wheres.len()));
+        self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
         self
     }
 
@@ -330,11 +318,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             raw,
             alias: alias.map(|a| a.to_string()),
         });
-        self
-    }
-
-    pub fn aggregate(&mut self, exprs: &[AggregateExpr]) -> &mut Self {
-        self.aggregates = exprs.to_vec();
         self
     }
 
@@ -731,10 +714,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
             "Query has JOINs which are not supported in UPDATE and will be discarded"
         );
         assert!(
-            self.aggregates.is_empty(),
-            "Query has aggregates which are not supported in UPDATE and will be discarded"
-        );
-        assert!(
             self.order_bys.is_empty(),
             "Query has ORDER BY which is not supported in UPDATE and will be discarded"
         );
@@ -762,10 +741,6 @@ impl<V: Clone + std::fmt::Debug> Query<V> {
         assert!(
             self.joins.is_empty(),
             "Query has JOINs which are not supported in DELETE and will be discarded"
-        );
-        assert!(
-            self.aggregates.is_empty(),
-            "Query has aggregates which are not supported in DELETE and will be discarded"
         );
         assert!(
             self.order_bys.is_empty(),
