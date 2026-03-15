@@ -1,7 +1,7 @@
 
 # qbey
 
-pipe syntax based sql query builder
+sql query builder
 
 > **Note:** This project is in early development. APIs may change without backward compatibility.
 
