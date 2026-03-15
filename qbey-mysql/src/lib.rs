@@ -27,20 +27,16 @@ impl qbey::Dialect for MySQL {
 }
 
 /// MySQL-specific query builder wrapping the core Query.
+///
+/// Supports set operations (UNION, INTERSECT, EXCEPT) via `union()`, `union_all()`, etc.
+/// When `set_operations` is non-empty, this query is a compound query.
 #[derive(Clone)]
 pub struct MysqlQuery<V: Clone + std::fmt::Debug = Value> {
     inner: qbey::Query<V>,
     force_indexes: Vec<String>,
     use_indexes: Vec<String>,
     ignore_indexes: Vec<String>,
-}
-
-/// A combined query built from UNION / UNION ALL on MysqlQuery.
-pub struct MysqlUnionQuery<V: Clone + std::fmt::Debug = Value> {
-    parts: Vec<(qbey::SetOp, MysqlQuery<V>)>,
-    order_bys: Vec<qbey::OrderByClause>,
-    limit_val: Option<u64>,
-    offset_val: Option<u64>,
+    set_operations: Vec<(qbey::SetOp, MysqlQuery<V>)>,
 }
 
 /// MySQL-specific UPDATE query builder.
@@ -228,20 +224,6 @@ impl<V: Clone + std::fmt::Debug> qbey::IntoSelectTree<V> for MysqlQuery<V> {
     }
 }
 
-impl<V: Clone + std::fmt::Debug> qbey::AsUnionParts for MysqlQuery<V> {
-    type Query = MysqlQuery<V>;
-    fn as_union_parts(&self) -> Vec<(qbey::SetOp, MysqlQuery<V>)> {
-        vec![(qbey::SetOp::Union, self.clone())]
-    }
-}
-
-impl<V: Clone + std::fmt::Debug> qbey::AsUnionParts for MysqlUnionQuery<V> {
-    type Query = MysqlQuery<V>;
-    fn as_union_parts(&self) -> Vec<(qbey::SetOp, MysqlQuery<V>)> {
-        self.parts.clone()
-    }
-}
-
 /// Create a MySQL-specific query builder for the given table.
 ///
 /// Accepts a table name (`&str`) or a [`qbey::TableRef`] (created with [`qbey::table()`]).
@@ -299,6 +281,7 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
             force_indexes: Vec::new(),
             use_indexes: Vec::new(),
             ignore_indexes: Vec::new(),
+            set_operations: Vec::new(),
         }
     }
 
@@ -346,46 +329,116 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         self
     }
 
-    pub fn union<T: qbey::AsUnionParts<Query = MysqlQuery<V>>>(
-        &self,
-        other: &T,
-    ) -> MysqlUnionQuery<V> {
-        let mut parts = vec![(qbey::SetOp::Union, self.clone())];
-        let other_parts = other.as_union_parts();
-        for (i, (op, query)) in other_parts.into_iter().enumerate() {
-            if i == 0 {
-                parts.push((qbey::SetOp::Union, query));
-            } else {
-                parts.push((op, query));
-            }
-        }
-        MysqlUnionQuery {
-            parts,
-            order_bys: Vec::new(),
-            limit_val: None,
-            offset_val: None,
+    /// Returns the parts of this query for use in set operations.
+    fn as_set_operation_parts(&self) -> Vec<(qbey::SetOp, MysqlQuery<V>)> {
+        if self.set_operations.is_empty() {
+            vec![(qbey::SetOp::Union, self.clone())] // SetOp is placeholder for the first part
+        } else {
+            self.set_operations.clone()
         }
     }
 
-    pub fn union_all<T: qbey::AsUnionParts<Query = MysqlQuery<V>>>(
-        &self,
-        other: &T,
-    ) -> MysqlUnionQuery<V> {
-        let mut parts = vec![(qbey::SetOp::Union, self.clone())];
-        let other_parts = other.as_union_parts();
-        for (i, (op, query)) in other_parts.into_iter().enumerate() {
+    fn combine(&self, op: qbey::SetOp, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        let mut parts = self.as_set_operation_parts();
+        let other_parts = other.as_set_operation_parts();
+        for (i, (other_op, query)) in other_parts.into_iter().enumerate() {
             if i == 0 {
-                parts.push((qbey::SetOp::UnionAll, query));
+                parts.push((op.clone(), query));
             } else {
-                parts.push((op, query));
+                parts.push((other_op, query));
             }
         }
-        MysqlUnionQuery {
-            parts,
-            order_bys: Vec::new(),
-            limit_val: None,
-            offset_val: None,
+        MysqlQuery {
+            // inner is a dummy Query; for compound queries it only serves as a
+            // container for union-level order_bys / limit / offset via Deref.
+            inner: qbey::qbey_with(""),
+            force_indexes: Vec::new(),
+            use_indexes: Vec::new(),
+            ignore_indexes: Vec::new(),
+            set_operations: parts,
         }
+    }
+
+    fn add_combine(&mut self, op: qbey::SetOp, other: &MysqlQuery<V>) {
+        if self.set_operations.is_empty() {
+            // Convert self into a compound query: move current state into
+            // set_operations and reset self to an empty shell.
+            let first = self.clone();
+            *self = MysqlQuery::wrap(qbey::qbey_with(""));
+            self.set_operations = vec![(qbey::SetOp::Union, first)];
+        }
+        let other_parts = other.as_set_operation_parts();
+        for (i, (other_op, query)) in other_parts.into_iter().enumerate() {
+            if i == 0 {
+                self.set_operations.push((op.clone(), query));
+            } else {
+                self.set_operations.push((other_op, query));
+            }
+        }
+    }
+
+    pub fn union(&self, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        self.combine(qbey::SetOp::Union, other)
+    }
+
+    pub fn union_all(&self, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        self.combine(qbey::SetOp::UnionAll, other)
+    }
+
+    pub fn intersect(&self, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        self.combine(qbey::SetOp::Intersect, other)
+    }
+
+    pub fn intersect_all(&self, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        self.combine(qbey::SetOp::IntersectAll, other)
+    }
+
+    pub fn except(&self, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        self.combine(qbey::SetOp::Except, other)
+    }
+
+    pub fn except_all(&self, other: &MysqlQuery<V>) -> MysqlQuery<V> {
+        self.combine(qbey::SetOp::ExceptAll, other)
+    }
+
+    pub fn add_union(&mut self, other: &MysqlQuery<V>) -> &mut Self {
+        self.add_combine(qbey::SetOp::Union, other);
+        self
+    }
+
+    pub fn add_union_all(&mut self, other: &MysqlQuery<V>) -> &mut Self {
+        self.add_combine(qbey::SetOp::UnionAll, other);
+        self
+    }
+
+    pub fn add_intersect(&mut self, other: &MysqlQuery<V>) -> &mut Self {
+        self.add_combine(qbey::SetOp::Intersect, other);
+        self
+    }
+
+    pub fn add_intersect_all(&mut self, other: &MysqlQuery<V>) -> &mut Self {
+        self.add_combine(qbey::SetOp::IntersectAll, other);
+        self
+    }
+
+    pub fn add_except(&mut self, other: &MysqlQuery<V>) -> &mut Self {
+        self.add_combine(qbey::SetOp::Except, other);
+        self
+    }
+
+    pub fn add_except_all(&mut self, other: &MysqlQuery<V>) -> &mut Self {
+        self.add_combine(qbey::SetOp::ExceptAll, other);
+        self
+    }
+
+    /// Returns true if this query is a compound query (has set operations).
+    pub fn has_set_operations(&self) -> bool {
+        !self.set_operations.is_empty()
+    }
+
+    /// Returns the set operation parts for compound queries.
+    pub fn set_operations(&self) -> &[(qbey::SetOp, MysqlQuery<V>)] {
+        &self.set_operations
     }
 
     /// Build a SelectTree with MySQL-specific index hints applied.
@@ -407,9 +460,28 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         tree
     }
 
+    /// Build a SelectTree for a compound query.
+    ///
+    /// Each part's tree is built with MySQL index hints applied.
+    /// The outer order_bys/limit/offset come from inner (set via Deref).
+    fn to_compound_tree(&self) -> SelectTree<V> {
+        let parts: Vec<_> = self
+            .set_operations
+            .iter()
+            .map(|(op, mq)| (op.clone(), mq.to_tree()))
+            .collect();
+        let mut tree = self.inner.to_tree();
+        tree.set_operations = parts;
+        tree
+    }
+
     /// Build standard SQL with MySQL dialect.
     pub fn to_sql(&self) -> (String, Vec<V>) {
-        let tree = self.to_tree();
+        let tree = if self.set_operations.is_empty() {
+            self.to_tree()
+        } else {
+            self.to_compound_tree()
+        };
         let ph = |n: usize| MySQL.placeholder(n);
         let qi = |name: &str| MySQL.quote_identifier(name);
         StandardSqlRenderer.render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySQL))
@@ -449,79 +521,9 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
     }
 }
 
-impl<V: Clone + std::fmt::Debug> MysqlUnionQuery<V> {
-    fn to_tree(&self) -> qbey::tree::UnionTree<V> {
-        let parts = self
-            .parts
-            .iter()
-            .map(|(op, mq)| (op.clone(), mq.to_tree()))
-            .collect();
-        qbey::tree::UnionTree {
-            parts,
-            order_bys: self.order_bys.clone(),
-            limit: self.limit_val,
-            offset: self.offset_val,
-        }
-    }
-}
-
-impl<V: Clone + std::fmt::Debug> qbey::UnionQueryOps<V> for MysqlUnionQuery<V> {
-    fn union<T: qbey::AsUnionParts<Query = MysqlQuery<V>>>(&mut self, other: &T) -> &mut Self {
-        let parts = other.as_union_parts();
-        for (i, (op, query)) in parts.into_iter().enumerate() {
-            if i == 0 {
-                self.parts.push((qbey::SetOp::Union, query));
-            } else {
-                self.parts.push((op, query));
-            }
-        }
-        self
-    }
-
-    fn union_all<T: qbey::AsUnionParts<Query = MysqlQuery<V>>>(&mut self, other: &T) -> &mut Self {
-        let parts = other.as_union_parts();
-        for (i, (op, query)) in parts.into_iter().enumerate() {
-            if i == 0 {
-                self.parts.push((qbey::SetOp::UnionAll, query));
-            } else {
-                self.parts.push((op, query));
-            }
-        }
-        self
-    }
-
-    fn order_by(&mut self, clause: qbey::OrderByClause) -> &mut Self {
-        self.order_bys.push(clause);
-        self
-    }
-
-    fn order_by_expr(&mut self, raw: qbey::RawSql) -> &mut Self {
-        self.order_bys.push(qbey::OrderByClause::Expr(raw));
-        self
-    }
-
-    fn limit(&mut self, n: u64) -> &mut Self {
-        self.limit_val = Some(n);
-        self
-    }
-
-    fn offset(&mut self, n: u64) -> &mut Self {
-        self.offset_val = Some(n);
-        self
-    }
-
-    fn to_sql(&self) -> (String, Vec<V>) {
-        let tree = self.to_tree();
-        let ph = |n: usize| MySQL.placeholder(n);
-        let qi = |name: &str| MySQL.quote_identifier(name);
-        StandardSqlRenderer.render_union(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySQL))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use qbey::UnionQueryOps;
     use qbey::{col, table};
 
     #[test]
@@ -657,7 +659,7 @@ mod tests {
     }
 
     #[test]
-    fn test_union_with_union_query() {
+    fn test_union_with_add_union() {
         let mut q1 = qbey("employee");
         q1.and_where(("dept", "eng"));
         q1.select(&["id", "name"]);
@@ -676,7 +678,7 @@ mod tests {
 
         let uq2 = q3.union_all(&q4);
         let mut uq1 = q1.union_all(&q2);
-        uq1.union_all(&uq2);
+        uq1.add_union_all(&uq2);
 
         let (sql, binds) = uq1.to_sql();
         assert_eq!(
@@ -687,7 +689,7 @@ mod tests {
     }
 
     #[test]
-    fn test_query_union_with_union_query() {
+    fn test_query_union_with_compound_query() {
         let mut q1 = qbey("employee");
         q1.and_where(("dept", "eng"));
         q1.select(&["id", "name"]);
@@ -1144,6 +1146,132 @@ mod tests {
         assert_eq!(
             sql,
             "SELECT `id`, `name` FROM `users` STRAIGHT_JOIN (SELECT `user_id`, `total` FROM `orders`) AS `o` ON `users`.`id` = `o`.`user_id`"
+        );
+    }
+
+    #[test]
+    fn test_intersect() {
+        let mut q1 = qbey("employee");
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.select(&["dept"]);
+
+        let q = q1.intersect(&q2);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` INTERSECT SELECT `dept` FROM `contractor`"
+        );
+    }
+
+    #[test]
+    fn test_intersect_all() {
+        let mut q1 = qbey("employee");
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.select(&["dept"]);
+
+        let q = q1.intersect_all(&q2);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` INTERSECT ALL SELECT `dept` FROM `contractor`"
+        );
+    }
+
+    #[test]
+    fn test_except() {
+        let mut q1 = qbey("employee");
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.select(&["dept"]);
+
+        let q = q1.except(&q2);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` EXCEPT SELECT `dept` FROM `contractor`"
+        );
+    }
+
+    #[test]
+    fn test_except_all() {
+        let mut q1 = qbey("employee");
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.select(&["dept"]);
+
+        let q = q1.except_all(&q2);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` EXCEPT ALL SELECT `dept` FROM `contractor`"
+        );
+    }
+
+    #[test]
+    fn test_intersect_with_order_by_and_limit() {
+        let mut q1 = qbey("employee");
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.select(&["dept"]);
+
+        let mut q = q1.intersect(&q2);
+        q.order_by(col("dept").asc());
+        q.limit(5);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` INTERSECT SELECT `dept` FROM `contractor` ORDER BY `dept` ASC LIMIT 5"
+        );
+    }
+
+    #[test]
+    fn test_except_with_order_by_and_limit() {
+        let mut q1 = qbey("employee");
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.select(&["dept"]);
+
+        let mut q = q1.except(&q2);
+        q.order_by(col("dept").desc());
+        q.limit(3);
+        q.offset(1);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` EXCEPT SELECT `dept` FROM `contractor` ORDER BY `dept` DESC LIMIT 3 OFFSET 1"
+        );
+    }
+
+    #[test]
+    fn test_intersect_with_force_index() {
+        let mut q1 = qbey("employee");
+        q1.force_index(&["idx_dept"]);
+        q1.select(&["dept"]);
+
+        let mut q2 = qbey("contractor");
+        q2.force_index(&["idx_dept"]);
+        q2.select(&["dept"]);
+
+        let q = q1.intersect(&q2);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `dept` FROM `employee` FORCE INDEX (idx_dept) INTERSECT SELECT `dept` FROM `contractor` FORCE INDEX (idx_dept)"
         );
     }
 }

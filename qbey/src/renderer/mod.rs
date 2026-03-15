@@ -7,7 +7,7 @@ pub mod delete;
 pub mod standard;
 pub mod update;
 
-use crate::tree::{FromClause, FromSource, SelectTree, UnionTree};
+use crate::tree::{FromClause, FromSource, SelectTree};
 
 /// Configuration for rendering SQL from trees.
 pub struct RenderConfig<'a> {
@@ -38,7 +38,6 @@ impl<'a> RenderConfig<'a> {
 pub trait Renderer {
     fn render_select<V: Clone>(&self, tree: &SelectTree<V>, cfg: &RenderConfig)
     -> (String, Vec<V>);
-    fn render_union<V: Clone>(&self, tree: &UnionTree<V>, cfg: &RenderConfig) -> (String, Vec<V>);
 }
 
 // ── Shared rendering helpers (crate-visible for standard module) ──
@@ -47,6 +46,10 @@ pub(super) fn set_op_keyword(op: &crate::SetOp) -> &'static str {
     match op {
         crate::SetOp::Union => "UNION",
         crate::SetOp::UnionAll => "UNION ALL",
+        crate::SetOp::Intersect => "INTERSECT",
+        crate::SetOp::IntersectAll => "INTERSECT ALL",
+        crate::SetOp::Except => "EXCEPT",
+        crate::SetOp::ExceptAll => "EXCEPT ALL",
     }
 }
 
