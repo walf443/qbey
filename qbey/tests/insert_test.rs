@@ -277,6 +277,14 @@ fn test_insert_col_expr_duplicate_expr_column_panics() {
 }
 
 #[test]
+#[should_panic(expected = "Cannot mix add_value_col_expr() with from_select()")]
+fn test_insert_col_expr_after_from_select_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.from_select(qbey("old_employee"));
+    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+}
+
+#[test]
 fn test_insert_col_expr_only() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
