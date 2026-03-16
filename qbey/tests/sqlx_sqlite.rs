@@ -1,6 +1,6 @@
 #![cfg(feature = "test-sqlx")]
 
-use qbey::{LikeExpression, col, not, qbey_from_subquery_with, qbey_with, table};
+use qbey::{LikeExpression, col, count_all, not, qbey_from_subquery_with, qbey_with, table};
 use sqlx::{Row, SqlitePool};
 
 #[derive(Debug, Clone)]
@@ -650,4 +650,17 @@ async fn test_delete_allow_without_where() {
         .await
         .unwrap();
     assert_eq!(rows.len(), 0);
+}
+
+#[tokio::test]
+async fn test_count_all_with_reserved_word_alias() {
+    let pool = setup_db().await;
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.add_select(count_all().as_("count"));
+    let (sql, _) = q.to_sql();
+
+    let rows = sqlx::query(&sql).fetch_all(&pool).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<i64, _>("count"), 3);
 }

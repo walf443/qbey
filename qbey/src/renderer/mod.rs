@@ -1,6 +1,6 @@
 use crate::{
-    Col, JoinClause, JoinCondition, JoinType, OrderByClause, SelectItem, SortDir, WhereClause,
-    WhereEntry,
+    Col, JoinClause, JoinCondition, JoinType, OrderByClause, SelectFunc, SelectItem, SortDir,
+    WhereClause, WhereEntry,
 };
 
 pub mod delete;
@@ -230,6 +230,18 @@ fn render_select_item(item: &SelectItem, cfg: &RenderConfig) -> String {
             Some(alias) => format!("{} AS {}", raw, (cfg.qi)(alias)),
             None => raw.to_string(),
         },
+        SelectItem::Function { func, col, alias } => {
+            let arg = match (func, col) {
+                (SelectFunc::CountOne, _) => "1".to_string(),
+                (_, Some(col)) => render_col_ref(col, cfg),
+                (_, None) => "*".to_string(),
+            };
+            let base = format!("{}({})", func.as_str(), arg);
+            match alias {
+                Some(alias) => format!("{} AS {}", base, (cfg.qi)(alias)),
+                None => base,
+            }
+        }
     }
 }
 

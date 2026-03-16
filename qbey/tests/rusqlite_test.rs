@@ -1,6 +1,6 @@
 #![cfg(feature = "test-rusqlite")]
 
-use qbey::{LikeExpression, col, qbey_from_subquery_with, qbey_with, table};
+use qbey::{LikeExpression, col, count_all, qbey_from_subquery_with, qbey_with, table};
 use rusqlite::{Connection, params_from_iter};
 
 #[derive(Debug, Clone)]
@@ -647,4 +647,17 @@ fn test_delete_allow_without_where() {
         .map(|r| r.unwrap())
         .collect();
     assert_eq!(ids.len(), 0);
+}
+
+#[test]
+fn test_count_all_with_reserved_word_alias() {
+    let conn = setup_db();
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.add_select(count_all().as_("count"));
+    let (sql, _) = q.to_sql();
+
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let count: i64 = stmt.query_row([], |row| row.get(0)).unwrap();
+    assert_eq!(count, 3);
 }

@@ -47,6 +47,45 @@ fn test_not_numbered_placeholders() {
 }
 
 #[test]
+fn test_col_count_numbered_placeholder() {
+    let mut q = qbey("employee");
+    q.select(&["dept"]);
+    q.add_select(col("id").count().as_("cnt"));
+    q.group_by(&["dept"]);
+    q.and_where(("status", "active"));
+    let (sql, binds) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(
+        sql,
+        "SELECT \"dept\", COUNT(\"id\") AS \"cnt\" FROM \"employee\" WHERE \"status\" = $1 GROUP BY \"dept\""
+    );
+    assert_eq!(binds, vec![Value::String("active".to_string())]);
+}
+
+#[test]
+fn test_count_all_numbered_placeholder() {
+    let mut q = qbey("employee");
+    q.select(&["dept"]);
+    q.add_select(count_all().as_("cnt"));
+    q.group_by(&["dept"]);
+    let (sql, _) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(
+        sql,
+        "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" GROUP BY \"dept\""
+    );
+}
+
+#[test]
+fn test_count_one_numbered_placeholder() {
+    let mut q = qbey("employee");
+    q.add_select(count_one().as_("cnt"));
+    let (sql, _) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(sql, "SELECT COUNT(1) AS \"cnt\" FROM \"employee\"");
+}
+
+#[test]
 fn test_in_subquery_numbered_placeholder() {
     let mut sub = qbey("employee");
     sub.and_where(("dept", "eng"));

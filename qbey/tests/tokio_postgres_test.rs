@@ -1,6 +1,6 @@
 #![cfg(feature = "test-tokio-postgres")]
 
-use qbey::{Dialect, LikeExpression, col, qbey_from_subquery_with, qbey_with, table};
+use qbey::{Dialect, LikeExpression, col, count_all, qbey_from_subquery_with, qbey_with, table};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
@@ -724,4 +724,17 @@ async fn test_delete_allow_without_where() {
 
     let rows = client.query("SELECT id FROM users", &[]).await.unwrap();
     assert_eq!(rows.len(), 0);
+}
+
+#[tokio::test]
+async fn test_count_all_with_reserved_word_alias() {
+    let client = setup_client().await;
+
+    let mut q = qbey_with::<PgValue>("users");
+    q.add_select(count_all().as_("count"));
+    let (sql, _) = q.to_sql_with(&PostgresDialect);
+
+    let rows = client.query(&sql, &[]).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i64>("count"), 3);
 }
