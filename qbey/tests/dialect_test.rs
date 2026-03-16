@@ -86,6 +86,64 @@ fn test_count_one_numbered_placeholder() {
 }
 
 #[test]
+fn test_col_sum_numbered_placeholder() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(col("price").sum().as_("total"));
+    q.group_by(&["product"]);
+    q.and_where(("status", "active"));
+    let (sql, binds) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(
+        sql,
+        "SELECT \"product\", SUM(\"price\") AS \"total\" FROM \"orders\" WHERE \"status\" = $1 GROUP BY \"product\""
+    );
+    assert_eq!(binds, vec![Value::String("active".to_string())]);
+}
+
+#[test]
+fn test_col_avg_numbered_placeholder() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(col("price").avg().as_("avg_price"));
+    q.group_by(&["product"]);
+    let (sql, _) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(
+        sql,
+        "SELECT \"product\", AVG(\"price\") AS \"avg_price\" FROM \"orders\" GROUP BY \"product\""
+    );
+}
+
+#[test]
+fn test_col_min_numbered_placeholder() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(col("price").min().as_("min_price"));
+    q.group_by(&["product"]);
+    let (sql, _) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(
+        sql,
+        "SELECT \"product\", MIN(\"price\") AS \"min_price\" FROM \"orders\" GROUP BY \"product\""
+    );
+}
+
+#[test]
+fn test_col_max_numbered_placeholder() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(col("price").max().as_("max_price"));
+    q.group_by(&["product"]);
+    let (sql, _) = q.to_sql_with(&PgDialect);
+
+    assert_eq!(
+        sql,
+        "SELECT \"product\", MAX(\"price\") AS \"max_price\" FROM \"orders\" GROUP BY \"product\""
+    );
+}
+
+#[test]
 fn test_in_subquery_numbered_placeholder() {
     let mut sub = qbey("employee");
     sub.and_where(("dept", "eng"));
