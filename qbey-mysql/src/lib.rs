@@ -15,7 +15,7 @@ use qbey::UpdateQueryBuilder;
 
 pub use qbey::MySqlDialect;
 
-#[deprecated(note = "use qbey::MySqlDialect instead")]
+#[deprecated(note = "use MySqlDialect (re-exported from this crate) or qbey::MySqlDialect instead")]
 pub type MySQL = qbey::MySqlDialect;
 
 /// MySQL-specific query builder wrapping the core SelectQuery.
