@@ -1,8 +1,4 @@
-#![cfg(feature = "test-sqlx")]
-
-mod common;
-
-use common::{MysqlValue, bind_params, setup_pool};
+use super::common::{MysqlValue, bind_params, setup_pool};
 use qbey::{SelectQueryBuilder, UpdateQueryBuilder, col};
 use qbey_mysql::qbey_with;
 use sqlx::Row;
