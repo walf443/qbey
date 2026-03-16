@@ -1,6 +1,9 @@
 #![cfg(feature = "test-sqlx")]
 
-use qbey::{LikeExpression, col, table};
+use qbey::{
+    DeleteQueryBuilder, InsertQueryBuilder, LikeExpression, SelectQueryBuilder, UpdateQueryBuilder,
+    col, table,
+};
 use qbey_mysql::qbey_with;
 use sqlx::{MySqlPool, Row};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};

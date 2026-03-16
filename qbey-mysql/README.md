@@ -6,6 +6,7 @@ MySQL dialect for [qbey](../README.md) query builder.
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::SelectQueryBuilder;
 use qbey::col;
 
 let mut q = qbey("employee");
@@ -19,6 +20,7 @@ assert_eq!(sql, "SELECT `id`, `name` FROM `employee` WHERE `name` = ?");
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::SelectQueryBuilder;
 
 // FORCE INDEX
 let mut q = qbey("employee");
@@ -49,6 +51,7 @@ assert_eq!(sql, "SELECT `id`, `name` FROM `employee` IGNORE INDEX (idx_old) WHER
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::SelectQueryBuilder;
 use qbey::table;
 
 let mut q = qbey("users");
@@ -63,6 +66,7 @@ assert_eq!(sql, "SELECT `id`, `name` FROM `users` STRAIGHT_JOIN `orders` ON `use
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::InsertQueryBuilder;
 use qbey::{col, Value, RawSql};
 
 let mut ins = qbey("users").into_insert();
@@ -77,6 +81,7 @@ With bind values:
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::InsertQueryBuilder;
 use qbey::{col, Value};
 
 let mut ins = qbey("users").into_insert();
@@ -93,6 +98,7 @@ With raw SQL expressions:
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::InsertQueryBuilder;
 use qbey::{col, Value, RawSql};
 
 let mut ins = qbey("users").into_insert();
@@ -110,6 +116,7 @@ assert_eq!(
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::UpdateQueryBuilder;
 use qbey::col;
 
 let mut u = qbey("users").into_update();
@@ -124,6 +131,7 @@ By default, UPDATE without WHERE will panic. Use `allow_without_where()` to expl
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::UpdateQueryBuilder;
 use qbey::col;
 
 let mut u = qbey("users").into_update();
@@ -138,6 +146,7 @@ MySQL supports `ORDER BY` and `LIMIT` in UPDATE statements (not available in sta
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::UpdateQueryBuilder;
 use qbey::col;
 
 let mut u = qbey("users").into_update();
@@ -154,6 +163,7 @@ assert_eq!(sql, "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY `crea
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::DeleteQueryBuilder;
 use qbey::col;
 
 let mut d = qbey("users").into_delete();
@@ -167,6 +177,7 @@ By default, DELETE without WHERE will panic. Use `allow_without_where()` to expl
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::DeleteQueryBuilder;
 
 let mut d = qbey("users").into_delete();
 d.allow_without_where();
@@ -179,6 +190,7 @@ MySQL supports `ORDER BY` and `LIMIT` in DELETE statements (not available in sta
 
 ```rust
 use qbey_mysql::qbey;
+use qbey::DeleteQueryBuilder;
 use qbey::col;
 
 let mut d = qbey("users").into_delete();
