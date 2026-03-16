@@ -818,15 +818,16 @@ async fn test_insert_on_duplicate_key_update_with_value() {
 async fn test_insert_on_duplicate_key_update_expr() {
     let pool = setup_pool().await;
 
-    // Insert a conflicting row using VALUES() to copy the inserted value
+    // Insert a conflicting row using raw expressions
+    // Alice (id=1, age=30) already exists — age should become 30 + 1 = 31
     let mut ins = qbey_with::<MysqlValue>("users").into_insert();
     ins.add_value(&[
         ("id", 1.into()),
-        ("name", "Updated".into()),
-        ("age", 99.into()),
+        ("name", "Alice".into()),
+        ("age", 30.into()),
     ]);
-    ins.on_duplicate_key_update_expr(col("name"), qbey::RawSql::new("VALUES(`name`)"));
-    ins.on_duplicate_key_update_expr(col("age"), qbey::RawSql::new("VALUES(`age`)"));
+    ins.on_duplicate_key_update_expr(col("name"), qbey::RawSql::new("CONCAT(`name`, '!')"));
+    ins.on_duplicate_key_update_expr(col("age"), qbey::RawSql::new("`age` + 1"));
     let (sql, binds) = ins.to_sql();
 
     bind_params(sqlx::query(&sql), &binds)
@@ -838,8 +839,8 @@ async fn test_insert_on_duplicate_key_update_expr() {
         .fetch_all(&pool)
         .await
         .unwrap();
-    assert_eq!(rows[0].get::<String, _>("name"), "Updated");
-    assert_eq!(rows[0].get::<i64, _>("age"), 99);
+    assert_eq!(rows[0].get::<String, _>("name"), "Alice!");
+    assert_eq!(rows[0].get::<i64, _>("age"), 31);
 }
 
 #[tokio::test]
