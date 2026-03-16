@@ -703,7 +703,8 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         };
         let ph = |n: usize| MySqlDialect.placeholder(n);
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
-        StandardSqlRenderer.render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySqlDialect))
+        StandardSqlRenderer
+            .render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySqlDialect))
     }
 
     /// Convert this MySQL query builder into an UPDATE query builder.
