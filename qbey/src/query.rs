@@ -725,19 +725,19 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
         );
         assert!(
             self.joins.is_empty(),
-            "SelectQuery has JOINs which are not supported in INSERT and will be discarded"
+            "SelectQuery has JOINs which are not supported in INSERT"
         );
         assert!(
             self.wheres.is_empty(),
-            "SelectQuery has WHERE which is not supported in INSERT and will be discarded"
+            "SelectQuery has WHERE which is not supported in INSERT"
         );
         assert!(
             self.order_bys.is_empty(),
-            "SelectQuery has ORDER BY which is not supported in INSERT and will be discarded"
+            "SelectQuery has ORDER BY which is not supported in INSERT"
         );
         assert!(
             self.limit_val.is_none(),
-            "SelectQuery has LIMIT which is not supported in INSERT and will be discarded"
+            "SelectQuery has LIMIT which is not supported in INSERT"
         );
         InsertQuery::new(self.table)
     }

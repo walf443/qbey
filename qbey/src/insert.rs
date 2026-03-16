@@ -152,6 +152,16 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
         if self.columns.is_empty() {
             // First call: establish column order.
             self.columns = pairs.iter().map(|(c, _)| c.to_string()).collect();
+            {
+                let mut seen = std::collections::HashSet::with_capacity(self.columns.len());
+                for col in &self.columns {
+                    assert!(
+                        seen.insert(col.as_str()),
+                        "add_value: duplicate column {:?}",
+                        col
+                    );
+                }
+            }
             let row: Vec<V> = pairs.into_iter().map(|(_, v)| v).collect();
             if let InsertSource::Values(ref mut rows) = self.source {
                 rows.push(row);

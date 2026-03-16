@@ -177,3 +177,33 @@ fn test_insert_from_select_query_with_where_panics() {
     q.and_where(col("id").eq(1));
     let _ = q.into_insert();
 }
+
+#[test]
+#[should_panic(expected = "duplicate column")]
+fn test_insert_duplicate_column_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into()), ("name", "Bob".into())]);
+}
+
+#[test]
+fn test_insert_tree_map_values() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
+    let tree = ins.to_tree();
+
+    let mapped = tree.map_values(&|v: Value| match v {
+        Value::String(s) => format!("str:{}", s),
+        Value::Int(n) => format!("int:{}", n),
+        _ => format!("{:?}", v),
+    });
+
+    assert_eq!(mapped.table, "employee");
+    assert_eq!(mapped.columns, vec!["name", "age"]);
+    match mapped.source {
+        qbey::tree::InsertTreeSource::Values(rows) => {
+            assert_eq!(rows.len(), 1);
+            assert_eq!(rows[0], vec!["str:Alice", "int:30"]);
+        }
+        _ => panic!("expected Values source"),
+    }
+}
