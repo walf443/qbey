@@ -5,8 +5,8 @@ struct Employee {
     age: i32,
 }
 
-impl IntoInsertRow<Value> for Employee {
-    fn into_insert_row(&self) -> Vec<(&'static str, Value)> {
+impl ToInsertRow<Value> for Employee {
+    fn to_insert_row(&self) -> Vec<(&'static str, Value)> {
         vec![
             ("name", self.name.as_str().into()),
             ("age", self.age.into()),
@@ -79,8 +79,8 @@ fn test_insert_from_vec_of_structs_with_custom_value() {
         age: i32,
     }
 
-    impl IntoInsertRow<MyValue> for Employee2 {
-        fn into_insert_row(&self) -> Vec<(&'static str, MyValue)> {
+    impl ToInsertRow<MyValue> for Employee2 {
+        fn to_insert_row(&self) -> Vec<(&'static str, MyValue)> {
             vec![
                 ("name", self.name.as_str().into()),
                 ("age", self.age.into()),
@@ -120,7 +120,7 @@ fn test_insert_from_vec_of_structs_with_custom_value() {
     );
 }
 
-/// Slice-based API still works alongside IntoInsertRow.
+/// Slice-based API still works alongside ToInsertRow.
 #[test]
 fn test_insert_slice_api_still_works() {
     let mut ins = qbey("employee").into_insert();

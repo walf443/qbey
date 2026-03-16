@@ -13,15 +13,15 @@ use crate::tree::default_quote_identifier;
 /// Implement this trait on your domain structs to enable direct insertion:
 ///
 /// ```
-/// use qbey::{qbey, Value, IntoInsertRow};
+/// use qbey::{qbey, Value, ToInsertRow};
 ///
 /// struct Employee {
 ///     name: String,
 ///     age: i32,
 /// }
 ///
-/// impl IntoInsertRow<Value> for Employee {
-///     fn into_insert_row(&self) -> Vec<(&'static str, Value)> {
+/// impl ToInsertRow<Value> for Employee {
+///     fn to_insert_row(&self) -> Vec<(&'static str, Value)> {
 ///         vec![
 ///             ("name", self.name.as_str().into()),
 ///             ("age", self.age.into()),
@@ -42,18 +42,18 @@ use crate::tree::default_quote_identifier;
 /// let (sql, binds) = ins.to_sql();
 /// assert_eq!(sql, r#"INSERT INTO "employee" ("name", "age") VALUES (?, ?), (?, ?)"#);
 /// ```
-pub trait IntoInsertRow<V: Clone> {
-    fn into_insert_row(&self) -> Vec<(&'static str, V)>;
+pub trait ToInsertRow<V: Clone> {
+    fn to_insert_row(&self) -> Vec<(&'static str, V)>;
 }
 
-impl<V: Clone> IntoInsertRow<V> for [(&'static str, V)] {
-    fn into_insert_row(&self) -> Vec<(&'static str, V)> {
+impl<V: Clone> ToInsertRow<V> for [(&'static str, V)] {
+    fn to_insert_row(&self) -> Vec<(&'static str, V)> {
         self.to_vec()
     }
 }
 
-impl<V: Clone, const N: usize> IntoInsertRow<V> for [(&'static str, V); N] {
-    fn into_insert_row(&self) -> Vec<(&'static str, V)> {
+impl<V: Clone, const N: usize> ToInsertRow<V> for [(&'static str, V); N] {
+    fn to_insert_row(&self) -> Vec<(&'static str, V)> {
         self.to_vec()
     }
 }
@@ -105,9 +105,9 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
 
     /// Add a row of column-value pairs.
     ///
-    /// Accepts any type that implements [`IntoInsertRow<V>`], including:
+    /// Accepts any type that implements [`ToInsertRow<V>`], including:
     /// - A slice of `(&str, V)` tuples: `&[("name", "Alice".into())]`
-    /// - A custom struct that implements `IntoInsertRow<V>`
+    /// - A custom struct that implements `ToInsertRow<V>`
     ///
     /// The first call establishes the column list. Subsequent calls must provide
     /// the same set of column names (order may differ — values are reordered to
@@ -138,8 +138,8 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     ///     ]
     /// );
     /// ```
-    pub fn add_value(&mut self, row: &(impl IntoInsertRow<V> + ?Sized)) -> &mut Self {
-        let pairs = row.into_insert_row();
+    pub fn add_value(&mut self, row: &(impl ToInsertRow<V> + ?Sized)) -> &mut Self {
+        let pairs = row.to_insert_row();
         assert!(
             !pairs.is_empty(),
             "add_value requires at least one column-value pair"
@@ -166,7 +166,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
                 pairs.len()
             );
 
-            let pair_map: HashMap<&str, V> = pairs.into_iter().map(|(c, v)| (c, v)).collect();
+            let pair_map: HashMap<&str, V> = pairs.into_iter().collect();
 
             let mut row = Vec::with_capacity(self.columns.len());
             for col_name in &self.columns {
