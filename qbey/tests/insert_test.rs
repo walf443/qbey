@@ -186,6 +186,81 @@ fn test_insert_duplicate_column_panics() {
 }
 
 #[test]
+fn test_insert_with_col_expr() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
+    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("name", "age", "created_at") VALUES (?, ?, NOW())"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::String("Alice".to_string()), Value::Int(30)]
+    );
+}
+
+#[test]
+fn test_insert_multiple_rows_with_col_expr() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
+    ins.add_value(&[("name", "Bob".into()), ("age", 25.into())]);
+    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_value_col_expr("updated_at", RawSql::new("NOW()"));
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("name", "age", "created_at", "updated_at") VALUES (?, ?, NOW(), NOW()), (?, ?, NOW(), NOW())"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("Alice".to_string()),
+            Value::Int(30),
+            Value::String("Bob".to_string()),
+            Value::Int(25),
+        ]
+    );
+}
+
+#[test]
+fn test_insert_col_expr_with_dialect() {
+    struct PgDialect;
+    impl Dialect for PgDialect {
+        fn placeholder(&self, index: usize) -> String {
+            format!("${}", index)
+        }
+    }
+
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into())]);
+    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    let (sql, binds) = ins.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("name", "created_at") VALUES ($1, NOW())"#
+    );
+    assert_eq!(binds, vec![Value::String("Alice".to_string())]);
+}
+
+#[test]
+#[should_panic(expected = "already exists in value columns")]
+fn test_insert_col_expr_duplicate_value_column_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into())]);
+    ins.add_value_col_expr("name", RawSql::new("'default'"));
+}
+
+#[test]
+#[should_panic(expected = "duplicate column")]
+fn test_insert_col_expr_duplicate_expr_column_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+}
+
+#[test]
 fn test_insert_tree_map_values() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);

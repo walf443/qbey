@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::Dialect;
+use crate::raw_sql::RawSql;
 use crate::tree::SelectTree;
 use crate::value::Value;
 
@@ -92,6 +93,9 @@ pub struct InsertQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) table: String,
     pub(crate) columns: Vec<String>,
     pub(crate) source: InsertSource<V>,
+    /// Extra columns whose values are raw SQL expressions (e.g., `NOW()`).
+    /// These are appended after the normal bind-value columns in every row.
+    pub(crate) col_exprs: Vec<(String, RawSql)>,
 }
 
 impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
@@ -100,6 +104,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
             table,
             columns: Vec::new(),
             source: InsertSource::Values(Vec::new()),
+            col_exprs: Vec::new(),
         }
     }
 
@@ -197,6 +202,53 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
         self
     }
 
+    /// Add an extra column whose value is a raw SQL expression applied to every row.
+    ///
+    /// This is useful for columns like `created_at` that should use a database
+    /// function such as `NOW()` rather than a bind parameter.
+    ///
+    /// The column is appended after the normal bind-value columns established
+    /// by [`add_value()`](InsertQuery::add_value).
+    ///
+    /// # Panics
+    ///
+    /// - Panics if the column name duplicates a column already added via
+    ///   `add_value()` or a previous `add_value_col_expr()` call.
+    ///
+    /// ```
+    /// use qbey::{qbey, Value, RawSql};
+    ///
+    /// let mut ins = qbey("employee").into_insert();
+    /// ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
+    /// ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    /// let (sql, binds) = ins.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     r#"INSERT INTO "employee" ("name", "age", "created_at") VALUES (?, ?, NOW())"#
+    /// );
+    /// assert_eq!(binds, vec![Value::String("Alice".to_string()), Value::Int(30)]);
+    /// ```
+    pub fn add_value_col_expr(&mut self, column: &str, expr: RawSql) -> &mut Self {
+        assert!(
+            matches!(self.source, InsertSource::Values(_)),
+            "Cannot mix add_value_col_expr() with from_select()"
+        );
+        // Check for duplicates against value columns.
+        assert!(
+            !self.columns.iter().any(|c| c == column),
+            "add_value_col_expr: column {:?} already exists in value columns",
+            column
+        );
+        // Check for duplicates against existing col_exprs.
+        assert!(
+            !self.col_exprs.iter().any(|(c, _)| c == column),
+            "add_value_col_expr: duplicate column {:?}",
+            column
+        );
+        self.col_exprs.push((column.to_string(), expr));
+        self
+    }
+
     /// Use a SELECT query as the source of rows (INSERT ... SELECT ...).
     ///
     /// # Panics
@@ -238,16 +290,23 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
                     !rows.is_empty(),
                     "INSERT requires at least one row of values or a SELECT subquery"
                 );
+                let col_exprs = self
+                    .col_exprs
+                    .iter()
+                    .map(|(c, e)| (c.clone(), e.as_str().to_string()))
+                    .collect();
                 crate::tree::InsertTree {
                     table: self.table.clone(),
                     columns: self.columns.clone(),
                     source: crate::tree::InsertTreeSource::Values(rows.clone()),
+                    col_exprs,
                 }
             }
             InsertSource::Select(sub) => crate::tree::InsertTree {
                 table: self.table.clone(),
                 columns: self.columns.clone(),
                 source: crate::tree::InsertTreeSource::Select(sub.clone()),
+                col_exprs: Vec::new(),
             },
         }
     }
