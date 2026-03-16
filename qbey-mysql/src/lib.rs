@@ -194,17 +194,8 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V> {
 enum OnDuplicateKeyUpdateClause<V: Clone> {
     /// A column set to a bind value: `` `col` = ? ``.
     Value(String, V),
-    /// A column set to a raw SQL expression: `` `col` = `col` + 1 ``.
-    Expr(String, qbey::RawSql),
-}
-
-impl<V: Clone> OnDuplicateKeyUpdateClause<V> {
-    fn column(&self) -> &str {
-        match self {
-            OnDuplicateKeyUpdateClause::Value(col, _) => col,
-            OnDuplicateKeyUpdateClause::Expr(col, _) => col,
-        }
-    }
+    /// A raw SQL expression: `` `col` = `col` + 1 ``.
+    Expr(qbey::RawSql),
 }
 
 /// MySQL-specific INSERT query builder.
@@ -271,10 +262,10 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     /// ```
     pub fn on_duplicate_key_update(&mut self, col: qbey::Col, val: impl Into<V>) -> &mut Self {
         assert!(
-            !self
-                .on_duplicate_key_updates
-                .iter()
-                .any(|c| c.column() == col.column),
+            !self.on_duplicate_key_updates.iter().any(|c| matches!(
+                c,
+                OnDuplicateKeyUpdateClause::Value(name, _) if name == &col.column
+            )),
             "on_duplicate_key_update: duplicate column {:?}",
             col.column
         );
@@ -285,34 +276,25 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
 
     /// Add an ON DUPLICATE KEY UPDATE clause with a raw SQL expression.
     ///
+    /// Use [`RawSql::new()`] to create the expression, making it explicit
+    /// that raw SQL is being injected.
+    ///
     /// ```
     /// use qbey::{col, Value, RawSql};
     /// use qbey_mysql::qbey;
     ///
     /// let mut ins = qbey("users").into_insert();
     /// ins.add_value(&[("id", 1.into()), ("age", 30.into())]);
-    /// ins.on_duplicate_key_update_expr(col("age"), RawSql::new("`age` + 1"));
+    /// ins.on_duplicate_key_update_expr(RawSql::new("`age` = `age` + 1"));
     /// let (sql, _) = ins.to_sql();
     /// assert_eq!(
     ///     sql,
     ///     "INSERT INTO `users` (`id`, `age`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `age` = `age` + 1"
     /// );
     /// ```
-    pub fn on_duplicate_key_update_expr(
-        &mut self,
-        col: qbey::Col,
-        expr: qbey::RawSql,
-    ) -> &mut Self {
-        assert!(
-            !self
-                .on_duplicate_key_updates
-                .iter()
-                .any(|c| c.column() == col.column),
-            "on_duplicate_key_update_expr: duplicate column {:?}",
-            col.column
-        );
+    pub fn on_duplicate_key_update_expr(&mut self, expr: qbey::RawSql) -> &mut Self {
         self.on_duplicate_key_updates
-            .push(OnDuplicateKeyUpdateClause::Expr(col.column, expr));
+            .push(OnDuplicateKeyUpdateClause::Expr(expr));
         self
     }
 
@@ -335,8 +317,8 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
                         binds.push(val.clone());
                         sql.push_str(&format!("{} = {}", (cfg.qi)(col), (cfg.ph)(binds.len())));
                     }
-                    OnDuplicateKeyUpdateClause::Expr(col, expr) => {
-                        sql.push_str(&format!("{} = {}", (cfg.qi)(col), expr.as_str()));
+                    OnDuplicateKeyUpdateClause::Expr(expr) => {
+                        sql.push_str(expr.as_str());
                     }
                 }
             }
@@ -1626,7 +1608,7 @@ mod tests {
     fn test_insert_on_duplicate_key_update_expr() {
         let mut ins = qbey("users").into_insert();
         ins.add_value(&[("id", 1.into()), ("age", 30.into())]);
-        ins.on_duplicate_key_update_expr(col("age"), qbey::RawSql::new("`age` + 1"));
+        ins.on_duplicate_key_update_expr(qbey::RawSql::new("`age` = `age` + 1"));
         let (sql, binds) = ins.to_sql();
         assert_eq!(
             sql,
@@ -1643,7 +1625,7 @@ mod tests {
             ("name", "Alice".into()),
             ("age", 30.into()),
         ]);
-        ins.on_duplicate_key_update_expr(col("age"), qbey::RawSql::new("`age` + 1"));
+        ins.on_duplicate_key_update_expr(qbey::RawSql::new("`age` = `age` + 1"));
         ins.on_duplicate_key_update(col("name"), "Alicia");
         let (sql, binds) = ins.to_sql();
         assert_eq!(
@@ -1676,14 +1658,5 @@ mod tests {
         ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
         ins.on_duplicate_key_update(col("name"), "Alice");
         ins.on_duplicate_key_update(col("name"), "Bob");
-    }
-
-    #[test]
-    #[should_panic(expected = "duplicate column")]
-    fn test_insert_on_duplicate_key_update_expr_duplicate_column_panics() {
-        let mut ins = qbey("users").into_insert();
-        ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
-        ins.on_duplicate_key_update(col("name"), "Alice");
-        ins.on_duplicate_key_update_expr(col("name"), qbey::RawSql::new("CONCAT(`name`, '!')"));
     }
 }

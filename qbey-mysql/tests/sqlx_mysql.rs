@@ -826,8 +826,8 @@ async fn test_insert_on_duplicate_key_update_expr() {
         ("name", "Alice".into()),
         ("age", 30.into()),
     ]);
-    ins.on_duplicate_key_update_expr(col("name"), qbey::RawSql::new("CONCAT(`name`, '!')"));
-    ins.on_duplicate_key_update_expr(col("age"), qbey::RawSql::new("`age` + 1"));
+    ins.on_duplicate_key_update_expr(qbey::RawSql::new("`name` = CONCAT(`name`, '!')"));
+    ins.on_duplicate_key_update_expr(qbey::RawSql::new("`age` = `age` + 1"));
     let (sql, binds) = ins.to_sql();
 
     bind_params(sqlx::query(&sql), &binds)

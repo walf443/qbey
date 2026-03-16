@@ -97,8 +97,8 @@ use qbey::{col, Value, RawSql};
 
 let mut ins = qbey("users").into_insert();
 ins.add_value(&[("id", 1.into()), ("name", "Alice".into()), ("age", 30.into())]);
-ins.on_duplicate_key_update_expr(col("name"), RawSql::new("CONCAT(`name`, '!')"));
-ins.on_duplicate_key_update_expr(col("age"), RawSql::new("`age` + 1"));
+ins.on_duplicate_key_update_expr(RawSql::new("`name` = CONCAT(`name`, '!')"));
+ins.on_duplicate_key_update_expr(RawSql::new("`age` = `age` + 1"));
 let (sql, binds) = ins.to_sql();
 assert_eq!(
     sql,
