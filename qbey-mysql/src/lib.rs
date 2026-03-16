@@ -473,7 +473,8 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for MysqlQuery<V> {
         alias: &str,
         condition: qbey::JoinCondition,
     ) -> &mut Self {
-        self.inner.add_join_subquery(join_type, sub, alias, condition);
+        self.inner
+            .add_join_subquery(join_type, sub, alias, condition);
         self
     }
 
