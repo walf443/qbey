@@ -1,10 +1,5 @@
 use crate::{JoinClause, OrderByClause, SelectItem, WhereEntry};
 
-/// Default double-quote identifier quoting (SQL standard).
-pub fn default_quote_identifier(name: &str) -> String {
-    format!("\"{}\"", name.replace('"', "\"\""))
-}
-
 /// The source of a FROM clause — either a table name or a subquery.
 #[derive(Debug, Clone)]
 pub enum FromSource<V: Clone = crate::Value> {
