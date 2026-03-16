@@ -7,6 +7,57 @@ use crate::value::Value;
 use crate::renderer::RenderConfig;
 use crate::tree::default_quote_identifier;
 
+/// Trait for types that can be converted into a row of column-value pairs
+/// for use with [`InsertQuery::add_value()`].
+///
+/// Implement this trait on your domain structs to enable direct insertion:
+///
+/// ```
+/// use qbey::{qbey, Value, IntoInsertRow};
+///
+/// struct Employee {
+///     name: String,
+///     age: i32,
+/// }
+///
+/// impl IntoInsertRow<Value> for Employee {
+///     fn into_insert_row(&self) -> Vec<(&'static str, Value)> {
+///         vec![
+///             ("name", self.name.as_str().into()),
+///             ("age", self.age.into()),
+///         ]
+///     }
+/// }
+///
+/// let employees = vec![
+///     Employee { name: "Alice".to_string(), age: 30 },
+///     Employee { name: "Bob".to_string(), age: 25 },
+/// ];
+///
+/// let mut ins = qbey("employee").into_insert();
+/// for e in &employees {
+///     ins.add_value(e);
+/// }
+///
+/// let (sql, binds) = ins.to_sql();
+/// assert_eq!(sql, r#"INSERT INTO "employee" ("name", "age") VALUES (?, ?), (?, ?)"#);
+/// ```
+pub trait IntoInsertRow<V: Clone> {
+    fn into_insert_row(&self) -> Vec<(&'static str, V)>;
+}
+
+impl<V: Clone> IntoInsertRow<V> for [(&'static str, V)] {
+    fn into_insert_row(&self) -> Vec<(&'static str, V)> {
+        self.to_vec()
+    }
+}
+
+impl<V: Clone, const N: usize> IntoInsertRow<V> for [(&'static str, V); N] {
+    fn into_insert_row(&self) -> Vec<(&'static str, V)> {
+        self.to_vec()
+    }
+}
+
 /// The source of values for an INSERT statement.
 #[derive(Debug, Clone)]
 pub(crate) enum InsertSource<V: Clone> {
@@ -54,6 +105,10 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
 
     /// Add a row of column-value pairs.
     ///
+    /// Accepts any type that implements [`IntoInsertRow<V>`], including:
+    /// - A slice of `(&str, V)` tuples: `&[("name", "Alice".into())]`
+    /// - A custom struct that implements `IntoInsertRow<V>`
+    ///
     /// The first call establishes the column list. Subsequent calls must provide
     /// the same set of column names (order may differ — values are reordered to
     /// match the column order established by the first call).
@@ -61,7 +116,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// # Panics
     ///
     /// - Panics if called after [`from_select()`](InsertQuery::from_select).
-    /// - Panics if `pairs` is empty.
+    /// - Panics if the row is empty.
     /// - Panics if the column set does not match the first call's column set.
     ///
     /// ```
@@ -83,7 +138,8 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     ///     ]
     /// );
     /// ```
-    pub fn add_value(&mut self, pairs: &[(&str, V)]) -> &mut Self {
+    pub fn add_value(&mut self, row: &(impl IntoInsertRow<V> + ?Sized)) -> &mut Self {
+        let pairs = row.into_insert_row();
         assert!(
             !pairs.is_empty(),
             "add_value requires at least one column-value pair"
@@ -96,7 +152,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
         if self.columns.is_empty() {
             // First call: establish column order.
             self.columns = pairs.iter().map(|(c, _)| c.to_string()).collect();
-            let row: Vec<V> = pairs.iter().map(|(_, v)| v.clone()).collect();
+            let row: Vec<V> = pairs.into_iter().map(|(_, v)| v).collect();
             if let InsertSource::Values(ref mut rows) = self.source {
                 rows.push(row);
             }
@@ -110,7 +166,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
                 pairs.len()
             );
 
-            let pair_map: HashMap<&str, &V> = pairs.iter().map(|(c, v)| (*c, v)).collect();
+            let pair_map: HashMap<&str, V> = pairs.into_iter().map(|(c, v)| (c, v)).collect();
 
             let mut row = Vec::with_capacity(self.columns.len());
             for col_name in &self.columns {
@@ -120,7 +176,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
                         col_name, self.columns
                     )
                 });
-                row.push((*val).clone());
+                row.push(val.clone());
             }
 
             if let InsertSource::Values(ref mut rows) = self.source {

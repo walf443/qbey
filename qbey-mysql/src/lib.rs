@@ -202,8 +202,8 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     /// Add a row of column-value pairs.
     ///
     /// See [`qbey::InsertQuery::add_value()`] for details.
-    pub fn add_value(&mut self, pairs: &[(&str, V)]) -> &mut Self {
-        self.inner.add_value(pairs);
+    pub fn add_value(&mut self, row: &(impl qbey::IntoInsertRow<V> + ?Sized)) -> &mut Self {
+        self.inner.add_value(row);
         self
     }
 
