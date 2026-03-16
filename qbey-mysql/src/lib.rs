@@ -369,7 +369,6 @@ fn apply_index_hints_to<V: Clone>(
         .iter()
         .position(|t| matches!(t, SelectToken::From(_)))
     {
-        // Insert in reverse order so they end up in the correct order
         for (i, hint) in hints.into_iter().enumerate() {
             tree.tokens.insert(pos + 1 + i, hint);
         }

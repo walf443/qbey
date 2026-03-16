@@ -254,6 +254,10 @@ pub(super) fn render_select_tokens<V: Clone>(
                 continue;
             }
             SelectToken::CloseParen => {
+                debug_assert!(
+                    !parts.is_empty(),
+                    "CloseParen with no preceding parts to attach to"
+                );
                 if let Some(last) = parts.last_mut() {
                     last.push(')');
                 }
@@ -305,6 +309,11 @@ pub(super) fn render_select_tokens<V: Clone>(
             parts.push(s);
         }
     }
+    debug_assert_eq!(
+        open_parens, 0,
+        "unclosed OpenParen: {} open paren(s) remaining",
+        open_parens
+    );
 }
 
 fn render_where_clause<V: Clone>(

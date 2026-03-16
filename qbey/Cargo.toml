@@ -14,6 +14,11 @@ tokio-postgres = "0.7"
 postgres = "0.19"
 testcontainers = "0.27"
 testcontainers-modules = { version = "0.15", features = ["postgres", "mysql"] }
+criterion = { version = "0.5" }
+
+[[bench]]
+name = "query_bench"
+harness = false
 
 [features]
 test-sqlx = []
