@@ -378,10 +378,7 @@ pub fn qbey(table: impl qbey::IntoFromTable) -> MysqlQuery<Value> {
     MysqlQuery::wrap(qbey::qbey(table))
 }
 
-fn apply_index_hints_to<V: Clone>(
-    tree: &mut SelectTree<V>,
-    index_hints: &[IndexHint],
-) {
+fn apply_index_hints_to<V: Clone>(tree: &mut SelectTree<V>, index_hints: &[IndexHint]) {
     use qbey::tree::SelectToken;
     if index_hints.is_empty() {
         return;
