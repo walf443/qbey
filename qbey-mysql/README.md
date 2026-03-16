@@ -55,14 +55,14 @@ q.select(&["id", "name"]);
 let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT `id`, `name` FROM `employee` FORCE INDEX FOR JOIN (idx_name) WHERE `name` = ?");
 
-// Multiple hints: USE INDEX FOR JOIN + FORCE INDEX FOR ORDER BY
+// Multiple hints: USE INDEX FOR JOIN + USE INDEX FOR ORDER BY
 let mut q = qbey("employee");
 q.use_index_for(IndexHintScope::Join, &["idx_a"]);
-q.force_index_for(IndexHintScope::OrderBy, &["idx_b"]);
+q.use_index_for(IndexHintScope::OrderBy, &["idx_b"]);
 q.and_where(("name", "Alice"));
 q.select(&["id", "name"]);
 let (sql, binds) = q.to_sql();
-assert_eq!(sql, "SELECT `id`, `name` FROM `employee` USE INDEX FOR JOIN (idx_a) FORCE INDEX FOR ORDER BY (idx_b) WHERE `name` = ?");
+assert_eq!(sql, "SELECT `id`, `name` FROM `employee` USE INDEX FOR JOIN (idx_a) USE INDEX FOR ORDER BY (idx_b) WHERE `name` = ?");
 ```
 
 ## STRAIGHT_JOIN

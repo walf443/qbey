@@ -966,14 +966,14 @@ mod tests {
     fn test_multiple_index_hints_combined() {
         let mut q = qbey("employee");
         q.use_index_for(IndexHintScope::Join, &["idx_a"]);
-        q.force_index_for(IndexHintScope::OrderBy, &["idx_b"]);
+        q.use_index_for(IndexHintScope::OrderBy, &["idx_b"]);
         q.and_where(("name", "Alice"));
         q.select(&["id", "name"]);
 
         let (sql, _) = q.to_sql();
         assert_eq!(
             sql,
-            "SELECT `id`, `name` FROM `employee` USE INDEX FOR JOIN (idx_a) FORCE INDEX FOR ORDER BY (idx_b) WHERE `name` = ?"
+            "SELECT `id`, `name` FROM `employee` USE INDEX FOR JOIN (idx_a) USE INDEX FOR ORDER BY (idx_b) WHERE `name` = ?"
         );
     }
 
