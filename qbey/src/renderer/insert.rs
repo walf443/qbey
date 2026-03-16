@@ -3,7 +3,15 @@ use crate::tree::{InsertToken, InsertTree};
 
 /// Render an INSERT statement from an `InsertTree`.
 pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (String, Vec<V>) {
-    let mut binds: Vec<V> = Vec::new();
+    // Pre-calculate bind capacity from Values token.
+    let bind_cap = tree.tokens.iter().fold(0usize, |acc, t| {
+        if let InsertToken::Values(rows) = t {
+            acc + rows.iter().map(|r| r.len()).sum::<usize>()
+        } else {
+            acc
+        }
+    });
+    let mut binds: Vec<V> = Vec::with_capacity(bind_cap);
     let mut parts = Vec::new();
 
     // Extract InsertInto metadata first (required by Values/SelectSource).
@@ -19,11 +27,17 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (Str
                 for (col, _) in col_exprs {
                     quoted_cols.push((cfg.qi)(col));
                 }
-                let mut sql = format!(
+                let header = format!(
                     "INSERT INTO {} ({}) VALUES ",
                     (cfg.qi)(table),
                     quoted_cols.join(", ")
                 );
+                let col_count = columns.len() + col_exprs.len();
+                // Estimate: header + per-row "(?, ?, ...)" ~= (col_count * 3 + 2) per row
+                let estimated_len =
+                    header.len() + rows.len() * (col_count * 3 + 2) + rows.len() * 2;
+                let mut sql = String::with_capacity(estimated_len);
+                sql.push_str(&header);
 
                 for (i, row) in rows.iter().enumerate() {
                     if i > 0 {
