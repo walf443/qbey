@@ -189,7 +189,7 @@ fn test_insert_duplicate_column_panics() {
 fn test_insert_with_col_expr() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
@@ -206,8 +206,8 @@ fn test_insert_multiple_rows_with_col_expr() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
     ins.add_value(&[("name", "Bob".into()), ("age", 25.into())]);
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
-    ins.add_value_col_expr("updated_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("updated_at", RawSql::new("NOW()"));
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
@@ -235,7 +235,7 @@ fn test_insert_col_expr_with_dialect() {
 
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into())]);
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
     let (sql, binds) = ins.to_sql_with(&PgDialect);
     assert_eq!(
         sql,
@@ -248,7 +248,7 @@ fn test_insert_col_expr_with_dialect() {
 fn test_insert_col_expr_with_col() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
-    ins.add_value_col_expr(col("created_at"), RawSql::new("NOW()"));
+    ins.add_col_value_expr(col("created_at"), RawSql::new("NOW()"));
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
@@ -265,29 +265,29 @@ fn test_insert_col_expr_with_col() {
 fn test_insert_col_expr_duplicate_value_column_panics() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into())]);
-    ins.add_value_col_expr("name", RawSql::new("'default'"));
+    ins.add_col_value_expr("name", RawSql::new("'default'"));
 }
 
 #[test]
 #[should_panic(expected = "duplicate column")]
 fn test_insert_col_expr_duplicate_expr_column_panics() {
     let mut ins = qbey("employee").into_insert();
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
 }
 
 #[test]
-#[should_panic(expected = "Cannot mix add_value_col_expr() with from_select()")]
+#[should_panic(expected = "Cannot mix add_col_value_expr() with from_select()")]
 fn test_insert_col_expr_after_from_select_panics() {
     let mut ins = qbey("employee").into_insert();
     ins.from_select(qbey("old_employee"));
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
 }
 
 #[test]
 fn test_insert_col_expr_only() {
     let mut ins = qbey("employee").into_insert();
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
@@ -299,8 +299,8 @@ fn test_insert_col_expr_only() {
 #[test]
 fn test_insert_col_expr_only_multiple() {
     let mut ins = qbey("employee").into_insert();
-    ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
-    ins.add_value_col_expr("uuid", RawSql::new("UUID()"));
+    ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
+    ins.add_col_value_expr("uuid", RawSql::new("UUID()"));
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
@@ -313,7 +313,7 @@ fn test_insert_col_expr_only_multiple() {
 fn test_insert_col_expr_with_qualified_col_ignores_table() {
     let mut ins = qbey("employee").into_insert();
     ins.add_value(&[("name", "Alice".into())]);
-    ins.add_value_col_expr(table("employee").col("created_at"), RawSql::new("NOW()"));
+    ins.add_col_value_expr(table("employee").col("created_at"), RawSql::new("NOW()"));
     let (sql, _) = ins.to_sql();
     // table qualifier is ignored in INSERT column lists
     assert_eq!(

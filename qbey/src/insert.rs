@@ -214,7 +214,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// # Panics
     ///
     /// - Panics if the column name duplicates a column already added via
-    ///   `add_value()` or a previous `add_value_col_expr()` call.
+    ///   `add_value()` or a previous `add_col_value_expr()` call.
     ///
     /// The column can be specified as a `&str` or a [`Col`](crate::Col):
     ///
@@ -223,8 +223,8 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     ///
     /// let mut ins = qbey("employee").into_insert();
     /// ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
-    /// ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
-    /// ins.add_value_col_expr(col("updated_at"), RawSql::new("NOW()"));
+    /// ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
+    /// ins.add_col_value_expr(col("updated_at"), RawSql::new("NOW()"));
     /// let (sql, binds) = ins.to_sql();
     /// assert_eq!(
     ///     sql,
@@ -232,24 +232,24 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// );
     /// assert_eq!(binds, vec![Value::String("Alice".to_string()), Value::Int(30)]);
     /// ```
-    pub fn add_value_col_expr(&mut self, column: impl Into<Col>, expr: RawSql) -> &mut Self {
+    pub fn add_col_value_expr(&mut self, column: impl Into<Col>, expr: RawSql) -> &mut Self {
         // Only the column name is used; INSERT column lists do not support
         // table qualification, so the table and alias fields are ignored.
         let column = column.into().column;
         assert!(
             matches!(self.source, InsertSource::Values(_)),
-            "Cannot mix add_value_col_expr() with from_select()"
+            "Cannot mix add_col_value_expr() with from_select()"
         );
         // Check for duplicates against value columns.
         assert!(
             !self.columns.iter().any(|c| c == &column),
-            "add_value_col_expr: column {:?} already exists in value columns",
+            "add_col_value_expr: column {:?} already exists in value columns",
             column
         );
         // Check for duplicates against existing col_exprs.
         assert!(
             !self.col_exprs.iter().any(|(c, _)| c == &column),
-            "add_value_col_expr: duplicate column {:?}",
+            "add_col_value_expr: duplicate column {:?}",
             column
         );
         self.col_exprs.push((column, expr));

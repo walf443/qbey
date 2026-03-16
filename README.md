@@ -559,14 +559,14 @@ assert_eq!(sql, r#"DELETE FROM "employee""#);
 Values are set using `add_value()` with column-value pairs.
 Multiple rows can be inserted by calling `add_value()` multiple times.
 Column order may differ between calls — values are automatically reordered to match the first call.
-`add_value_col_expr()` appends a raw SQL expression (e.g., `NOW()`) to every row:
+`add_col_value_expr()` appends a raw SQL expression (e.g., `NOW()`) to every row:
 
 ```rust
 # use qbey::{qbey, col, Value, RawSql};
 let mut ins = qbey("employee").into_insert();
 ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
 ins.add_value(&[("age", 25.into()), ("name", "Bob".into())]);
-ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+ins.add_col_value_expr("created_at", RawSql::new("NOW()"));
 
 let (sql, binds) = ins.to_sql();
 assert_eq!(sql, r#"INSERT INTO "employee" ("name", "age", "created_at") VALUES (?, ?, NOW()), (?, ?, NOW())"#);
