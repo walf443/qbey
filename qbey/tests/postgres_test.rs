@@ -1,7 +1,7 @@
 #![cfg(feature = "test-postgres")]
 
 use postgres::{Client, NoTls, types::ToSql};
-use qbey::{Dialect, LikeExpression, col, qbey_from_subquery_with, qbey_with, table};
+use qbey::{Dialect, LikeExpression, col, count_all, qbey_from_subquery_with, qbey_with, table};
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::postgres::Postgres;
@@ -615,4 +615,14 @@ pg_test!(test_delete_allow_without_where, |client| {
 
     let rows = client.query("SELECT id FROM users", &[]).unwrap();
     assert_eq!(rows.len(), 0);
+});
+
+pg_test!(test_count_all_with_reserved_word_alias, |client| {
+    let mut q = qbey_with::<PgValue>("users");
+    q.add_select(count_all().as_("count"));
+    let (sql, _) = q.to_sql_with(&PostgresDialect);
+
+    let rows = client.query(&sql, &[]).unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i64>("count"), 3);
 });

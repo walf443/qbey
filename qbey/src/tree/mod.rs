@@ -76,8 +76,8 @@ pub struct SelectTree<V: Clone = crate::Value> {
 impl<V: Clone> SelectTree<V> {
     /// Transform all bind values in this tree.
     ///
-    /// `select` is not mapped because `SelectClause` contains only column
-    /// references, neither of which holds bind values.
+    /// `select` is not mapped because `SelectClause` variants (column
+    /// references, raw expressions, and function calls) do not hold bind values.
     pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectTree<U> {
         SelectTree {
             from: self.from.map_values(f),
