@@ -331,7 +331,7 @@ async fn test_use_index_for_order_by() {
         .await
         .unwrap();
 
-    assert!(rows.len() > 0);
+    assert!(!rows.is_empty());
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
 }
 
