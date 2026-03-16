@@ -289,3 +289,77 @@ fn test_order_by_mixed_col_and_expr() {
         r#"SELECT "id", "name" FROM "users" ORDER BY "name" ASC, RAND()"#
     );
 }
+
+#[test]
+fn test_col_count() {
+    let mut q = qbey("employee");
+    q.select(&["dept"]);
+    q.add_select(col("id").count());
+    q.group_by(&["dept"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "dept", COUNT("id") FROM "employee" GROUP BY "dept""#
+    );
+}
+
+#[test]
+fn test_col_count_with_alias() {
+    let mut q = qbey("employee");
+    q.select(&["dept"]);
+    q.add_select(col("id").count().as_("cnt"));
+    q.group_by(&["dept"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "dept", COUNT("id") AS "cnt" FROM "employee" GROUP BY "dept""#
+    );
+}
+
+#[test]
+fn test_col_count_with_table_qualified() {
+    let mut q = qbey("employee");
+    q.select(&["dept"]);
+    q.add_select(table("employee").col("id").count().as_("cnt"));
+    q.group_by(&["dept"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "dept", COUNT("employee"."id") AS "cnt" FROM "employee" GROUP BY "dept""#
+    );
+}
+
+#[test]
+fn test_count_all() {
+    let mut q = qbey("employee");
+    q.add_select(count_all());
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(sql, r#"SELECT COUNT(*) FROM "employee""#);
+}
+
+#[test]
+fn test_count_all_with_alias() {
+    let mut q = qbey("employee");
+    q.select(&["dept"]);
+    q.add_select(count_all().as_("cnt"));
+    q.group_by(&["dept"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "dept", COUNT(*) AS "cnt" FROM "employee" GROUP BY "dept""#
+    );
+}
+
+#[test]
+fn test_count_one() {
+    let mut q = qbey("employee");
+    q.add_select(count_one().as_("cnt"));
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(sql, r#"SELECT COUNT(1) AS "cnt" FROM "employee""#);
+}

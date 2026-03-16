@@ -252,9 +252,11 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
         self
     }
 
-    /// Append a single column to the select list.
-    pub fn add_select(&mut self, col: Col) -> &mut Self {
-        self.selects.push(SelectItem::Col(col));
+    /// Append a single item to the select list.
+    ///
+    /// Accepts a `Col`, `SelectItem`, or any type that implements `Into<SelectItem>`.
+    pub fn add_select(&mut self, item: impl Into<SelectItem>) -> &mut Self {
+        self.selects.push(item.into());
         self
     }
 

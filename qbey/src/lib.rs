@@ -30,7 +30,10 @@ pub trait Dialect {
 }
 
 // Re-export all public types at the crate root.
-pub use column::{Col, ColRef, OrderByClause, SelectItem, SortDir, TableRef, col, table};
+pub use column::{
+    Col, ColRef, OrderByClause, SelectFunc, SelectItem, SortDir, TableRef, col, count_all,
+    count_one, table,
+};
 pub use delete::DeleteQuery;
 pub use join::{JoinClause, JoinCol, JoinCondition, JoinType};
 pub use like::LikeExpression;

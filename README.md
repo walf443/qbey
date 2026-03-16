@@ -176,6 +176,19 @@ assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT ((\"role\" = ? OR \"role\"
 ### Aggregate / GROUP BY
 
 ```rust
+# use qbey::{qbey, col, count_all};
+let mut q = qbey("employee");
+q.select(&["dept"]);
+q.add_select(count_all().as_("cnt"));
+q.group_by(&["dept"]);
+
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" GROUP BY \"dept\"");
+```
+
+Raw SQL expressions can also be used for aggregate functions not yet covered by the builder API:
+
+```rust
 # use qbey::{qbey, col, RawSql};
 let mut q = qbey("employee");
 q.select(&["dept"]);

@@ -225,6 +225,19 @@ impl Col {
         self
     }
 
+    /// Create a `COUNT(col)` aggregate expression.
+    ///
+    /// - `col("id").count()` → `COUNT("id")`
+    /// - `table("users").col("id").count()` → `COUNT("users"."id")`
+    /// - `col("id").count().as_("cnt")` → `COUNT("id") AS "cnt"`
+    pub fn count(self) -> SelectItem {
+        SelectItem::Function {
+            func: SelectFunc::Count,
+            col: Some(self),
+            alias: None,
+        }
+    }
+
     pub fn asc(self) -> OrderByClause {
         OrderByClause::Col {
             col: self,
@@ -264,6 +277,74 @@ pub enum SelectItem {
         raw: crate::raw_sql::RawSql,
         alias: Option<String>,
     },
+    /// A function applied to a column (e.g., `COUNT("id")`, `SUM("price")`).
+    Function {
+        func: SelectFunc,
+        col: Option<Col>,
+        alias: Option<String>,
+    },
+}
+
+/// Supported SQL functions for SELECT items.
+#[derive(Debug, Clone)]
+pub enum SelectFunc {
+    /// `COUNT(col)` or `COUNT(*)`.
+    Count,
+    /// `COUNT(1)`.
+    CountOne,
+}
+
+impl SelectFunc {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            SelectFunc::Count => "COUNT",
+            SelectFunc::CountOne => "COUNT",
+        }
+    }
+}
+
+/// Create a `COUNT(*)` expression.
+///
+/// - `count_all()` → `COUNT(*)`
+/// - `count_all().as_("cnt")` → `COUNT(*) AS "cnt"`
+pub fn count_all() -> SelectItem {
+    SelectItem::Function {
+        func: SelectFunc::Count,
+        col: None,
+        alias: None,
+    }
+}
+
+/// Create a `COUNT(1)` expression.
+///
+/// - `count_one()` → `COUNT(1)`
+/// - `count_one().as_("cnt")` → `COUNT(1) AS "cnt"`
+pub fn count_one() -> SelectItem {
+    SelectItem::Function {
+        func: SelectFunc::CountOne,
+        col: None,
+        alias: None,
+    }
+}
+
+impl SelectItem {
+    /// Add an alias to this select item.
+    ///
+    /// - `col("id").count().as_("cnt")` → `COUNT("id") AS "cnt"`
+    pub fn as_(mut self, alias: &str) -> SelectItem {
+        match &mut self {
+            SelectItem::Col(col) => {
+                col.alias = Some(alias.to_string());
+            }
+            SelectItem::Expr { alias: a, .. } => {
+                *a = Some(alias.to_string());
+            }
+            SelectItem::Function { alias: a, .. } => {
+                *a = Some(alias.to_string());
+            }
+        }
+        self
+    }
 }
 
 impl From<Col> for SelectItem {
