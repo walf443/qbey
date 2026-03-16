@@ -103,6 +103,53 @@ let (sql, binds) = u.to_sql();
 assert_eq!(sql, "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY `created_at` ASC LIMIT 10");
 ```
 
+## INSERT
+
+```rust
+use qbey_mysql::qbey;
+use qbey::{col, Value, RawSql};
+
+let mut ins = qbey("users").into_insert();
+ins.add_value(&[("id", 1.into()), ("name", "Alice".into()), ("age", 30.into())]);
+let (sql, binds) = ins.to_sql();
+assert_eq!(sql, "INSERT INTO `users` (`id`, `name`, `age`) VALUES (?, ?, ?)");
+```
+
+### ON DUPLICATE KEY UPDATE
+
+With bind values:
+
+```rust
+use qbey_mysql::qbey;
+use qbey::{col, Value};
+
+let mut ins = qbey("users").into_insert();
+ins.add_value(&[("id", 1.into()), ("name", "Alice".into()), ("age", 30.into())]);
+ins.on_duplicate_key_update(col("name"), "Alicia");
+let (sql, binds) = ins.to_sql();
+assert_eq!(
+    sql,
+    "INSERT INTO `users` (`id`, `name`, `age`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `name` = ?"
+);
+```
+
+With raw SQL expressions (e.g., `VALUES()`, arithmetic):
+
+```rust
+use qbey_mysql::qbey;
+use qbey::{col, Value, RawSql};
+
+let mut ins = qbey("users").into_insert();
+ins.add_value(&[("id", 1.into()), ("name", "Alice".into()), ("age", 30.into())]);
+ins.on_duplicate_key_update_expr(col("name"), RawSql::new("VALUES(`name`)"));
+ins.on_duplicate_key_update_expr(col("age"), RawSql::new("`age` + 1"));
+let (sql, binds) = ins.to_sql();
+assert_eq!(
+    sql,
+    "INSERT INTO `users` (`id`, `name`, `age`) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE `name` = VALUES(`name`), `age` = `age` + 1"
+);
+```
+
 ## DELETE
 
 ```rust

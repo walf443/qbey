@@ -785,3 +785,87 @@ async fn test_delete_with_order_by_and_limit() {
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
     assert_eq!(rows[1].get::<String, _>("name"), "Bob");
 }
+
+#[tokio::test]
+async fn test_insert_on_duplicate_key_update_with_value() {
+    let pool = setup_pool().await;
+
+    // Insert a conflicting row (id=1 already exists as Alice, age=30)
+    let mut ins = qbey_with::<MysqlValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", 1.into()),
+        ("name", "Alice".into()),
+        ("age", 30.into()),
+    ]);
+    ins.on_duplicate_key_update(col("name"), "Alicia");
+    let (sql, binds) = ins.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // name should be updated to "Alicia", age unchanged
+    let rows = sqlx::query("SELECT name, age FROM users WHERE id = 1")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Alicia");
+    assert_eq!(rows[0].get::<i64, _>("age"), 30);
+}
+
+#[tokio::test]
+async fn test_insert_on_duplicate_key_update_expr() {
+    let pool = setup_pool().await;
+
+    // Insert a conflicting row using VALUES() to copy the inserted value
+    let mut ins = qbey_with::<MysqlValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", 1.into()),
+        ("name", "Updated".into()),
+        ("age", 99.into()),
+    ]);
+    ins.on_duplicate_key_update_expr(col("name"), qbey::RawSql::new("VALUES(`name`)"));
+    ins.on_duplicate_key_update_expr(col("age"), qbey::RawSql::new("VALUES(`age`)"));
+    let (sql, binds) = ins.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rows = sqlx::query("SELECT name, age FROM users WHERE id = 1")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Updated");
+    assert_eq!(rows[0].get::<i64, _>("age"), 99);
+}
+
+#[tokio::test]
+async fn test_insert_on_duplicate_key_update_no_conflict() {
+    let pool = setup_pool().await;
+
+    // Insert a new row (id=100 does not exist) — no conflict, normal insert
+    let mut ins = qbey_with::<MysqlValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", 100.into()),
+        ("name", "Dave".into()),
+        ("age", 40.into()),
+    ]);
+    ins.on_duplicate_key_update(col("name"), "should_not_apply");
+    let (sql, binds) = ins.to_sql();
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rows = sqlx::query("SELECT name, age FROM users WHERE id = 100")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Dave");
+    assert_eq!(rows[0].get::<i64, _>("age"), 40);
+}
