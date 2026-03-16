@@ -716,7 +716,14 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
             if i > 0 {
                 tokens.push(SelectToken::SetOperator(op.clone()));
             }
-            tokens.push(SelectToken::SubSelect(Box::new(mq.to_tree())));
+            let sub = mq.to_tree();
+            if sub.needs_parentheses() {
+                tokens.push(SelectToken::OpenParen);
+                tokens.push(SelectToken::SubSelect(Box::new(sub)));
+                tokens.push(SelectToken::CloseParen);
+            } else {
+                tokens.push(SelectToken::SubSelect(Box::new(sub)));
+            }
         }
 
         // Compound-level ORDER BY / LIMIT / OFFSET from inner

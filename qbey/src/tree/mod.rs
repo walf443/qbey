@@ -58,20 +58,35 @@ pub enum SelectToken<V: Clone = crate::Value> {
     Raw(String),
     /// A sub-SELECT within a compound query (UNION/INTERSECT/EXCEPT).
     SubSelect(Box<SelectTree<V>>),
+    /// Open parenthesis `(`. Paired with `CloseParen`.
+    /// Used to wrap sub-selects that need parentheses in compound queries.
+    OpenParen,
+    /// Close parenthesis `)`. Paired with `OpenParen`.
+    CloseParen,
     /// Set operation keyword (UNION, UNION ALL, INTERSECT, EXCEPT, etc.).
     SetOperator(crate::SetOp),
 }
 
 /// Token for INSERT query construction.
+///
+/// **Token ordering**: `InsertInto` must appear before `Values` or `SelectSource`,
+/// as the renderer extracts table/column metadata from it.
+/// Typical sequences:
+/// - `[InsertInto, Values, KeywordAssignments?]`
+/// - `[InsertInto, SelectSource]`
 #[derive(Debug, Clone)]
 pub enum InsertToken<V: Clone = crate::Value> {
+    /// INSERT INTO header with table name, columns, and expression columns.
     InsertInto {
         table: String,
         columns: Vec<String>,
         col_exprs: Vec<(String, String)>,
     },
+    /// Explicit value rows for INSERT ... VALUES (...), (...).
     Values(Vec<Vec<V>>),
+    /// A subquery source for INSERT ... SELECT ....
     SelectSource(Box<SelectTree<V>>),
+    /// Raw SQL fragment (no binds).
     Raw(String),
     /// SET-style assignments (e.g., ON DUPLICATE KEY UPDATE).
     KeywordAssignments {
@@ -118,6 +133,20 @@ pub struct SelectTree<V: Clone = crate::Value> {
 }
 
 impl<V: Clone> SelectTree<V> {
+    /// Returns true if this tree contains tokens (ORDER BY, LIMIT, OFFSET, FOR)
+    /// that require parentheses when used as a sub-select in compound queries.
+    pub fn needs_parentheses(&self) -> bool {
+        self.tokens.iter().any(|t| {
+            matches!(
+                t,
+                SelectToken::OrderBy(_)
+                    | SelectToken::Limit(_)
+                    | SelectToken::Offset(_)
+                    | SelectToken::LockFor(_)
+            )
+        })
+    }
+
     /// Transform all bind values in this tree.
     pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectTree<U> {
         SelectTree {
@@ -146,6 +175,8 @@ impl<V: Clone> SelectTree<V> {
                     SelectToken::SubSelect(sub) => {
                         SelectToken::SubSelect(Box::new(sub.map_values(f)))
                     }
+                    SelectToken::OpenParen => SelectToken::OpenParen,
+                    SelectToken::CloseParen => SelectToken::CloseParen,
                     SelectToken::SetOperator(op) => SelectToken::SetOperator(op),
                 })
                 .collect(),
@@ -157,92 +188,7 @@ impl<V: Clone> SelectTree<V> {
 
 impl<V: Clone + std::fmt::Debug> SelectTree<V> {
     pub fn from_query(query: &crate::SelectQuery<V>) -> Self {
-        if !query.set_operations.is_empty() {
-            // Compound query: build SubSelect + SetOperator token sequence
-            let mut tokens = Vec::new();
-
-            for (i, (op, part)) in query.set_operations.iter().enumerate() {
-                if i > 0 {
-                    tokens.push(SelectToken::SetOperator(op.clone()));
-                }
-                tokens.push(SelectToken::SubSelect(Box::new(SelectTree::from_query(
-                    part,
-                ))));
-            }
-
-            // Compound-level ORDER BY / LIMIT / OFFSET
-            if !query.order_bys.is_empty() {
-                tokens.push(SelectToken::OrderBy(query.order_bys.clone()));
-            }
-            if let Some(n) = query.limit_val {
-                tokens.push(SelectToken::Limit(n));
-            }
-            if let Some(n) = query.offset_val {
-                tokens.push(SelectToken::Offset(n));
-            }
-
-            return SelectTree { tokens };
-        }
-
-        // Simple SELECT
-        let mut tokens = Vec::new();
-
-        tokens.push(SelectToken::Select(SelectClause::Columns(
-            query.selects.clone(),
-        )));
-
-        let source = match &query.from_subquery {
-            Some(sq) => FromSource::Subquery(sq.clone()),
-            None => FromSource::Table(query.table.clone()),
-        };
-        tokens.push(SelectToken::From(FromClause {
-            source,
-            alias: query.table_alias.clone(),
-        }));
-
-        debug_assert!(
-            query.join_subqueries.len() <= query.joins.len(),
-            "join_subqueries must not exceed joins length"
-        );
-        let mut join_subqueries = query.join_subqueries.clone();
-        join_subqueries.resize_with(query.joins.len(), || None);
-
-        for (i, join) in query.joins.iter().enumerate() {
-            tokens.push(SelectToken::Join {
-                clause: join.clone(),
-                subquery: join_subqueries[i].clone(),
-            });
-        }
-
-        if !query.wheres.is_empty() {
-            tokens.push(SelectToken::Where(query.wheres.clone()));
-        }
-
-        if !query.group_bys.is_empty() {
-            tokens.push(SelectToken::GroupBy(query.group_bys.clone()));
-        }
-
-        if !query.havings.is_empty() {
-            tokens.push(SelectToken::Having(query.havings.clone()));
-        }
-
-        if !query.order_bys.is_empty() {
-            tokens.push(SelectToken::OrderBy(query.order_bys.clone()));
-        }
-
-        if let Some(n) = query.limit_val {
-            tokens.push(SelectToken::Limit(n));
-        }
-
-        if let Some(n) = query.offset_val {
-            tokens.push(SelectToken::Offset(n));
-        }
-
-        if let Some(ref lock) = query.lock_for {
-            tokens.push(SelectToken::LockFor(lock.clone()));
-        }
-
-        SelectTree { tokens }
+        Self::from_query_owned(query.clone())
     }
 
     /// Convert a SelectQuery into a SelectTree by moving fields instead of cloning.
@@ -254,9 +200,14 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
                 if i > 0 {
                     tokens.push(SelectToken::SetOperator(op));
                 }
-                tokens.push(SelectToken::SubSelect(Box::new(
-                    SelectTree::from_query_owned(part),
-                )));
+                let sub = SelectTree::from_query_owned(part);
+                if sub.needs_parentheses() {
+                    tokens.push(SelectToken::OpenParen);
+                    tokens.push(SelectToken::SubSelect(Box::new(sub)));
+                    tokens.push(SelectToken::CloseParen);
+                } else {
+                    tokens.push(SelectToken::SubSelect(Box::new(sub)));
+                }
             }
 
             if !query.order_bys.is_empty() {

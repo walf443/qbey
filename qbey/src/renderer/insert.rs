@@ -6,35 +6,22 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (Str
     let mut binds: Vec<V> = Vec::new();
     let mut parts = Vec::new();
 
-    // Track table/columns from InsertInto token for SelectSource rendering
-    let mut table_name = String::new();
+    // Extract InsertInto metadata first (required by Values/SelectSource).
+    let (table, columns, col_exprs) = extract_insert_into(&tree.tokens);
 
     for token in &tree.tokens {
         match token {
-            InsertToken::InsertInto {
-                table,
-                columns,
-                col_exprs,
-            } => {
-                table_name = table.clone();
-                // We don't emit the full INSERT INTO here yet;
-                // the Values or SelectSource token decides the format.
-                // Store info for use by subsequent tokens.
-                // For Values, we emit the header when we see Values.
-                // For SelectSource, we emit just INSERT INTO table.
-                // We handle this below in Values/SelectSource.
-                let _ = (columns, col_exprs); // used by Values token
+            InsertToken::InsertInto { .. } => {
+                // Already extracted above; nothing to emit here.
             }
             InsertToken::Values(rows) => {
-                // Find the InsertInto token to get columns/col_exprs
-                let (columns, col_exprs) = find_insert_into(&tree.tokens);
                 let mut quoted_cols: Vec<String> = columns.iter().map(|c| (cfg.qi)(c)).collect();
                 for (col, _) in col_exprs {
                     quoted_cols.push((cfg.qi)(col));
                 }
                 let mut sql = format!(
                     "INSERT INTO {} ({}) VALUES ",
-                    (cfg.qi)(&table_name),
+                    (cfg.qi)(table),
                     quoted_cols.join(", ")
                 );
 
@@ -63,7 +50,7 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (Str
             }
             InsertToken::SelectSource(sub) => {
                 let sub_sql = super::render_subquery_sql(sub, cfg, &mut binds);
-                parts.push(format!("INSERT INTO {} {}", (cfg.qi)(&table_name), sub_sql));
+                parts.push(format!("INSERT INTO {} {}", (cfg.qi)(table), sub_sql));
             }
             InsertToken::Raw(s) => {
                 parts.push(s.clone());
@@ -89,17 +76,23 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (Str
     (parts.join(" "), binds)
 }
 
-/// Extract columns and col_exprs from the InsertInto token.
-fn find_insert_into<V: Clone>(
+/// Extract table, columns, and col_exprs from the first `InsertInto` token.
+///
+/// # Panics
+///
+/// Panics if no `InsertInto` token is found.
+fn extract_insert_into<V: Clone>(
     tokens: &[InsertToken<V>],
-) -> (&Vec<String>, &Vec<(String, String)>) {
+) -> (&str, &[String], &[(String, String)]) {
     for token in tokens {
         if let InsertToken::InsertInto {
-            columns, col_exprs, ..
+            table,
+            columns,
+            col_exprs,
         } = token
         {
-            return (columns, col_exprs);
+            return (table, columns, col_exprs);
         }
     }
-    unreachable!("InsertTree must contain InsertInto token")
+    unreachable!("InsertTree must contain an InsertInto token")
 }

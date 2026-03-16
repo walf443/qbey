@@ -245,70 +245,64 @@ pub(super) fn render_select_tokens<V: Clone>(
     binds: &mut Vec<V>,
     parts: &mut Vec<String>,
 ) {
+    let mut open_parens: usize = 0;
     for token in tokens {
+        // OpenParen/CloseParen are handled specially to avoid spaces around parens.
         match token {
-            SelectToken::Select(clause) => {
-                parts.push(render_select_clause(clause, cfg));
+            SelectToken::OpenParen => {
+                open_parens += 1;
+                continue;
             }
-            SelectToken::From(from) => {
-                parts.push(render_from(from, cfg, binds));
+            SelectToken::CloseParen => {
+                if let Some(last) = parts.last_mut() {
+                    last.push(')');
+                }
+                continue;
             }
+            _ => {}
+        }
+
+        let rendered = match token {
+            SelectToken::Select(clause) => Some(render_select_clause(clause, cfg)),
+            SelectToken::From(from) => Some(render_from(from, cfg, binds)),
             SelectToken::Join { clause, subquery } => {
-                parts.push(render_join(clause, subquery, cfg, binds));
+                Some(render_join(clause, subquery, cfg, binds))
             }
             SelectToken::Where(wheres) => {
-                if let Some(where_sql) = render_wheres(wheres, cfg, binds) {
-                    parts.push(format!("WHERE {}", where_sql));
-                }
+                render_wheres(wheres, cfg, binds).map(|where_sql| format!("WHERE {}", where_sql))
             }
             SelectToken::GroupBy(cols) => {
-                if !cols.is_empty() {
+                if cols.is_empty() {
+                    None
+                } else {
                     let quoted: Vec<String> = cols.iter().map(|c| (cfg.qi)(c)).collect();
-                    parts.push(format!("GROUP BY {}", quoted.join(", ")));
+                    Some(format!("GROUP BY {}", quoted.join(", ")))
                 }
             }
-            SelectToken::Having(havings) => {
-                if let Some(having_sql) = render_wheres(havings, cfg, binds) {
-                    parts.push(format!("HAVING {}", having_sql));
-                }
-            }
-            SelectToken::OrderBy(obs) => {
-                if let Some(clause) = render_order_by(obs, cfg) {
-                    parts.push(clause);
-                }
-            }
-            SelectToken::Limit(n) => {
-                parts.push(format!("LIMIT {}", n));
-            }
-            SelectToken::Offset(n) => {
-                parts.push(format!("OFFSET {}", n));
-            }
-            SelectToken::LockFor(s) => {
-                parts.push(format!("FOR {}", s));
-            }
-            SelectToken::Raw(s) => {
-                parts.push(s.clone());
-            }
+            SelectToken::Having(havings) => render_wheres(havings, cfg, binds)
+                .map(|having_sql| format!("HAVING {}", having_sql)),
+            SelectToken::OrderBy(obs) => render_order_by(obs, cfg),
+            SelectToken::Limit(n) => Some(format!("LIMIT {}", n)),
+            SelectToken::Offset(n) => Some(format!("OFFSET {}", n)),
+            SelectToken::LockFor(s) => Some(format!("FOR {}", s)),
+            SelectToken::Raw(s) => Some(s.clone()),
             SelectToken::SubSelect(sub) => {
                 let mut sub_parts = Vec::new();
                 render_select_tokens(&sub.tokens, cfg, binds, &mut sub_parts);
-                let sub_sql = sub_parts.join(" ");
-                // Wrap in parens if sub-select has ORDER BY/LIMIT/OFFSET
-                let has_extra = sub.tokens.iter().any(|t| {
-                    matches!(
-                        t,
-                        SelectToken::OrderBy(_) | SelectToken::Limit(_) | SelectToken::Offset(_)
-                    )
-                });
-                if has_extra {
-                    parts.push(format!("({})", sub_sql));
-                } else {
-                    parts.push(sub_sql);
-                }
+                Some(sub_parts.join(" "))
             }
-            SelectToken::SetOperator(op) => {
-                parts.push(set_op_keyword(op).to_string());
+            SelectToken::SetOperator(op) => Some(set_op_keyword(op).to_string()),
+            SelectToken::OpenParen | SelectToken::CloseParen => unreachable!(),
+        };
+
+        if let Some(mut s) = rendered {
+            // Prepend pending open parentheses
+            if open_parens > 0 {
+                let prefix: String = std::iter::repeat_n('(', open_parens).collect();
+                s = format!("{}{}", prefix, s);
+                open_parens = 0;
             }
+            parts.push(s);
         }
     }
 }
