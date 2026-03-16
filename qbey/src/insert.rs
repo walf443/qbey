@@ -1,9 +1,30 @@
 use std::collections::{HashMap, HashSet};
 
 use crate::Dialect;
+use crate::column::Col;
 use crate::raw_sql::RawSql;
 use crate::tree::SelectTree;
 use crate::value::Value;
+
+/// Trait for types that can be used as a column name in
+/// [`InsertQuery::add_value_col_expr()`].
+///
+/// Implemented for `&str` and [`Col`].
+pub trait IntoColumnName {
+    fn into_column_name(self) -> String;
+}
+
+impl IntoColumnName for &str {
+    fn into_column_name(self) -> String {
+        self.to_string()
+    }
+}
+
+impl IntoColumnName for Col {
+    fn into_column_name(self) -> String {
+        self.column
+    }
+}
 
 use crate::renderer::RenderConfig;
 use crate::tree::default_quote_identifier;
@@ -215,37 +236,41 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// - Panics if the column name duplicates a column already added via
     ///   `add_value()` or a previous `add_value_col_expr()` call.
     ///
+    /// The column can be specified as a `&str` or a [`Col`](crate::Col):
+    ///
     /// ```
-    /// use qbey::{qbey, Value, RawSql};
+    /// use qbey::{qbey, col, Value, RawSql};
     ///
     /// let mut ins = qbey("employee").into_insert();
     /// ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
     /// ins.add_value_col_expr("created_at", RawSql::new("NOW()"));
+    /// ins.add_value_col_expr(col("updated_at"), RawSql::new("NOW()"));
     /// let (sql, binds) = ins.to_sql();
     /// assert_eq!(
     ///     sql,
-    ///     r#"INSERT INTO "employee" ("name", "age", "created_at") VALUES (?, ?, NOW())"#
+    ///     r#"INSERT INTO "employee" ("name", "age", "created_at", "updated_at") VALUES (?, ?, NOW(), NOW())"#
     /// );
     /// assert_eq!(binds, vec![Value::String("Alice".to_string()), Value::Int(30)]);
     /// ```
-    pub fn add_value_col_expr(&mut self, column: &str, expr: RawSql) -> &mut Self {
+    pub fn add_value_col_expr(&mut self, column: impl IntoColumnName, expr: RawSql) -> &mut Self {
+        let column = column.into_column_name();
         assert!(
             matches!(self.source, InsertSource::Values(_)),
             "Cannot mix add_value_col_expr() with from_select()"
         );
         // Check for duplicates against value columns.
         assert!(
-            !self.columns.iter().any(|c| c == column),
+            !self.columns.iter().any(|c| c == &column),
             "add_value_col_expr: column {:?} already exists in value columns",
             column
         );
         // Check for duplicates against existing col_exprs.
         assert!(
-            !self.col_exprs.iter().any(|(c, _)| c == column),
+            !self.col_exprs.iter().any(|(c, _)| c == &column),
             "add_value_col_expr: duplicate column {:?}",
             column
         );
-        self.col_exprs.push((column.to_string(), expr));
+        self.col_exprs.push((column, expr));
         self
     }
 

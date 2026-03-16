@@ -245,6 +245,22 @@ fn test_insert_col_expr_with_dialect() {
 }
 
 #[test]
+fn test_insert_col_expr_with_col() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("name", "Alice".into()), ("age", 30.into())]);
+    ins.add_value_col_expr(col("created_at"), RawSql::new("NOW()"));
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("name", "age", "created_at") VALUES (?, ?, NOW())"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::String("Alice".to_string()), Value::Int(30)]
+    );
+}
+
+#[test]
 #[should_panic(expected = "already exists in value columns")]
 fn test_insert_col_expr_duplicate_value_column_panics() {
     let mut ins = qbey("employee").into_insert();
