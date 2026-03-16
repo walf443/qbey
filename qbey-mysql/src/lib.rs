@@ -1308,6 +1308,62 @@ mod tests {
     }
 
     #[test]
+    fn test_col_sum() {
+        let mut q = qbey("orders");
+        q.select(&["product"]);
+        q.add_select(col("price").sum().as_("total"));
+        q.group_by(&["product"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `product`, SUM(`price`) AS `total` FROM `orders` GROUP BY `product`"
+        );
+    }
+
+    #[test]
+    fn test_col_avg() {
+        let mut q = qbey("orders");
+        q.select(&["product"]);
+        q.add_select(col("price").avg().as_("avg_price"));
+        q.group_by(&["product"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `product`, AVG(`price`) AS `avg_price` FROM `orders` GROUP BY `product`"
+        );
+    }
+
+    #[test]
+    fn test_col_min() {
+        let mut q = qbey("orders");
+        q.select(&["product"]);
+        q.add_select(col("price").min().as_("min_price"));
+        q.group_by(&["product"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `product`, MIN(`price`) AS `min_price` FROM `orders` GROUP BY `product`"
+        );
+    }
+
+    #[test]
+    fn test_col_max() {
+        let mut q = qbey("orders");
+        q.select(&["product"]);
+        q.add_select(col("price").max().as_("max_price"));
+        q.group_by(&["product"]);
+
+        let (sql, _) = q.to_sql();
+        assert_eq!(
+            sql,
+            "SELECT `product`, MAX(`price`) AS `max_price` FROM `orders` GROUP BY `product`"
+        );
+    }
+
+    #[test]
     fn test_intersect_with_force_index() {
         let mut q1 = qbey("employee");
         q1.force_index(&["idx_dept"]);
