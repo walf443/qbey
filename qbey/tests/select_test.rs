@@ -600,6 +600,87 @@ fn test_having_not_in_subquery() {
 }
 
 #[test]
+fn test_having_count_all() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(count_all().as_("cnt"));
+    q.group_by(&["product"]);
+    q.having(count_all().gt(5));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "product", COUNT(*) AS "cnt" FROM "orders" GROUP BY "product" HAVING COUNT(*) > ?"#
+    );
+    assert_eq!(binds, vec![Value::Int(5)]);
+}
+
+#[test]
+fn test_having_count_all_shared_select_item() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    let cnt = count_all().as_("cnt");
+    q.add_select(cnt.clone());
+    q.group_by(&["product"]);
+    q.having(cnt.gt(5));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "product", COUNT(*) AS "cnt" FROM "orders" GROUP BY "product" HAVING COUNT(*) > ?"#
+    );
+    assert_eq!(binds, vec![Value::Int(5)]);
+}
+
+#[test]
+fn test_having_count_all_pg() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(count_all().as_("cnt"));
+    q.group_by(&["product"]);
+    q.having(count_all().gt(5));
+
+    let (sql, binds) = q.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"SELECT "product", COUNT(*) AS "cnt" FROM "orders" GROUP BY "product" HAVING COUNT(*) > $1"#
+    );
+    assert_eq!(binds, vec![Value::Int(5)]);
+}
+
+#[test]
+fn test_having_sum_aggregate() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(col("price").sum().as_("total"));
+    q.group_by(&["product"]);
+    q.having(col("price").sum().gt(100));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "product", SUM("price") AS "total" FROM "orders" GROUP BY "product" HAVING SUM("price") > ?"#
+    );
+    assert_eq!(binds, vec![Value::Int(100)]);
+}
+
+#[test]
+fn test_having_count_one() {
+    let mut q = qbey("orders");
+    q.select(&["product"]);
+    q.add_select(count_one().as_("cnt"));
+    q.group_by(&["product"]);
+    q.having(count_one().gte(3));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "product", COUNT(1) AS "cnt" FROM "orders" GROUP BY "product" HAVING COUNT(1) >= ?"#
+    );
+    assert_eq!(binds, vec![Value::Int(3)]);
+}
+
+#[test]
 fn test_multiple_aggregates() {
     let mut q = qbey("orders");
     q.select(&["product"]);

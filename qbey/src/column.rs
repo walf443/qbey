@@ -42,6 +42,7 @@ impl TableRef {
             table: Some(self.name.clone()),
             column: col.to_string(),
             alias: None,
+            aggregate: None,
         }
     }
 
@@ -52,6 +53,7 @@ impl TableRef {
                 table: Some(self.name.clone()),
                 column: c.to_string(),
                 alias: None,
+                aggregate: None,
             })
             .collect()
     }
@@ -74,6 +76,9 @@ pub struct Col {
     pub table: Option<String>,
     pub column: String,
     pub alias: Option<String>,
+    /// When set, this Col represents an aggregate function call (e.g., `COUNT(*)`, `SUM("price")`).
+    /// The inner `Option<Box<Col>>` is the function argument (`None` means `*`).
+    pub(crate) aggregate: Option<(SelectFunc, Option<Box<Col>>)>,
 }
 
 /// Create a column reference.
@@ -82,6 +87,7 @@ pub fn col(name: &str) -> Col {
         table: None,
         column: name.to_string(),
         alias: None,
+        aggregate: None,
     }
 }
 
@@ -91,6 +97,7 @@ impl From<&str> for Col {
             table: None,
             column: name.to_string(),
             alias: None,
+            aggregate: None,
         }
     }
 }
@@ -398,6 +405,60 @@ pub fn count_one() -> SelectItem {
 }
 
 impl SelectItem {
+    /// Convert this select item into a `Col` for use in WHERE/HAVING conditions.
+    ///
+    /// For `Function` variants, the resulting `Col` carries aggregate info so the
+    /// renderer produces e.g. `COUNT(*)` instead of a quoted identifier.
+    ///
+    /// Panics if the variant is `Expr` (raw expressions cannot be safely converted).
+    fn to_col(self) -> Col {
+        match self {
+            SelectItem::Col(col) => col,
+            SelectItem::Function { func, col, .. } => Col {
+                table: None,
+                column: String::new(),
+                alias: None,
+                aggregate: Some((func, col.map(Box::new))),
+            },
+            SelectItem::Expr { .. } => {
+                panic!("cannot convert raw Expr SelectItem to Col for WHERE/HAVING")
+            }
+        }
+    }
+
+    /// Create a `col > val` condition using this aggregate expression.
+    ///
+    /// - `count_all().gt(5)` → `COUNT(*) > ?`
+    /// - `col("price").sum().gt(100)` → `SUM("price") > ?`
+    pub fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
+        self.to_col().gt(val)
+    }
+
+    /// Create a `col < val` condition using this aggregate expression.
+    pub fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
+        self.to_col().lt(val)
+    }
+
+    /// Create a `col >= val` condition using this aggregate expression.
+    pub fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
+        self.to_col().gte(val)
+    }
+
+    /// Create a `col <= val` condition using this aggregate expression.
+    pub fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
+        self.to_col().lte(val)
+    }
+
+    /// Create a `col = val` condition using this aggregate expression.
+    pub fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
+        self.to_col().eq(val)
+    }
+
+    /// Create a `col != val` condition using this aggregate expression.
+    pub fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
+        self.to_col().ne(val)
+    }
+
     /// Add an alias to this select item.
     ///
     /// - `col("id").count().as_("cnt")` → `COUNT("id") AS "cnt"`
@@ -429,6 +490,7 @@ impl<'a> From<&'a str> for SelectItem {
             table: None,
             column: s.to_string(),
             alias: None,
+            aggregate: None,
         })
     }
 }

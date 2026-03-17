@@ -701,9 +701,37 @@ pg_test!(test_insert_from_select, |client| {
 
 // --- HAVING ---
 
-// TODO: PostgreSQL does not allow SELECT aliases in HAVING.
-// Once ExprCondition (raw SQL in WHERE/HAVING) is supported,
-// these tests should use HAVING COUNT(*) > $1 directly.
-pg_test!(test_having, |_client| {});
+pg_test!(test_having, |client| {
+    let mut q = qbey_with::<PgValue>("users");
+    q.select(&["age"]);
+    q.add_select(count_all().as_("cnt"));
+    q.group_by(&["age"]);
+    q.having(count_all().gt(1_i32));
 
-pg_test!(test_having_with_where, |_client| {});
+    let (sql, binds) = q.to_sql();
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    // age=30 has 2 rows (Alice and Charlie), which is > 1
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i32>("age"), 30);
+    assert_eq!(rows[0].get::<_, i64>("cnt"), 2);
+});
+
+pg_test!(test_having_with_where, |client| {
+    let mut q = qbey_with::<PgValue>("users");
+    q.select(&["age"]);
+    q.add_select(count_all().as_("cnt"));
+    q.and_where(col("age").gte(25_i32));
+    q.group_by(&["age"]);
+    q.and_having(count_all().gte(1_i32));
+
+    let (sql, binds) = q.to_sql();
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    // age >= 25: Alice(30), Bob(25), Charlie(30) → age=25 has cnt=1, age=30 has cnt=2
+    assert_eq!(rows.len(), 2);
+});
