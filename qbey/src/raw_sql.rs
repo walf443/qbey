@@ -5,8 +5,11 @@ use crate::value::Value;
 /// optionally with bind parameters.
 ///
 /// This type exists to make it explicit that the caller is injecting raw SQL.
-/// Placeholder `{}` in the SQL template will be replaced with the dialect's
-/// bind parameter marker (`?` for SQLite/MySQL, `$1`/`$2` for PostgreSQL).
+/// When `.binds()` is called, `{}` in the SQL template is treated as a
+/// placeholder and replaced with the dialect's bind parameter marker
+/// (`?` for SQLite/MySQL, `$1`/`$2` for PostgreSQL). Without `.binds()`,
+/// the SQL string is used as-is — any `{}` in the template is preserved
+/// literally.
 ///
 /// # Security
 ///

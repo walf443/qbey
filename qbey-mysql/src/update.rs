@@ -77,6 +77,11 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         let ph = |_: usize| "?".to_string();
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
+        // ORDER BY is rendered separately and appended as Raw(String) because
+        // UpdateToken has no OrderBy variant. The binds are collected separately
+        // and appended after render_update. This is correct for MySQL's `?`
+        // placeholders (position-independent) but would need a different approach
+        // for PostgreSQL's `$N` indexed placeholders.
         let mut order_by_binds: Vec<V> = Vec::new();
         if let Some(order_by) =
             qbey::renderer::render_order_by(&self.order_bys, &cfg, &mut order_by_binds)

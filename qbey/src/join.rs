@@ -56,12 +56,12 @@ impl<V: Clone> JoinCondition<V> {
 }
 
 /// Create a USING join condition with a single column.
-pub fn using_col<V: Clone>(col: &str) -> JoinCondition<V> {
+pub fn using_col(col: &str) -> JoinCondition {
     JoinCondition::Using(vec![col.to_string()])
 }
 
 /// Create a USING join condition with multiple columns.
-pub fn using_cols<V: Clone>(cols: &[&str]) -> JoinCondition<V> {
+pub fn using_cols(cols: &[&str]) -> JoinCondition {
     JoinCondition::Using(cols.iter().map(|c| c.to_string()).collect())
 }
 
