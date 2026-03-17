@@ -49,6 +49,11 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for MysqlQuery<V> {
         self
     }
 
+    fn distinct(&mut self) -> &mut Self {
+        self.inner.distinct();
+        self
+    }
+
     fn and_where(&mut self, cond: impl qbey::IntoWhereClause<V>) -> &mut Self {
         self.inner.and_where(cond);
         self
