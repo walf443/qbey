@@ -12,7 +12,7 @@ pub enum SetClause<V: Clone> {
     /// `"col" = ?` — identifier-quoted column with a bind value.
     Value(String, V),
     /// Raw SQL expression via [`RawSql`].
-    Expr(RawSql),
+    Expr(RawSql<V>),
 }
 
 /// Trait for UPDATE query builder methods.
@@ -58,7 +58,7 @@ pub trait UpdateQueryBuilder<V: Clone> {
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE "id" = ?"#);
     /// ```
-    fn set_expr(&mut self, expr: RawSql) -> &mut Self;
+    fn set_expr(&mut self, expr: RawSql<V>) -> &mut Self;
 
     /// Add an AND WHERE condition.
     fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self;
@@ -105,7 +105,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQueryBuilder<V> for UpdateQuery<V> {
         self
     }
 
-    fn set_expr(&mut self, expr: RawSql) -> &mut Self {
+    fn set_expr(&mut self, expr: RawSql<V>) -> &mut Self {
         self.sets.push(SetClause::Expr(expr));
         self
     }

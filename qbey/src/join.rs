@@ -1,5 +1,6 @@
 use crate::column::Col;
 use crate::raw_sql::RawSql;
+use crate::value::Value;
 
 /// A column reference in a JOIN condition, optionally qualified with a table name.
 /// When `table` is `None`, the table name is inferred from the `join()` / `left_join()` call.
@@ -29,24 +30,38 @@ impl From<&str> for JoinCol {
 
 /// A JOIN ON condition.
 #[derive(Debug, Clone)]
-pub enum JoinCondition {
+pub enum JoinCondition<V: Clone = Value> {
     ColEq {
         left: Col,
         right: JoinCol,
     },
-    And(Vec<JoinCondition>),
+    And(Vec<JoinCondition<V>>),
     Using(Vec<String>),
     /// Raw SQL expression for arbitrary ON conditions (e.g., `"a.text LIKE b.pattern"`).
-    Expr(RawSql),
+    Expr(RawSql<V>),
+}
+
+impl<V: Clone> JoinCondition<V> {
+    /// Transform all bind values in this condition.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> JoinCondition<U> {
+        match self {
+            JoinCondition::ColEq { left, right } => JoinCondition::ColEq { left, right },
+            JoinCondition::And(conditions) => {
+                JoinCondition::And(conditions.into_iter().map(|c| c.map_values(f)).collect())
+            }
+            JoinCondition::Using(cols) => JoinCondition::Using(cols),
+            JoinCondition::Expr(raw) => JoinCondition::Expr(raw.map_values(f)),
+        }
+    }
 }
 
 /// Create a USING join condition with a single column.
-pub fn using_col(col: &str) -> JoinCondition {
+pub fn using_col<V: Clone>(col: &str) -> JoinCondition<V> {
     JoinCondition::Using(vec![col.to_string()])
 }
 
 /// Create a USING join condition with multiple columns.
-pub fn using_cols(cols: &[&str]) -> JoinCondition {
+pub fn using_cols<V: Clone>(cols: &[&str]) -> JoinCondition<V> {
     JoinCondition::Using(cols.iter().map(|c| c.to_string()).collect())
 }
 
@@ -62,7 +77,7 @@ pub fn using_cols(cols: &[&str]) -> JoinCondition {
 /// let mut q = qbey("texts");
 /// q.join("patterns", join::on_expr(RawSql::new(r#""texts"."text" LIKE "patterns"."pattern""#)));
 /// ```
-pub fn on_expr(raw: RawSql) -> JoinCondition {
+pub fn on_expr<V: Clone>(raw: RawSql<V>) -> JoinCondition<V> {
     JoinCondition::Expr(raw)
 }
 
@@ -77,9 +92,21 @@ pub enum JoinType {
 
 /// A JOIN clause.
 #[derive(Debug, Clone)]
-pub struct JoinClause {
+pub struct JoinClause<V: Clone = Value> {
     pub join_type: JoinType,
     pub table: String,
     pub alias: Option<String>,
-    pub condition: JoinCondition,
+    pub condition: JoinCondition<V>,
+}
+
+impl<V: Clone> JoinClause<V> {
+    /// Transform all bind values in this clause.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> JoinClause<U> {
+        JoinClause {
+            join_type: self.join_type,
+            table: self.table,
+            alias: self.alias,
+            condition: self.condition.map_values(f),
+        }
+    }
 }

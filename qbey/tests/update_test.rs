@@ -286,3 +286,63 @@ fn test_update_with_set_expr_dialect() {
         vec![Value::String("Alice".to_string()), Value::Int(1)]
     );
 }
+
+// ── SetClause::Expr with binds ──
+
+#[test]
+fn test_update_set_expr_with_binds() {
+    let mut u = qbey("employee").into_update();
+    u.set_expr(RawSql::new(r#""score" = "score" + {}"#).binds(&[10]));
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+    assert_eq!(
+        sql,
+        r#"UPDATE "employee" SET "score" = "score" + ? WHERE "id" = ?"#
+    );
+    assert_eq!(binds, vec![Value::Int(10), Value::Int(1)]);
+}
+
+#[test]
+fn test_update_set_expr_with_binds_pg() {
+    let mut u = qbey("employee").into_update();
+    u.set(col("name"), "Alice");
+    u.set_expr(RawSql::new(r#""score" = "score" + {}"#).binds(&[10]));
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"UPDATE "employee" SET "name" = $1, "score" = "score" + $2 WHERE "id" = $3"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("Alice".to_string()),
+            Value::Int(10),
+            Value::Int(1),
+        ]
+    );
+}
+
+#[test]
+fn test_update_set_expr_with_binds_mixed() {
+    let mut u = qbey("employee").into_update();
+    u.set(col("name"), "Alice");
+    u.set_expr(RawSql::new(r#""score" = COALESCE({}, {})"#).binds(&[100, 0]));
+    u.set(col("status"), "active");
+    u.and_where(col("id").eq(1));
+    let (sql, binds) = u.to_sql();
+    assert_eq!(
+        sql,
+        r#"UPDATE "employee" SET "name" = ?, "score" = COALESCE(?, ?), "status" = ? WHERE "id" = ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("Alice".to_string()),
+            Value::Int(100),
+            Value::Int(0),
+            Value::String("active".to_string()),
+            Value::Int(1),
+        ]
+    );
+}

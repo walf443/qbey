@@ -9,7 +9,7 @@ use qbey::{MySqlDialect, UpdateQueryBuilder};
 #[derive(Debug, Clone)]
 pub struct MysqlUpdateQuery<V: Clone + std::fmt::Debug = Value> {
     inner: qbey::UpdateQuery<V>,
-    order_bys: Vec<qbey::OrderByClause>,
+    order_bys: Vec<qbey::OrderByClause<V>>,
     limit_val: Option<u64>,
 }
 
@@ -29,7 +29,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQueryBuilder<V> for MysqlUpdateQuery<V> {
         self
     }
 
-    fn set_expr(&mut self, expr: qbey::RawSql) -> &mut Self {
+    fn set_expr(&mut self, expr: qbey::RawSql<V>) -> &mut Self {
         self.inner.set_expr(expr);
         self
     }
@@ -52,13 +52,13 @@ impl<V: Clone + std::fmt::Debug> UpdateQueryBuilder<V> for MysqlUpdateQuery<V> {
 
 impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
     /// Add an ORDER BY clause (MySQL extension).
-    pub fn order_by(&mut self, clause: qbey::OrderByClause) -> &mut Self {
+    pub fn order_by(&mut self, clause: qbey::OrderByClause<V>) -> &mut Self {
         self.order_bys.push(clause);
         self
     }
 
     /// Add a raw SQL expression to the ORDER BY clause (MySQL extension).
-    pub fn order_by_expr(&mut self, raw: qbey::RawSql) -> &mut Self {
+    pub fn order_by_expr(&mut self, raw: qbey::RawSql<V>) -> &mut Self {
         self.order_bys.push(qbey::OrderByClause::Expr(raw));
         self
     }
@@ -77,13 +77,18 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         let ph = |_: usize| "?".to_string();
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
-        if let Some(order_by) = qbey::renderer::render_order_by(&self.order_bys, &cfg) {
+        let mut order_by_binds: Vec<V> = Vec::new();
+        if let Some(order_by) =
+            qbey::renderer::render_order_by(&self.order_bys, &cfg, &mut order_by_binds)
+        {
             tree.tokens.push(qbey::tree::UpdateToken::Raw(order_by));
         }
         if let Some(n) = self.limit_val {
             tree.tokens
                 .push(qbey::tree::UpdateToken::Raw(format!("LIMIT {}", n)));
         }
-        qbey::renderer::update::render_update(&tree, &cfg)
+        let (sql, mut binds) = qbey::renderer::update::render_update(&tree, &cfg);
+        binds.extend(order_by_binds);
+        (sql, binds)
     }
 }

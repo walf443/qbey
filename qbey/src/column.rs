@@ -1,7 +1,7 @@
 use crate::join::{JoinCol, JoinCondition};
 use crate::like::LikeExpression;
 use crate::raw_sql::RawSql;
-use crate::value::Op;
+use crate::value::{Op, Value};
 use crate::where_clause::{IntoIncluded, IntoRangeClause, WhereClause};
 
 #[derive(Debug, Clone)]
@@ -11,11 +11,21 @@ pub enum SortDir {
 }
 
 #[derive(Debug, Clone)]
-pub enum OrderByClause {
+pub enum OrderByClause<V: Clone = Value> {
     /// A column reference with a sort direction.
     Col { col: Col, dir: SortDir },
     /// A raw SQL expression rendered as-is (e.g., `"RAND()"`, `"id DESC NULLS FIRST"`).
-    Expr(RawSql),
+    Expr(RawSql<V>),
+}
+
+impl<V: Clone> OrderByClause<V> {
+    /// Transform all bind values in this clause.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> OrderByClause<U> {
+        match self {
+            OrderByClause::Col { col, dir } => OrderByClause::Col { col, dir },
+            OrderByClause::Expr(raw) => OrderByClause::Expr(raw.map_values(f)),
+        }
+    }
 }
 
 /// Backwards-compatible alias — `ColRef` is now just `Col`.
@@ -267,7 +277,7 @@ impl ConditionExpr for Col {
 /// Panics if called on a `SelectItem::Expr` variant, which cannot be safely
 /// converted to a column reference. Use [`RawSql`](crate::RawSql) in
 /// WHERE/HAVING clauses through other means instead.
-impl ConditionExpr for SelectItem {
+impl<V: Clone> ConditionExpr for SelectItem<V> {
     fn into_condition_col(self) -> Col {
         match self {
             SelectItem::Col(col) => col,
@@ -379,7 +389,7 @@ impl Col {
 
 /// An item in a SELECT list — either a column reference or a raw SQL expression.
 #[derive(Debug, Clone)]
-pub enum SelectItem {
+pub enum SelectItem<V: Clone = Value> {
     /// A column reference (optionally table-qualified and/or aliased).
     Col(Col),
     /// A raw SQL expression (e.g., `"COUNT(*)"`, `"price * quantity"`).
@@ -387,7 +397,7 @@ pub enum SelectItem {
     /// **Warning:** `raw` is embedded into SQL without escaping.
     /// Never pass user-supplied input — see [`SelectQuery::add_select_expr`](crate::SelectQuery::add_select_expr).
     Expr {
-        raw: crate::raw_sql::RawSql,
+        raw: crate::raw_sql::RawSql<V>,
         alias: Option<String>,
     },
     /// A function applied to a column (e.g., `COUNT("id")`, `SUM("price")`).
@@ -396,6 +406,20 @@ pub enum SelectItem {
         col: Option<Col>,
         alias: Option<String>,
     },
+}
+
+impl<V: Clone> SelectItem<V> {
+    /// Transform all bind values in this item.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> SelectItem<U> {
+        match self {
+            SelectItem::Col(col) => SelectItem::Col(col),
+            SelectItem::Expr { raw, alias } => SelectItem::Expr {
+                raw: raw.map_values(f),
+                alias,
+            },
+            SelectItem::Function { func, col, alias } => SelectItem::Function { func, col, alias },
+        }
+    }
 }
 
 /// Supported SQL functions for SELECT items.
@@ -452,11 +476,11 @@ pub fn count_one() -> SelectItem {
     }
 }
 
-impl SelectItem {
+impl<V: Clone> SelectItem<V> {
     /// Add an alias to this select item.
     ///
     /// - `col("id").count().as_("cnt")` → `COUNT("id") AS "cnt"`
-    pub fn as_(mut self, alias: &str) -> SelectItem {
+    pub fn as_(mut self, alias: &str) -> SelectItem<V> {
         match &mut self {
             SelectItem::Col(col) => {
                 col.alias = Some(alias.to_string());
@@ -472,13 +496,13 @@ impl SelectItem {
     }
 }
 
-impl From<Col> for SelectItem {
+impl<V: Clone> From<Col> for SelectItem<V> {
     fn from(col: Col) -> Self {
         SelectItem::Col(col)
     }
 }
 
-impl<'a> From<&'a str> for SelectItem {
+impl<'a, V: Clone> From<&'a str> for SelectItem<V> {
     fn from(s: &'a str) -> Self {
         SelectItem::Col(Col {
             table: None,
