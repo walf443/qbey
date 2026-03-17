@@ -459,6 +459,46 @@ impl SelectItem {
         self.to_col().ne(val)
     }
 
+    /// Create a `BETWEEN` condition using this aggregate expression.
+    ///
+    /// - `col("price").sum().between(100, 500)` → `SUM("price") BETWEEN ? AND ?`
+    pub fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
+        self.to_col().between(low, high)
+    }
+
+    /// Create a `NOT BETWEEN` condition using this aggregate expression.
+    pub fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
+        self.to_col().not_between(low, high)
+    }
+
+    /// Convert a Rust range into SQL conditions using this aggregate expression.
+    ///
+    /// - `count_all().in_range(5..=10)` → `COUNT(*) BETWEEN ? AND ?`
+    /// - `count_all().in_range(5..)` → `COUNT(*) >= ?`
+    pub fn in_range<V: Clone>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
+        self.to_col().in_range(range)
+    }
+
+    /// Create an `IN (...)` condition using this aggregate expression.
+    pub fn included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
+        self.to_col().included(source)
+    }
+
+    /// Create a `NOT IN (...)` condition using this aggregate expression.
+    pub fn not_included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
+        self.to_col().not_included(source)
+    }
+
+    /// Create a `LIKE` condition using this aggregate expression.
+    pub fn like(self, expr: LikeExpression) -> WhereClause<String> {
+        self.to_col().like(expr)
+    }
+
+    /// Create a `NOT LIKE` condition using this aggregate expression.
+    pub fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
+        self.to_col().not_like(expr)
+    }
+
     /// Add an alias to this select item.
     ///
     /// - `col("id").count().as_("cnt")` → `COUNT("id") AS "cnt"`
