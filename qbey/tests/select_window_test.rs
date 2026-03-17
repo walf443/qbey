@@ -328,3 +328,18 @@ fn test_named_window_deduplicates() {
         r#"SELECT "id", SUM("salary") OVER "w" AS "total", AVG("salary") OVER "w" AS "avg_sal", MIN("salary") OVER "w" AS "min_sal" FROM "employee" WINDOW "w" AS (PARTITION BY "dept")"#
     );
 }
+
+#[test]
+#[should_panic(expected = "conflicting WINDOW definitions")]
+fn test_named_window_conflicting_definitions_panics() {
+    let w1 = window().partition_by(&[col("dept")]).as_("w");
+    let w2 = window().order_by(col("salary").desc()).as_("w");
+
+    let mut q = qbey("employee");
+    q.select(&["id"]);
+    q.add_select(col("salary").sum_over(w1).as_("total"));
+    q.add_select(row_number().over(w2).as_("rn"));
+
+    // Should panic: two different definitions with the same name "w"
+    let _ = q.to_sql();
+}

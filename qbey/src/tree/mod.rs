@@ -237,6 +237,9 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
                 tokens.push(SelectToken::Offset(n));
             }
 
+            // Note: Named WINDOW clauses are not extracted here for compound queries.
+            // Each sub-select handles its own WINDOW clause independently via
+            // the recursive `from_query_owned` call above.
             return SelectTree { tokens };
         }
 
@@ -291,8 +294,16 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
                     if let SelectItem::WindowFunction { window, .. } = item
                         && let Some(ref name) = window.name
                     {
-                        // Deduplicate by name.
-                        if !window_defs.iter().any(|(n, _)| n == name) {
+                        if let Some((_, existing)) = window_defs.iter().find(|(n, _)| n == name) {
+                            // Same name must have identical definition.
+                            assert!(
+                                existing.partition_by.len() == window.partition_by.len()
+                                    && existing.order_by.len() == window.order_by.len(),
+                                "conflicting WINDOW definitions for name {:?}: \
+                                 all WindowSpecs sharing a name must have the same partition_by and order_by",
+                                name,
+                            );
+                        } else {
                             window_defs.push((name.clone(), window.clone()));
                         }
                     }
