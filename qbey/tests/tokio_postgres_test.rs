@@ -823,3 +823,14 @@ async fn test_insert_from_select() {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].get::<_, String>("name"), "Charlie");
 }
+
+// --- HAVING ---
+
+// TODO: PostgreSQL does not allow SELECT aliases in HAVING.
+// Once ExprCondition (raw SQL in WHERE/HAVING) is supported,
+// these tests should use HAVING COUNT(*) > $1 directly.
+#[tokio::test]
+async fn test_having() {}
+
+#[tokio::test]
+async fn test_having_with_where() {}

@@ -821,3 +821,57 @@ fn test_insert_with_to_insert_row_trait() {
     assert_eq!(rows[0], ("Dave".to_string(), 40));
     assert_eq!(rows[1], ("Eve".to_string(), 28));
 }
+
+// --- HAVING ---
+
+#[test]
+fn test_having() {
+    let conn = setup_db();
+
+    let mut q = qbey_with::<SqliteValue>("orders");
+    q.select(&["user_id"]);
+    q.add_select(count_all().as_("cnt"));
+    q.group_by(&["user_id"]);
+    q.having(col("cnt").gt(1));
+    let (sql, binds) = q.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<(i64, i64)> = stmt
+        .query_map(params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    // Only Alice (user_id=1) has 2 orders
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0], (1, 2));
+}
+
+#[test]
+fn test_having_with_where() {
+    let conn = setup_db();
+
+    let mut q = qbey_with::<SqliteValue>("orders");
+    q.select(&["user_id"]);
+    q.add_select(count_all().as_("cnt"));
+    q.and_where(col("status").eq("shipped"));
+    q.group_by(&["user_id"]);
+    q.and_having(col("cnt").gt(0));
+    let (sql, binds) = q.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<i64> = stmt
+        .query_map(params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            row.get(0)
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    // Alice (1 shipped) and Bob (1 shipped)
+    assert_eq!(rows.len(), 2);
+}

@@ -200,6 +200,36 @@ let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total_salary\" FROM \"employee\" GROUP BY \"dept\"");
 ```
 
+### HAVING
+
+```rust
+# use qbey::{qbey, col, count_all, SelectQueryBuilder};
+let mut q = qbey("employee");
+q.select(&["dept"]);
+q.add_select(count_all().as_("cnt"));
+q.group_by(&["dept"]);
+q.having(col("cnt").gt(5));
+
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" GROUP BY \"dept\" HAVING \"cnt\" > ?");
+```
+
+For multiple conditions, use `and_having` / `or_having`:
+
+```rust
+# use qbey::{qbey, col, count_all, SelectQueryBuilder};
+let mut q = qbey("employee");
+q.select(&["dept"]);
+q.add_select(count_all().as_("cnt"));
+q.add_select(col("salary").sum().as_("total"));
+q.group_by(&["dept"]);
+q.and_having(col("cnt").gt(5));
+q.and_having(col("total").gt(100000));
+
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total\" FROM \"employee\" GROUP BY \"dept\" HAVING \"cnt\" > ? AND \"total\" > ?");
+```
+
 ### Order By
 
 ```rust

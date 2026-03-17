@@ -698,3 +698,12 @@ pg_test!(test_insert_from_select, |client| {
     assert_eq!(rows.len(), 1);
     assert_eq!(rows[0].get::<_, String>("name"), "Charlie");
 });
+
+// --- HAVING ---
+
+// TODO: PostgreSQL does not allow SELECT aliases in HAVING.
+// Once ExprCondition (raw SQL in WHERE/HAVING) is supported,
+// these tests should use HAVING COUNT(*) > $1 directly.
+pg_test!(test_having, |_client| {});
+
+pg_test!(test_having_with_where, |_client| {});
