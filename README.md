@@ -20,6 +20,18 @@ let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ?");
 ```
 
+The `prelude` module re-exports commonly needed traits so you can import them all at once:
+
+```rust
+# use qbey::{qbey, col, count_all};
+use qbey::prelude::*;
+
+let mut q = qbey("employee");
+q.and_where(col("age").gt(20));
+q.select(&["id", "name"]);
+let (sql, binds) = q.to_sql();
+```
+
 ## Features
 
 - **Standard SQL** — Generate traditional `SELECT ... FROM ... WHERE` SQL from the query builder
