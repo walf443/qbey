@@ -1091,6 +1091,11 @@ async fn test_cte_update() {
         .await
         .unwrap();
     assert_eq!(rows[0].get::<String, _>("name"), "Senior");
+    let rows = sqlx::query("SELECT name FROM users WHERE id = 3")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Senior");
 }
 
 #[tokio::test]

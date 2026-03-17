@@ -1022,6 +1022,12 @@ async fn test_cte_update() {
         .unwrap();
     let name: String = rows[0].get("name");
     assert_eq!(name, "Senior");
+    let rows = client
+        .query(r#"SELECT "name" FROM "users" WHERE "id" = 3"#, &[])
+        .await
+        .unwrap();
+    let name: String = rows[0].get("name");
+    assert_eq!(name, "Senior");
 }
 
 #[tokio::test]

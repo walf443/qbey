@@ -1046,6 +1046,12 @@ fn test_cte_update() {
         })
         .unwrap();
     assert_eq!(name, "Senior");
+    let name: String = conn
+        .query_row(r#"SELECT "name" FROM "users" WHERE "id" = 3"#, [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(name, "Senior");
 }
 
 #[test]

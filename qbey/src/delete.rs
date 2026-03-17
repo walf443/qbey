@@ -44,6 +44,29 @@ pub trait DeleteQueryBuilder<V: Clone> {
     ) -> &mut Self;
 
     /// Add a recursive CTE to the `WITH RECURSIVE` clause.
+    ///
+    /// Note: per the SQL standard, the `RECURSIVE` keyword applies to the
+    /// entire `WITH` block. If any CTE added via this method is recursive,
+    /// the rendered SQL will use `WITH RECURSIVE` for all CTEs in the clause.
+    ///
+    /// ```
+    /// use qbey::{qbey, col, ConditionExpr, DeleteQueryBuilder, SelectQueryBuilder};
+    ///
+    /// let mut base = qbey("categories");
+    /// base.select(&["id"]);
+    /// base.and_where(col("parent_id").eq(1));
+    ///
+    /// let mut recursive = qbey("categories");
+    /// recursive.select(&["id"]);
+    ///
+    /// let cte_query = base.union_all(&recursive);
+    ///
+    /// let mut d = qbey("items").into_delete();
+    /// d.with_recursive_cte("cat_tree", &["id"], cte_query);
+    /// d.and_where(col("category_id").eq(1));
+    /// let (sql, _) = d.to_sql();
+    /// assert!(sql.starts_with(r#"WITH RECURSIVE "cat_tree""#));
+    /// ```
     fn with_recursive_cte(
         &mut self,
         name: &str,
