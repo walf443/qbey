@@ -2,8 +2,8 @@
 
 use postgres::{Client, NoTls, types::ToSql};
 use qbey::{
-    DeleteQueryBuilder, InsertQueryBuilder, LikeExpression, SelectQueryBuilder, UpdateQueryBuilder,
-    col, count_all, qbey_from_subquery_with, qbey_with, table,
+    ConditionExpr, DeleteQueryBuilder, InsertQueryBuilder, LikeExpression, SelectQueryBuilder,
+    UpdateQueryBuilder, col, count_all, qbey_from_subquery_with, qbey_with, table,
 };
 use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use testcontainers::runners::AsyncRunner;

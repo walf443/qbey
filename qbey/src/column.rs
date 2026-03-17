@@ -102,50 +102,58 @@ impl From<&str> for Col {
     }
 }
 
-impl Col {
-    pub fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
+/// Trait for types that can produce WHERE/HAVING conditions.
+///
+/// Implemented by [`Col`] and [`SelectItem`]. Adding a new condition method
+/// here automatically makes it available on both types — no manual delegation
+/// needed.
+pub trait ConditionExpr: Sized {
+    /// Convert this expression into a `Col` for use in WHERE/HAVING clauses.
+    fn into_condition_col(self) -> Col;
+
+    fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
-            col: self,
+            col: self.into_condition_col(),
             op: Op::Eq,
             val,
         }
     }
 
-    pub fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
+    fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
-            col: self,
+            col: self.into_condition_col(),
             op: Op::Ne,
             val,
         }
     }
 
-    pub fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
+    fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
-            col: self,
+            col: self.into_condition_col(),
             op: Op::Gt,
             val,
         }
     }
 
-    pub fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
+    fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
-            col: self,
+            col: self.into_condition_col(),
             op: Op::Lt,
             val,
         }
     }
 
-    pub fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
+    fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
-            col: self,
+            col: self.into_condition_col(),
             op: Op::Gte,
             val,
         }
     }
 
-    pub fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
+    fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
-            col: self,
+            col: self.into_condition_col(),
             op: Op::Lte,
             val,
         }
@@ -160,10 +168,10 @@ impl Col {
     ///
     /// User input is automatically escaped (`%` and `_` are treated as literals).
     /// The `ESCAPE` clause is derived from the [`LikeExpression`].
-    pub fn like(self, expr: LikeExpression) -> WhereClause<String> {
+    fn like(self, expr: LikeExpression) -> WhereClause<String> {
         let val = expr.to_pattern();
         WhereClause::Like {
-            col: self,
+            col: self.into_condition_col(),
             expr,
             val,
         }
@@ -176,10 +184,10 @@ impl Col {
     ///
     /// User input is automatically escaped (`%` and `_` are treated as literals).
     /// The `ESCAPE` clause is derived from the [`LikeExpression`].
-    pub fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
+    fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
         let val = expr.to_pattern();
         WhereClause::NotLike {
-            col: self,
+            col: self.into_condition_col(),
             expr,
             val,
         }
@@ -194,8 +202,8 @@ impl Col {
     /// When a value list is empty, this produces `1 = 0` (always false) instead of
     /// invalid SQL. If you need to distinguish "no filter" from "match nothing",
     /// check that the slice is non-empty before calling this method.
-    pub fn included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
-        source.into_in_clause(self)
+    fn included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
+        source.into_in_clause(self.into_condition_col())
     }
 
     /// Generate a `NOT IN (...)` condition.
@@ -206,21 +214,21 @@ impl Col {
     ///
     /// When a value list is empty, this produces `1 = 1` (always true) instead of
     /// invalid SQL.
-    pub fn not_included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
-        source.into_not_in_clause(self)
+    fn not_included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
+        source.into_not_in_clause(self.into_condition_col())
     }
 
-    pub fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
+    fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
         WhereClause::Between {
-            col: self,
+            col: self.into_condition_col(),
             low,
             high,
         }
     }
 
-    pub fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
+    fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
         WhereClause::NotBetween {
-            col: self,
+            col: self.into_condition_col(),
             low,
             high,
         }
@@ -233,10 +241,35 @@ impl Col {
     /// - `20..`    → `col >= 20`
     /// - `..30`    → `col < 30`
     /// - `..=30`   → `col <= 30`
-    pub fn in_range<V: Clone>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
-        range.into_where_clause(self)
+    fn in_range<V: Clone>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
+        range.into_where_clause(self.into_condition_col())
     }
+}
 
+impl ConditionExpr for Col {
+    fn into_condition_col(self) -> Col {
+        self
+    }
+}
+
+impl ConditionExpr for SelectItem {
+    fn into_condition_col(self) -> Col {
+        match self {
+            SelectItem::Col(col) => col,
+            SelectItem::Function { func, col, .. } => Col {
+                table: None,
+                column: String::new(),
+                alias: None,
+                aggregate: Some((func, col.map(Box::new))),
+            },
+            SelectItem::Expr { .. } => {
+                panic!("cannot convert raw Expr SelectItem to Col for WHERE/HAVING")
+            }
+        }
+    }
+}
+
+impl Col {
     pub fn as_(mut self, alias: &str) -> Col {
         self.alias = Some(alias.to_string());
         self
@@ -405,100 +438,6 @@ pub fn count_one() -> SelectItem {
 }
 
 impl SelectItem {
-    /// Convert this select item into a `Col` for use in WHERE/HAVING conditions.
-    ///
-    /// For `Function` variants, the resulting `Col` carries aggregate info so the
-    /// renderer produces e.g. `COUNT(*)` instead of a quoted identifier.
-    ///
-    /// Panics if the variant is `Expr` (raw expressions cannot be safely converted).
-    fn to_col(self) -> Col {
-        match self {
-            SelectItem::Col(col) => col,
-            SelectItem::Function { func, col, .. } => Col {
-                table: None,
-                column: String::new(),
-                alias: None,
-                aggregate: Some((func, col.map(Box::new))),
-            },
-            SelectItem::Expr { .. } => {
-                panic!("cannot convert raw Expr SelectItem to Col for WHERE/HAVING")
-            }
-        }
-    }
-
-    /// Create a `col > val` condition using this aggregate expression.
-    ///
-    /// - `count_all().gt(5)` → `COUNT(*) > ?`
-    /// - `col("price").sum().gt(100)` → `SUM("price") > ?`
-    pub fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
-        self.to_col().gt(val)
-    }
-
-    /// Create a `col < val` condition using this aggregate expression.
-    pub fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
-        self.to_col().lt(val)
-    }
-
-    /// Create a `col >= val` condition using this aggregate expression.
-    pub fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
-        self.to_col().gte(val)
-    }
-
-    /// Create a `col <= val` condition using this aggregate expression.
-    pub fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
-        self.to_col().lte(val)
-    }
-
-    /// Create a `col = val` condition using this aggregate expression.
-    pub fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
-        self.to_col().eq(val)
-    }
-
-    /// Create a `col != val` condition using this aggregate expression.
-    pub fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
-        self.to_col().ne(val)
-    }
-
-    /// Create a `BETWEEN` condition using this aggregate expression.
-    ///
-    /// - `col("price").sum().between(100, 500)` → `SUM("price") BETWEEN ? AND ?`
-    pub fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
-        self.to_col().between(low, high)
-    }
-
-    /// Create a `NOT BETWEEN` condition using this aggregate expression.
-    pub fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
-        self.to_col().not_between(low, high)
-    }
-
-    /// Convert a Rust range into SQL conditions using this aggregate expression.
-    ///
-    /// - `count_all().in_range(5..=10)` → `COUNT(*) BETWEEN ? AND ?`
-    /// - `count_all().in_range(5..)` → `COUNT(*) >= ?`
-    pub fn in_range<V: Clone>(self, range: impl IntoRangeClause<V>) -> WhereClause<V> {
-        self.to_col().in_range(range)
-    }
-
-    /// Create an `IN (...)` condition using this aggregate expression.
-    pub fn included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
-        self.to_col().included(source)
-    }
-
-    /// Create a `NOT IN (...)` condition using this aggregate expression.
-    pub fn not_included<V: Clone>(self, source: impl IntoIncluded<V>) -> WhereClause<V> {
-        self.to_col().not_included(source)
-    }
-
-    /// Create a `LIKE` condition using this aggregate expression.
-    pub fn like(self, expr: LikeExpression) -> WhereClause<String> {
-        self.to_col().like(expr)
-    }
-
-    /// Create a `NOT LIKE` condition using this aggregate expression.
-    pub fn not_like(self, expr: LikeExpression) -> WhereClause<String> {
-        self.to_col().not_like(expr)
-    }
-
     /// Add an alias to this select item.
     ///
     /// - `col("id").count().as_("cnt")` → `COUNT("id") AS "cnt"`

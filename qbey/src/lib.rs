@@ -70,8 +70,8 @@ impl Dialect for MySqlDialect {
 
 // Re-export all public types at the crate root.
 pub use column::{
-    Col, ColRef, OrderByClause, SelectFunc, SelectItem, SortDir, TableRef, col, count_all,
-    count_one, table,
+    Col, ColRef, ConditionExpr, OrderByClause, SelectFunc, SelectItem, SortDir, TableRef, col,
+    count_all, count_one, table,
 };
 pub use delete::{DeleteQuery, DeleteQueryBuilder};
 pub use insert::{InsertQuery, InsertQueryBuilder, ToInsertRow};

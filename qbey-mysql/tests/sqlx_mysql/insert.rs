@@ -1,5 +1,5 @@
 use super::common::{MysqlValue, bind_params, setup_pool};
-use qbey::{InsertQueryBuilder, col};
+use qbey::{ConditionExpr, InsertQueryBuilder, col};
 use qbey_mysql::qbey_with;
 use sqlx::Row;
 
