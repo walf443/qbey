@@ -10,7 +10,7 @@ sql query builder
 ### Basic usage
 
 ```rust
-# use qbey::{qbey, col, ConditionExpr, SelectQueryBuilder};
+# use qbey::{qbey, col, SelectQueryBuilder};
 let mut q = qbey("employee");
 q.and_where(("name", "Alice"));   // tuple shorthand for Eq
 q.select(&["id", "name"]);
@@ -176,7 +176,7 @@ assert_eq!(sql, "SELECT * FROM \"employee\" WHERE NOT ((\"role\" = ? OR \"role\"
 ### Aggregate / GROUP BY
 
 ```rust
-# use qbey::{qbey, col, count_all, ConditionExpr, SelectQueryBuilder};
+# use qbey::{qbey, col, count_all, SelectQueryBuilder};
 let mut q = qbey("employee");
 q.select(&["dept"]);
 q.add_select(count_all().as_("cnt"));
@@ -238,7 +238,7 @@ assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"tota
 ### Order By
 
 ```rust
-# use qbey::{qbey, col, ConditionExpr, SelectQueryBuilder};
+# use qbey::{qbey, col, SelectQueryBuilder};
 let mut q = qbey("employee");
 q.select(&["id", "name", "age"]);
 q.order_by(col("name").asc());
@@ -280,7 +280,7 @@ assert_eq!(sql, r#"SELECT "id", "name" FROM "users" ORDER BY "name" ASC, RAND()"
 ### Limit / Offset
 
 ```rust
-# use qbey::{qbey, col, ConditionExpr, SelectQueryBuilder};
+# use qbey::{qbey, col, SelectQueryBuilder};
 let mut q = qbey("employee");
 q.select(&["id", "name"]);
 q.limit(10);
@@ -307,7 +307,7 @@ assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"employee\" WHERE \"name\" = ? AN
 `union()` / `union_all()` returns a new `Query`, so you can use the same `order_by()`, `limit()`, etc. on the result:
 
 ```rust
-# use qbey::{qbey, col, ConditionExpr, SelectQueryBuilder};
+# use qbey::{qbey, col, SelectQueryBuilder};
 let mut q1 = qbey("employee");
 q1.and_where(("dept", "eng"));
 q1.select(&["id", "name"]);
@@ -458,7 +458,7 @@ assert_eq!(sql, "SELECT \"id\", \"o\".\"total\" AS \"order_total\" FROM \"users\
 ### Column aliases
 
 ```rust
-# use qbey::{qbey, col, ConditionExpr, SelectQueryBuilder};
+# use qbey::{qbey, col, SelectQueryBuilder};
 let mut q = qbey("users");
 q.add_select(col("name").as_("user_name"));
 
@@ -514,7 +514,7 @@ assert_eq!(sql, r#"UPDATE "employee" SET "name" = ?, "age" = ? WHERE "id" = ?"#)
 By default, calling `to_sql()` without any WHERE conditions will panic to prevent accidental full-table updates. Use `allow_without_where()` to explicitly opt in:
 
 ```rust
-# use qbey::{qbey, col, ConditionExpr, UpdateQueryBuilder};
+# use qbey::{qbey, col, UpdateQueryBuilder};
 let mut u = qbey("employee").into_update();
 u.set(col("status"), "inactive");
 u.allow_without_where();

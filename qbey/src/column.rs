@@ -111,6 +111,7 @@ pub trait ConditionExpr: Sized {
     /// Convert this expression into a `Col` for use in WHERE/HAVING clauses.
     fn into_condition_col(self) -> Col;
 
+    /// Generate an equality (`=`) condition.
     fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
             col: self.into_condition_col(),
@@ -119,6 +120,7 @@ pub trait ConditionExpr: Sized {
         }
     }
 
+    /// Generate an inequality (`!=`) condition.
     fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
             col: self.into_condition_col(),
@@ -127,6 +129,7 @@ pub trait ConditionExpr: Sized {
         }
     }
 
+    /// Generate a greater-than (`>`) condition.
     fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
             col: self.into_condition_col(),
@@ -135,6 +138,7 @@ pub trait ConditionExpr: Sized {
         }
     }
 
+    /// Generate a less-than (`<`) condition.
     fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
             col: self.into_condition_col(),
@@ -143,6 +147,7 @@ pub trait ConditionExpr: Sized {
         }
     }
 
+    /// Generate a greater-than-or-equal (`>=`) condition.
     fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
             col: self.into_condition_col(),
@@ -151,6 +156,7 @@ pub trait ConditionExpr: Sized {
         }
     }
 
+    /// Generate a less-than-or-equal (`<=`) condition.
     fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
         WhereClause::Condition {
             col: self.into_condition_col(),
@@ -218,6 +224,7 @@ pub trait ConditionExpr: Sized {
         source.into_not_in_clause(self.into_condition_col())
     }
 
+    /// Generate a `BETWEEN` condition.
     fn between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
         WhereClause::Between {
             col: self.into_condition_col(),
@@ -226,6 +233,7 @@ pub trait ConditionExpr: Sized {
         }
     }
 
+    /// Generate a `NOT BETWEEN` condition.
     fn not_between<V: Clone>(self, low: V, high: V) -> WhereClause<V> {
         WhereClause::NotBetween {
             col: self.into_condition_col(),
@@ -252,6 +260,13 @@ impl ConditionExpr for Col {
     }
 }
 
+/// `SelectItem::Col` and `SelectItem::Function` variants are supported.
+///
+/// # Panics
+///
+/// Panics if called on a `SelectItem::Expr` variant, which cannot be safely
+/// converted to a column reference. Use [`RawSql`](crate::RawSql) in
+/// WHERE/HAVING clauses through other means instead.
 impl ConditionExpr for SelectItem {
     fn into_condition_col(self) -> Col {
         match self {

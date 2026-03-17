@@ -7,6 +7,7 @@ pub mod delete;
 pub mod insert;
 pub mod join;
 pub mod like;
+pub mod prelude;
 pub mod query;
 pub mod raw_sql;
 pub mod renderer;
