@@ -702,10 +702,7 @@ fn test_having_or() {
         sql,
         "SELECT `product`, COUNT(`id`) AS `cnt` FROM `orders` GROUP BY `product` HAVING `cnt` > ? OR `cnt` < ?"
     );
-    assert_eq!(
-        binds,
-        vec![qbey::Value::Int(10), qbey::Value::Int(2)]
-    );
+    assert_eq!(binds, vec![qbey::Value::Int(10), qbey::Value::Int(2)]);
 }
 
 #[test]

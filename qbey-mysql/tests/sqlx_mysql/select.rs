@@ -553,3 +553,43 @@ async fn test_like_custom_escape_char() {
     assert_eq!(rows[0].get::<String, _>("name"), "Alice");
     assert_eq!(rows[1].get::<String, _>("name"), "Charlie");
 }
+
+#[tokio::test]
+async fn test_having() {
+    let pool = setup_pool().await;
+
+    let mut q = qbey_with::<MysqlValue>("orders");
+    q.select(&["user_id"]);
+    q.add_select(qbey::count_all().as_("cnt"));
+    q.group_by(&["user_id"]);
+    q.having(col("cnt").gt(1));
+    let (sql, binds) = q.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    // Only Alice (user_id=1) has 2 orders
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<i64, _>("user_id"), 1);
+}
+
+#[tokio::test]
+async fn test_having_with_where() {
+    let pool = setup_pool().await;
+
+    let mut q = qbey_with::<MysqlValue>("orders");
+    q.select(&["user_id"]);
+    q.add_select(qbey::count_all().as_("cnt"));
+    q.and_where(col("status").eq("shipped"));
+    q.group_by(&["user_id"]);
+    q.and_having(col("cnt").gt(0));
+    let (sql, binds) = q.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    // Alice (1 shipped) and Bob (1 shipped)
+    assert_eq!(rows.len(), 2);
+}

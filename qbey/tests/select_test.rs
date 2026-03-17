@@ -496,7 +496,7 @@ fn test_having() {
     q.select(&["product"]);
     q.add_select(col("id").count().as_("cnt"));
     q.group_by(&["product"]);
-    q.and_having(col("cnt").gt(5));
+    q.having(col("cnt").gt(5));
 
     let (sql, binds) = q.to_sql();
     assert_eq!(
@@ -557,10 +557,7 @@ fn test_having_with_where() {
     );
     assert_eq!(
         binds,
-        vec![
-            Value::String("completed".to_string()),
-            Value::Int(5),
-        ]
+        vec![Value::String("completed".to_string()), Value::Int(5),]
     );
 }
 
