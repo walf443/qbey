@@ -157,3 +157,40 @@ fn test_cte_with_add_union() {
     assert!(sql.starts_with(r#"WITH "dept_cte" AS (SELECT"#));
     assert!(sql.contains("UNION"));
 }
+
+#[test]
+fn test_cte_with_from_subquery() {
+    let mut cte_q = qbey("orders");
+    cte_q.select(&["user_id", "amount"]);
+    cte_q.and_where(col("status").eq("completed"));
+
+    let mut sub = qbey("order_summary");
+    sub.select(&["user_id"]);
+
+    let mut q = qbey_from_subquery(sub, "t");
+    q.with_cte("order_summary", &[], cte_q);
+    q.select(&["user_id"]);
+
+    let (sql, binds) = q.to_sql();
+    assert!(sql.starts_with(r#"WITH "order_summary" AS (SELECT"#));
+    assert!(sql.contains(r#"FROM (SELECT "user_id" FROM "order_summary") AS "t""#));
+    assert_eq!(binds.len(), 1);
+}
+
+#[test]
+fn test_cte_with_join_subquery() {
+    let mut cte_q = qbey("departments");
+    cte_q.select(&["id", "name"]);
+
+    let mut sub = qbey("dept_cte");
+    sub.select(&["id", "name"]);
+
+    let mut q = qbey("employees");
+    q.with_cte("dept_cte", &[], cte_q);
+    q.select(&["id", "name"]);
+    q.join_subquery(sub, "d", col("employees.dept_id").eq_col("d.id"));
+
+    let (sql, _binds) = q.to_sql();
+    assert!(sql.starts_with(r#"WITH "dept_cte" AS (SELECT"#));
+    assert!(sql.contains("INNER JOIN"));
+}
