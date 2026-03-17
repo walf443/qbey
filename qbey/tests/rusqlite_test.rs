@@ -1019,6 +1019,68 @@ fn test_cte() {
 }
 
 #[test]
+fn test_cte_update() {
+    let conn = setup_db();
+
+    let mut cte_q = qbey_with::<SqliteValue>("users");
+    cte_q.select(&["id"]);
+    cte_q.and_where(col("age").gt(28));
+
+    let mut cte_ref = qbey_with::<SqliteValue>("older_users");
+    cte_ref.select(&["id"]);
+
+    let mut u = qbey_with::<SqliteValue>("users").into_update();
+    u.with_cte("older_users", &[], cte_q);
+    u.set(col("name"), "Senior");
+    u.and_where(col("id").included(cte_ref));
+    let (sql, binds) = u.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    // Alice(30) and Charlie(35) are > 28
+    let name: String = conn
+        .query_row(r#"SELECT "name" FROM "users" WHERE "id" = 1"#, [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(name, "Senior");
+    let name: String = conn
+        .query_row(r#"SELECT "name" FROM "users" WHERE "id" = 3"#, [], |row| {
+            row.get(0)
+        })
+        .unwrap();
+    assert_eq!(name, "Senior");
+}
+
+#[test]
+fn test_cte_delete() {
+    let conn = setup_db();
+
+    let mut cte_q = qbey_with::<SqliteValue>("users");
+    cte_q.select(&["id"]);
+    cte_q.and_where(col("age").gt(30));
+
+    let mut cte_ref = qbey_with::<SqliteValue>("old_users");
+    cte_ref.select(&["id"]);
+
+    let mut d = qbey_with::<SqliteValue>("users").into_delete();
+    d.with_cte("old_users", &[], cte_q);
+    d.and_where(col("id").included(cte_ref));
+    let (sql, binds) = d.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    let count: i64 = conn
+        .query_row(r#"SELECT COUNT(*) FROM "users""#, [], |row| row.get(0))
+        .unwrap();
+    assert_eq!(count, 2);
+}
+
+#[test]
 fn test_recursive_cte() {
     let conn = setup_db();
 

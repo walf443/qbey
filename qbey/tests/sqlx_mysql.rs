@@ -1062,3 +1062,66 @@ async fn test_cte() {
     assert_eq!(rows[0].get::<String, _>("name"), "Alice"); // age 30
     assert_eq!(rows[1].get::<String, _>("name"), "Charlie"); // age 35
 }
+
+#[tokio::test]
+async fn test_cte_update() {
+    let pool = setup_pool().await;
+
+    let mut cte_q = qbey_with::<MysqlValue>("users");
+    cte_q.select(&["id"]);
+    cte_q.and_where(col("age").gt(28));
+
+    let mut cte_ref = qbey_with::<MysqlValue>("older_users");
+    cte_ref.select(&["id"]);
+
+    let mut u = qbey_with::<MysqlValue>("users").into_update();
+    u.with_cte("older_users", &[], cte_q);
+    u.set(col("name"), "Senior");
+    u.and_where(col("id").included(cte_ref));
+    let (sql, binds) = u.to_sql_with(&DIALECT);
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    // Alice(30) and Charlie(35) are > 28
+    let rows = sqlx::query("SELECT name FROM users WHERE id = 1")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Senior");
+    let rows = sqlx::query("SELECT name FROM users WHERE id = 3")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows[0].get::<String, _>("name"), "Senior");
+}
+
+#[tokio::test]
+async fn test_cte_delete() {
+    let pool = setup_pool().await;
+
+    let mut cte_q = qbey_with::<MysqlValue>("users");
+    cte_q.select(&["id"]);
+    cte_q.and_where(col("age").gt(30));
+
+    let mut cte_ref = qbey_with::<MysqlValue>("old_users");
+    cte_ref.select(&["id"]);
+
+    let mut d = qbey_with::<MysqlValue>("users").into_delete();
+    d.with_cte("old_users", &[], cte_q);
+    d.and_where(col("id").included(cte_ref));
+    let (sql, binds) = d.to_sql_with(&DIALECT);
+
+    bind_params(sqlx::query(&sql), &binds)
+        .execute(&pool)
+        .await
+        .unwrap();
+
+    let rows = sqlx::query("SELECT id FROM users ORDER BY id")
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+}

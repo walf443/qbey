@@ -13,6 +13,18 @@ pub struct CteEntry<V: Clone = crate::Value> {
     pub recursive: bool,
 }
 
+impl<V: Clone> CteEntry<V> {
+    /// Transform all bind values in this CTE entry.
+    pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> CteEntry<U> {
+        CteEntry {
+            name: self.name,
+            columns: self.columns,
+            subquery: Box::new(self.subquery.map_values(f)),
+            recursive: self.recursive,
+        }
+    }
+}
+
 /// The source of a FROM clause — either a table name or a subquery.
 #[derive(Debug, Clone)]
 pub enum FromSource<V: Clone = crate::Value> {
@@ -118,6 +130,8 @@ pub enum InsertToken<V: Clone = crate::Value> {
 /// Token for UPDATE query construction.
 #[derive(Debug, Clone)]
 pub enum UpdateToken<V: Clone = crate::Value> {
+    /// CTE definitions (e.g., `WITH "cte" AS (SELECT ...)`).
+    With(Vec<CteEntry<V>>),
     Update {
         table: String,
         alias: Option<String>,
@@ -132,6 +146,8 @@ pub enum UpdateToken<V: Clone = crate::Value> {
 /// Token for DELETE query construction.
 #[derive(Debug, Clone)]
 pub enum DeleteToken<V: Clone = crate::Value> {
+    /// CTE definitions (e.g., `WITH "cte" AS (SELECT ...)`).
+    With(Vec<CteEntry<V>>),
     DeleteFrom {
         table: String,
         alias: Option<String>,
@@ -210,16 +226,9 @@ impl<V: Clone> SelectTree<V> {
                             .map(|(name, spec)| (name, spec.map_values(f)))
                             .collect(),
                     ),
-                    SelectToken::With(ctes) => SelectToken::With(
-                        ctes.into_iter()
-                            .map(|cte| CteEntry {
-                                name: cte.name,
-                                columns: cte.columns,
-                                subquery: Box::new(cte.subquery.map_values(f)),
-                                recursive: cte.recursive,
-                            })
-                            .collect(),
-                    ),
+                    SelectToken::With(ctes) => {
+                        SelectToken::With(ctes.into_iter().map(|cte| cte.map_values(f)).collect())
+                    }
                 })
                 .collect(),
         }
@@ -387,6 +396,9 @@ impl<V: Clone> UpdateTree<V> {
                 .tokens
                 .into_iter()
                 .map(|token| match token {
+                    UpdateToken::With(ctes) => {
+                        UpdateToken::With(ctes.into_iter().map(|cte| cte.map_values(f)).collect())
+                    }
                     UpdateToken::Update { table, alias } => UpdateToken::Update { table, alias },
                     UpdateToken::Set(sets) => UpdateToken::Set(
                         sets.into_iter()
@@ -478,6 +490,9 @@ impl<V: Clone> DeleteTree<V> {
                 .tokens
                 .into_iter()
                 .map(|token| match token {
+                    DeleteToken::With(ctes) => {
+                        DeleteToken::With(ctes.into_iter().map(|cte| cte.map_values(f)).collect())
+                    }
                     DeleteToken::DeleteFrom { table, alias } => {
                         DeleteToken::DeleteFrom { table, alias }
                     }
