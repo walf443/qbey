@@ -257,8 +257,13 @@ fn render_select_item<V: Clone>(
                 None => String::new(),
             };
             let func_call = format!("{}({})", func.as_str(), arg);
-            let over_clause = render_window_spec(window, cfg, binds);
-            let base = format!("{} OVER ({})", func_call, over_clause);
+            let base = match &window.name {
+                Some(name) => format!("{} OVER {}", func_call, (cfg.qi)(name)),
+                None => {
+                    let over_clause = render_window_spec(window, cfg, binds);
+                    format!("{} OVER ({})", func_call, over_clause)
+                }
+            };
             match alias {
                 Some(alias) => format!("{} AS {}", base, (cfg.qi)(alias)),
                 None => base,
@@ -389,6 +394,20 @@ pub(super) fn render_select_tokens<V: Clone>(
                 Some(sub_parts.join(" "))
             }
             SelectToken::SetOperator(op) => Some(set_op_keyword(op).to_string()),
+            SelectToken::Window(defs) => {
+                if defs.is_empty() {
+                    None
+                } else {
+                    let parts: Vec<String> = defs
+                        .iter()
+                        .map(|(name, spec)| {
+                            let spec_sql = render_window_spec(spec, cfg, binds);
+                            format!("{} AS ({})", (cfg.qi)(name), spec_sql)
+                        })
+                        .collect();
+                    Some(format!("WINDOW {}", parts.join(", ")))
+                }
+            }
             SelectToken::OpenParen | SelectToken::CloseParen => unreachable!(),
         };
 

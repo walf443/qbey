@@ -1,4 +1,4 @@
-use crate::{JoinClause, OrderByClause, SelectItem, WhereEntry};
+use crate::{JoinClause, OrderByClause, SelectItem, WhereEntry, WindowSpec};
 
 /// The source of a FROM clause — either a table name or a subquery.
 #[derive(Debug, Clone)]
@@ -68,6 +68,8 @@ pub enum SelectToken<V: Clone = crate::Value> {
     CloseParen,
     /// Set operation keyword (UNION, UNION ALL, INTERSECT, EXCEPT, etc.).
     SetOperator(crate::SetOp),
+    /// Named WINDOW definitions (e.g., `WINDOW "w" AS (...)`).
+    Window(Vec<(String, WindowSpec<V>)>),
 }
 
 /// Token for INSERT query construction.
@@ -188,6 +190,11 @@ impl<V: Clone> SelectTree<V> {
                     SelectToken::OpenParen => SelectToken::OpenParen,
                     SelectToken::CloseParen => SelectToken::CloseParen,
                     SelectToken::SetOperator(op) => SelectToken::SetOperator(op),
+                    SelectToken::Window(defs) => SelectToken::Window(
+                        defs.into_iter()
+                            .map(|(name, spec)| (name, spec.map_values(f)))
+                            .collect(),
+                    ),
                 })
                 .collect(),
         }
@@ -274,6 +281,26 @@ impl<V: Clone + std::fmt::Debug> SelectTree<V> {
 
         if !query.havings.is_empty() {
             tokens.push(SelectToken::Having(query.havings));
+        }
+
+        // Extract named window specs from select items for WINDOW clause.
+        {
+            let mut window_defs: Vec<(String, WindowSpec<V>)> = Vec::new();
+            if let Some(SelectToken::Select(SelectClause::Columns { items, .. })) = tokens.first() {
+                for item in items {
+                    if let SelectItem::WindowFunction { window, .. } = item {
+                        if let Some(ref name) = window.name {
+                            // Deduplicate by name.
+                            if !window_defs.iter().any(|(n, _)| n == name) {
+                                window_defs.push((name.clone(), window.clone()));
+                            }
+                        }
+                    }
+                }
+            }
+            if !window_defs.is_empty() {
+                tokens.push(SelectToken::Window(window_defs));
+            }
         }
 
         if !query.order_bys.is_empty() {

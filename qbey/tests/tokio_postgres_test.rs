@@ -968,3 +968,25 @@ async fn test_count_over_partition() {
     assert_eq!(cnt0, 2);
     assert_eq!(cnt2, 1);
 }
+
+#[tokio::test]
+async fn test_named_window() {
+    let client = setup_client().await;
+
+    let w = window().order_by(col("age").desc()).as_("w");
+
+    let mut q = qbey_with::<PgValue>("users");
+    q.select(&["id", "name", "age"]);
+    q.add_select(row_number().over(w.clone()).as_("rn"));
+    q.add_select(col("age").sum_over(w).as_("running"));
+    let (sql, _) = q.to_sql_with(&PostgresDialect);
+
+    let rows = client.query(&sql, &[]).await.unwrap();
+
+    // Ordered by age DESC: Charlie(35)=1, Alice(30)=2, Bob(25)=3
+    assert_eq!(rows.len(), 3);
+    let first_name: String = rows[0].get("name");
+    let first_rn: i64 = rows[0].get("rn");
+    assert_eq!(first_name, "Charlie");
+    assert_eq!(first_rn, 1);
+}

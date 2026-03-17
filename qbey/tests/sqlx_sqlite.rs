@@ -892,3 +892,25 @@ async fn test_count_over_partition() {
     assert_eq!(rows[1].get::<i32, _>("user_order_count"), 2);
     assert_eq!(rows[2].get::<i32, _>("user_order_count"), 1);
 }
+
+#[tokio::test]
+async fn test_named_window() {
+    let pool = setup_db().await;
+
+    let w = window().order_by(col("age").desc()).as_("w");
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.select(&["id", "name", "age"]);
+    q.add_select(row_number().over(w.clone()).as_("rn"));
+    q.add_select(col("age").sum_over(w).as_("running"));
+    let (sql, _) = q.to_sql();
+
+    let rows = sqlx::query(&sql).fetch_all(&pool).await.unwrap();
+
+    // Ordered by age DESC: Charlie(35)=1, Alice(30)=2, Bob(25)=3
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0].get::<i64, _>("rn"), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Charlie");
+    assert_eq!(rows[2].get::<i64, _>("rn"), 3);
+    assert_eq!(rows[2].get::<String, _>("name"), "Bob");
+}

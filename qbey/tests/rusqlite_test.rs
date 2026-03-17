@@ -988,3 +988,31 @@ fn test_count_over_partition() {
     assert_eq!(rows[1].2, 2); // order 2, user 1
     assert_eq!(rows[2].2, 1); // order 3, user 2
 }
+
+#[test]
+fn test_named_window() {
+    let conn = setup_db();
+
+    let w = window().order_by(col("age").desc()).as_("w");
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.select(&["id", "name", "age"]);
+    q.add_select(row_number().over(w.clone()).as_("rn"));
+    q.add_select(col("age").sum_over(w).as_("running"));
+    let (sql, _) = q.to_sql();
+
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<(i64, String, i64, i64)> = stmt
+        .query_map([], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    // Ordered by age DESC: Charlie(35)=1, Alice(30)=2, Bob(25)=3
+    assert_eq!(rows.len(), 3);
+    assert_eq!(rows[0], (3, "Charlie".to_string(), 35, 1));
+    assert_eq!(rows[1], (1, "Alice".to_string(), 30, 2));
+    assert_eq!(rows[2], (2, "Bob".to_string(), 25, 3));
+}

@@ -551,6 +551,9 @@ impl WindowFunc {
 pub struct WindowSpec<V: Clone = Value> {
     pub partition_by: Vec<Col>,
     pub order_by: Vec<OrderByClause<V>>,
+    /// When set, this window spec is rendered as a named WINDOW clause
+    /// and referenced by name in OVER.
+    pub name: Option<String>,
 }
 
 /// Create an empty window specification.
@@ -558,6 +561,7 @@ pub fn window() -> WindowSpec {
     WindowSpec {
         partition_by: Vec::new(),
         order_by: Vec::new(),
+        name: None,
     }
 }
 
@@ -574,6 +578,16 @@ impl<V: Clone> WindowSpec<V> {
         self
     }
 
+    /// Assign a name to this window spec for use in a WINDOW clause.
+    ///
+    /// When a named `WindowSpec` is used with `.over()` or `.*_over()`,
+    /// the query generates `OVER "name"` references and a
+    /// `WINDOW "name" AS (...)` clause.
+    pub fn as_(mut self, name: &str) -> Self {
+        self.name = Some(name.to_string());
+        self
+    }
+
     /// Transform all bind values in this spec.
     pub fn map_values<U: Clone>(self, f: &dyn Fn(V) -> U) -> WindowSpec<U> {
         WindowSpec {
@@ -583,6 +597,7 @@ impl<V: Clone> WindowSpec<V> {
                 .into_iter()
                 .map(|ob| ob.map_values(f))
                 .collect(),
+            name: self.name,
         }
     }
 
@@ -595,6 +610,7 @@ impl<V: Clone> WindowSpec<V> {
                 .into_iter()
                 .map(OrderByClause::from_default)
                 .collect(),
+            name: spec.name,
         }
     }
 }
@@ -607,6 +623,7 @@ pub fn row_number() -> SelectItem {
         window: WindowSpec {
             partition_by: Vec::new(),
             order_by: Vec::new(),
+            name: None,
         },
         alias: None,
     }
@@ -620,6 +637,7 @@ pub fn rank() -> SelectItem {
         window: WindowSpec {
             partition_by: Vec::new(),
             order_by: Vec::new(),
+            name: None,
         },
         alias: None,
     }
@@ -633,6 +651,7 @@ pub fn dense_rank() -> SelectItem {
         window: WindowSpec {
             partition_by: Vec::new(),
             order_by: Vec::new(),
+            name: None,
         },
         alias: None,
     }
