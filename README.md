@@ -202,16 +202,19 @@ assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"tota
 
 ### HAVING
 
+Aggregate expressions can be used directly in HAVING clauses, which is required for PostgreSQL compatibility (PostgreSQL does not allow SELECT aliases in HAVING):
+
 ```rust
 # use qbey::{qbey, col, count_all, SelectQueryBuilder};
 let mut q = qbey("employee");
 q.select(&["dept"]);
-q.add_select(count_all().as_("cnt"));
+let cnt = count_all().as_("cnt");
+q.add_select(cnt.clone());
 q.group_by(&["dept"]);
-q.having(col("cnt").gt(5));
+q.having(cnt.gt(5));
 
 let (sql, binds) = q.to_sql();
-assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" GROUP BY \"dept\" HAVING \"cnt\" > ?");
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" GROUP BY \"dept\" HAVING COUNT(*) > ?");
 ```
 
 For multiple conditions, use `and_having` / `or_having`:
@@ -220,14 +223,16 @@ For multiple conditions, use `and_having` / `or_having`:
 # use qbey::{qbey, col, count_all, SelectQueryBuilder};
 let mut q = qbey("employee");
 q.select(&["dept"]);
-q.add_select(count_all().as_("cnt"));
-q.add_select(col("salary").sum().as_("total"));
+let cnt = count_all().as_("cnt");
+let total = col("salary").sum().as_("total");
+q.add_select(cnt.clone());
+q.add_select(total.clone());
 q.group_by(&["dept"]);
-q.and_having(col("cnt").gt(5));
-q.and_having(col("total").gt(100000));
+q.and_having(cnt.gt(5));
+q.and_having(total.gt(100000));
 
 let (sql, binds) = q.to_sql();
-assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total\" FROM \"employee\" GROUP BY \"dept\" HAVING \"cnt\" > ? AND \"total\" > ?");
+assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total\" FROM \"employee\" GROUP BY \"dept\" HAVING COUNT(*) > ? AND SUM(\"salary\") > ?");
 ```
 
 ### Order By
