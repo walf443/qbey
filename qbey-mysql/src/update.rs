@@ -9,7 +9,7 @@ use qbey::{MySqlDialect, UpdateQueryBuilder};
 #[derive(Debug, Clone)]
 pub struct MysqlUpdateQuery<V: Clone + std::fmt::Debug = Value> {
     inner: qbey::UpdateQuery<V>,
-    order_bys: Vec<qbey::OrderByClause>,
+    order_bys: Vec<qbey::OrderByClause<qbey::Value>>,
     limit_val: Option<u64>,
 }
 
@@ -29,7 +29,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQueryBuilder<V> for MysqlUpdateQuery<V> {
         self
     }
 
-    fn set_expr(&mut self, expr: qbey::RawSql) -> &mut Self {
+    fn set_expr(&mut self, expr: qbey::RawSql<V>) -> &mut Self {
         self.inner.set_expr(expr);
         self
     }
@@ -77,7 +77,19 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         let ph = |_: usize| "?".to_string();
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
-        if let Some(order_by) = qbey::renderer::render_order_by(&self.order_bys, &cfg) {
+        // ORDER BY is rendered separately and appended as Raw(String) because
+        // UpdateToken has no OrderBy variant. The binds are collected separately
+        // and appended after render_update. This is correct for MySQL's `?`
+        // placeholders (position-independent) but would need a different approach
+        // for PostgreSQL's `$N` indexed placeholders.
+        let mut order_by_binds: Vec<Value> = Vec::new();
+        if let Some(order_by) =
+            qbey::renderer::render_order_by(&self.order_bys, &cfg, &mut order_by_binds)
+        {
+            debug_assert!(
+                order_by_binds.is_empty(),
+                "RawSql binds in MySQL UPDATE ORDER BY are not supported with custom value types"
+            );
             tree.tokens.push(qbey::tree::UpdateToken::Raw(order_by));
         }
         if let Some(n) = self.limit_val {

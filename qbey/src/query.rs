@@ -101,7 +101,7 @@ pub trait SelectQueryBuilder<V: Clone + std::fmt::Debug> {
     /// escaping or parameterization**. Never pass user-supplied input as `raw`;
     /// doing so opens the door to SQL injection. Only use hard-coded or
     /// application-controlled expressions.
-    fn add_select_expr(&mut self, raw: RawSql, alias: Option<&str>) -> &mut Self;
+    fn add_select_expr(&mut self, raw: RawSql<V>, alias: Option<&str>) -> &mut Self;
     /// Set the GROUP BY columns.
     fn group_by(&mut self, cols: &[&str]) -> &mut Self;
     /// Add an INNER JOIN clause.
@@ -148,7 +148,7 @@ pub trait SelectQueryBuilder<V: Clone + std::fmt::Debug> {
     /// # Security
     ///
     /// Never pass user-supplied input as `raw`.
-    fn order_by_expr(&mut self, raw: RawSql) -> &mut Self;
+    fn order_by_expr(&mut self, raw: RawSql<V>) -> &mut Self;
     /// Set the LIMIT value.
     fn limit(&mut self, n: u64) -> &mut Self;
     /// Set the OFFSET value.
@@ -214,14 +214,14 @@ pub struct SelectQuery<V: Clone + std::fmt::Debug = Value> {
     /// When set, the query selects from this subquery instead of `table`.
     pub(crate) from_subquery: Option<Box<crate::tree::SelectTree<V>>>,
     pub(crate) distinct: bool,
-    pub(crate) selects: Vec<SelectItem>,
+    pub(crate) selects: Vec<SelectItem<V>>,
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) havings: Vec<WhereEntry<V>>,
     pub(crate) group_bys: Vec<String>,
-    pub(crate) joins: Vec<JoinClause>,
+    pub(crate) joins: Vec<JoinClause<V>>,
     /// Subquery sources for joins, aligned with `joins` by index.
     pub(crate) join_subqueries: Vec<Option<Box<crate::tree::SelectTree<V>>>>,
-    pub(crate) order_bys: Vec<OrderByClause>,
+    pub(crate) order_bys: Vec<OrderByClause<V>>,
     pub(crate) limit_val: Option<u64>,
     pub(crate) offset_val: Option<u64>,
     /// Row-level locking clause (e.g., `"UPDATE"` → `FOR UPDATE`).
@@ -294,7 +294,7 @@ impl<V: Clone + std::fmt::Debug> IntoIncluded<V> for SelectQuery<V> {
     }
 }
 
-fn resolve_join_condition(cond: &mut JoinCondition, join_table: &str) {
+fn resolve_join_condition<V: Clone>(cond: &mut JoinCondition<V>, join_table: &str) {
     match cond {
         JoinCondition::ColEq { right, .. } => {
             if right.table.is_none() {
@@ -346,16 +346,19 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
     }
 
     fn select(&mut self, cols: &[impl Into<SelectItem> + Clone]) -> &mut Self {
-        self.selects.extend(cols.iter().map(|c| c.clone().into()));
+        self.selects.extend(
+            cols.iter()
+                .map(|c| SelectItem::from_default(c.clone().into())),
+        );
         self
     }
 
     fn add_select(&mut self, item: impl Into<SelectItem>) -> &mut Self {
-        self.selects.push(item.into());
+        self.selects.push(SelectItem::from_default(item.into()));
         self
     }
 
-    fn add_select_expr(&mut self, raw: RawSql, alias: Option<&str>) -> &mut Self {
+    fn add_select_expr(&mut self, raw: RawSql<V>, alias: Option<&str>) -> &mut Self {
         self.selects.push(SelectItem::Expr {
             raw,
             alias: alias.map(|a| a.to_string()),
@@ -371,7 +374,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
     fn join(&mut self, table: impl IntoJoinTable, condition: JoinCondition) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
-        let mut condition = condition;
+        let mut condition = JoinCondition::from_default(condition);
         resolve_join_condition(&mut condition, resolve_name);
 
         self.joins.push(JoinClause {
@@ -387,7 +390,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
     fn left_join(&mut self, table: impl IntoJoinTable, condition: JoinCondition) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
-        let mut condition = condition;
+        let mut condition = JoinCondition::from_default(condition);
         resolve_join_condition(&mut condition, resolve_name);
 
         self.joins.push(JoinClause {
@@ -408,7 +411,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
     ) -> &mut Self {
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
-        let mut condition = condition;
+        let mut condition = JoinCondition::from_default(condition);
         resolve_join_condition(&mut condition, resolve_name);
 
         self.joins.push(JoinClause {
@@ -447,7 +450,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
         condition: JoinCondition,
     ) -> &mut Self {
         let tree = sub.into_select_tree();
-        let mut condition = condition;
+        let mut condition = JoinCondition::from_default(condition);
         resolve_join_condition(&mut condition, alias);
 
         self.joins.push(JoinClause {
@@ -461,11 +464,11 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
     }
 
     fn order_by(&mut self, clause: OrderByClause) -> &mut Self {
-        self.order_bys.push(clause);
+        self.order_bys.push(OrderByClause::from_default(clause));
         self
     }
 
-    fn order_by_expr(&mut self, raw: RawSql) -> &mut Self {
+    fn order_by_expr(&mut self, raw: RawSql<V>) -> &mut Self {
         self.order_bys.push(OrderByClause::Expr(raw));
         self
     }
@@ -667,7 +670,7 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
     }
 
     /// Returns the ORDER BY clauses.
-    pub fn order_bys(&self) -> &[OrderByClause] {
+    pub fn order_bys(&self) -> &[OrderByClause<V>] {
         &self.order_bys
     }
 

@@ -31,10 +31,10 @@ impl<V: Clone> FromClause<V> {
 
 /// What the SELECT clause looks like.
 #[derive(Debug, Clone)]
-pub enum SelectClause {
+pub enum SelectClause<V: Clone = crate::Value> {
     /// SELECT [DISTINCT] * or SELECT [DISTINCT] col1, col2, ...
     Columns {
-        items: Vec<SelectItem>,
+        items: Vec<SelectItem<V>>,
         distinct: bool,
     },
 }
@@ -44,16 +44,16 @@ pub enum SelectClause {
 /// Token for SELECT query construction.
 #[derive(Debug, Clone)]
 pub enum SelectToken<V: Clone = crate::Value> {
-    Select(SelectClause),
+    Select(SelectClause<V>),
     From(FromClause<V>),
     Join {
-        clause: JoinClause,
+        clause: JoinClause<V>,
         subquery: Option<Box<SelectTree<V>>>,
     },
     Where(Vec<WhereEntry<V>>),
     GroupBy(Vec<String>),
     Having(Vec<WhereEntry<V>>),
-    OrderBy(Vec<OrderByClause>),
+    OrderBy(Vec<OrderByClause<V>>),
     Limit(u64),
     Offset(u64),
     LockFor(String),
@@ -157,10 +157,15 @@ impl<V: Clone> SelectTree<V> {
                 .tokens
                 .into_iter()
                 .map(|token| match token {
-                    SelectToken::Select(s) => SelectToken::Select(s),
+                    SelectToken::Select(s) => SelectToken::Select(match s {
+                        SelectClause::Columns { items, distinct } => SelectClause::Columns {
+                            items: items.into_iter().map(|item| item.map_values(f)).collect(),
+                            distinct,
+                        },
+                    }),
                     SelectToken::From(from) => SelectToken::From(from.map_values(f)),
                     SelectToken::Join { clause, subquery } => SelectToken::Join {
-                        clause,
+                        clause: clause.map_values(f),
                         subquery: subquery.map(|sq| Box::new(sq.map_values(f))),
                     },
                     SelectToken::Where(wheres) => {
@@ -170,7 +175,9 @@ impl<V: Clone> SelectTree<V> {
                     SelectToken::Having(havings) => {
                         SelectToken::Having(havings.into_iter().map(|w| w.map_values(f)).collect())
                     }
-                    SelectToken::OrderBy(o) => SelectToken::OrderBy(o),
+                    SelectToken::OrderBy(o) => {
+                        SelectToken::OrderBy(o.into_iter().map(|ob| ob.map_values(f)).collect())
+                    }
                     SelectToken::Limit(n) => SelectToken::Limit(n),
                     SelectToken::Offset(n) => SelectToken::Offset(n),
                     SelectToken::LockFor(s) => SelectToken::LockFor(s),
@@ -310,7 +317,9 @@ impl<V: Clone> UpdateTree<V> {
                                 crate::SetClause::Value(col, val) => {
                                     crate::SetClause::Value(col, f(val))
                                 }
-                                crate::SetClause::Expr(e) => crate::SetClause::Expr(e),
+                                crate::SetClause::Expr(e) => {
+                                    crate::SetClause::Expr(e.map_values(f))
+                                }
                             })
                             .collect(),
                     ),
@@ -365,7 +374,9 @@ impl<V: Clone> InsertTree<V> {
                                     crate::SetClause::Value(col, val) => {
                                         crate::SetClause::Value(col, f(val))
                                     }
-                                    crate::SetClause::Expr(e) => crate::SetClause::Expr(e),
+                                    crate::SetClause::Expr(e) => {
+                                        crate::SetClause::Expr(e.map_values(f))
+                                    }
                                 })
                                 .collect(),
                         }

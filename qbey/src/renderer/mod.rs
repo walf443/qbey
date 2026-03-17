@@ -15,8 +15,7 @@ pub struct RenderConfig<'a> {
     pub ph: &'a dyn Fn(usize) -> String,
     pub qi: &'a dyn Fn(&str) -> String,
     /// When true, backslashes inside SQL string literals are doubled (`\\`).
-    /// MySQL requires this because `\` is an escape character in string literals
-    /// by default (when `NO_BACKSLASH_ESCAPES` is not set).
+    /// MySQL requires this by default (when `NO_BACKSLASH_ESCAPES` is not set).
     pub backslash_escape: bool,
 }
 
@@ -107,7 +106,11 @@ fn render_join_col(col: &crate::JoinCol, cfg: &RenderConfig) -> String {
     }
 }
 
-pub(super) fn render_join_condition(cond: &JoinCondition, cfg: &RenderConfig) -> String {
+pub(super) fn render_join_condition<V: Clone>(
+    cond: &JoinCondition<V>,
+    cfg: &RenderConfig,
+    binds: &mut Vec<V>,
+) -> String {
     match cond {
         JoinCondition::ColEq { left, right } => {
             let left_str = match &left.table {
@@ -119,12 +122,12 @@ pub(super) fn render_join_condition(cond: &JoinCondition, cfg: &RenderConfig) ->
         JoinCondition::And(conditions) => {
             let parts: Vec<String> = conditions
                 .iter()
-                .map(|c| render_join_condition(c, cfg))
+                .map(|c| render_join_condition(c, cfg, binds))
                 .collect();
             parts.join(" AND ")
         }
         JoinCondition::Using(_) => unreachable!("Using is handled in render_join"),
-        JoinCondition::Expr(raw) => raw.to_string(),
+        JoinCondition::Expr(raw) => raw.render(cfg, binds),
     }
 }
 
@@ -137,7 +140,7 @@ fn render_join_table(table: &str, alias: &Option<String>, cfg: &RenderConfig) ->
 
 /// Render a single JOIN token.
 pub(super) fn render_join<V: Clone>(
-    join: &JoinClause,
+    join: &JoinClause<V>,
     subquery: &Option<Box<SelectTree<V>>>,
     cfg: &RenderConfig,
     binds: &mut Vec<V>,
@@ -164,14 +167,15 @@ pub(super) fn render_join<V: Clone>(
         "{} {} ON {}",
         keyword,
         table,
-        render_join_condition(&join.condition, cfg)
+        render_join_condition(&join.condition, cfg, binds)
     )
 }
 
-pub(super) fn render_select_columns(
-    items: &[SelectItem],
+pub(super) fn render_select_columns<V: Clone>(
+    items: &[SelectItem<V>],
     distinct: bool,
     cfg: &RenderConfig,
+    binds: &mut Vec<V>,
 ) -> String {
     let keyword = if distinct {
         "SELECT DISTINCT"
@@ -181,7 +185,10 @@ pub(super) fn render_select_columns(
     if items.is_empty() {
         format!("{} *", keyword)
     } else {
-        let quoted: Vec<String> = items.iter().map(|c| render_select_item(c, cfg)).collect();
+        let quoted: Vec<String> = items
+            .iter()
+            .map(|c| render_select_item(c, cfg, binds))
+            .collect();
         format!("{} {}", keyword, quoted.join(", "))
     }
 }
@@ -207,7 +214,11 @@ fn render_col_ref(col: &Col, cfg: &RenderConfig) -> String {
     }
 }
 
-fn render_select_item(item: &SelectItem, cfg: &RenderConfig) -> String {
+fn render_select_item<V: Clone>(
+    item: &SelectItem<V>,
+    cfg: &RenderConfig,
+    binds: &mut Vec<V>,
+) -> String {
     match item {
         SelectItem::Col(col) => {
             let base = render_col_ref(col, cfg);
@@ -216,10 +227,13 @@ fn render_select_item(item: &SelectItem, cfg: &RenderConfig) -> String {
                 None => base,
             }
         }
-        SelectItem::Expr { raw, alias } => match alias {
-            Some(alias) => format!("{} AS {}", raw, (cfg.qi)(alias)),
-            None => raw.to_string(),
-        },
+        SelectItem::Expr { raw, alias } => {
+            let rendered = raw.render(cfg, binds);
+            match alias {
+                Some(alias) => format!("{} AS {}", rendered, (cfg.qi)(alias)),
+                None => rendered,
+            }
+        }
         SelectItem::Function { func, col, alias } => {
             let arg = match (func, col) {
                 (SelectFunc::CountOne, _) => "1".to_string(),
@@ -236,14 +250,17 @@ fn render_select_item(item: &SelectItem, cfg: &RenderConfig) -> String {
 }
 
 /// Render the SELECT clause as a string.
-pub(super) fn render_select_clause(
-    select: &crate::tree::SelectClause,
+pub(super) fn render_select_clause<V: Clone>(
+    select: &crate::tree::SelectClause<V>,
     cfg: &RenderConfig,
+    binds: &mut Vec<V>,
 ) -> String {
     use crate::tree::SelectClause;
 
     match select {
-        SelectClause::Columns { items, distinct } => render_select_columns(items, *distinct, cfg),
+        SelectClause::Columns { items, distinct } => {
+            render_select_columns(items, *distinct, cfg, binds)
+        }
     }
 }
 
@@ -288,7 +305,7 @@ pub(super) fn render_select_tokens<V: Clone>(
         }
 
         let rendered = match token {
-            SelectToken::Select(clause) => Some(render_select_clause(clause, cfg)),
+            SelectToken::Select(clause) => Some(render_select_clause(clause, cfg, binds)),
             SelectToken::From(from) => Some(render_from(from, cfg, binds)),
             SelectToken::Join { clause, subquery } => {
                 Some(render_join(clause, subquery, cfg, binds))
@@ -306,7 +323,7 @@ pub(super) fn render_select_tokens<V: Clone>(
             }
             SelectToken::Having(havings) => render_wheres(havings, cfg, binds)
                 .map(|having_sql| format!("HAVING {}", having_sql)),
-            SelectToken::OrderBy(obs) => render_order_by(obs, cfg),
+            SelectToken::OrderBy(obs) => render_order_by(obs, cfg, binds),
             SelectToken::Limit(n) => Some(format!("LIMIT {}", n)),
             SelectToken::Offset(n) => Some(format!("OFFSET {}", n)),
             SelectToken::LockFor(s) => Some(format!("FOR {}", s)),
@@ -474,7 +491,11 @@ fn render_where_clause<V: Clone>(
 /// Returns `None` if the slice is empty; otherwise returns `Some("ORDER BY ...")`.
 /// Exposed publicly so dialect crates can reuse this for dialect-specific
 /// ORDER BY support (e.g., MySQL's ORDER BY in UPDATE/DELETE).
-pub fn render_order_by(order_bys: &[OrderByClause], cfg: &RenderConfig) -> Option<String> {
+pub fn render_order_by<V: Clone>(
+    order_bys: &[OrderByClause<V>],
+    cfg: &RenderConfig,
+    binds: &mut Vec<V>,
+) -> Option<String> {
     if order_bys.is_empty() {
         return None;
     }
@@ -488,7 +509,7 @@ pub fn render_order_by(order_bys: &[OrderByClause], cfg: &RenderConfig) -> Optio
                 };
                 format!("{} {}", render_col_ref(col, cfg), dir_str)
             }
-            OrderByClause::Expr(raw) => raw.to_string(),
+            OrderByClause::Expr(raw) => raw.render(cfg, binds),
         })
         .collect();
     Some(format!("ORDER BY {}", clauses.join(", ")))

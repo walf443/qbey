@@ -9,7 +9,7 @@ use qbey::{DeleteQueryBuilder, MySqlDialect};
 #[derive(Debug, Clone)]
 pub struct MysqlDeleteQuery<V: Clone + std::fmt::Debug = Value> {
     inner: qbey::DeleteQuery<V>,
-    order_bys: Vec<qbey::OrderByClause>,
+    order_bys: Vec<qbey::OrderByClause<qbey::Value>>,
     limit_val: Option<u64>,
 }
 
@@ -65,7 +65,19 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V> {
         let ph = |_: usize| "?".to_string();
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
-        if let Some(order_by) = qbey::renderer::render_order_by(&self.order_bys, &cfg) {
+        // ORDER BY is rendered separately and appended as Raw(String) because
+        // DeleteToken has no OrderBy variant. The binds are collected separately
+        // and appended after render_delete. This is correct for MySQL's `?`
+        // placeholders (position-independent) but would need a different approach
+        // for PostgreSQL's `$N` indexed placeholders.
+        let mut order_by_binds: Vec<Value> = Vec::new();
+        if let Some(order_by) =
+            qbey::renderer::render_order_by(&self.order_bys, &cfg, &mut order_by_binds)
+        {
+            debug_assert!(
+                order_by_binds.is_empty(),
+                "RawSql binds in MySQL DELETE ORDER BY are not supported with custom value types"
+            );
             tree.tokens.push(qbey::tree::DeleteToken::Raw(order_by));
         }
         if let Some(n) = self.limit_val {

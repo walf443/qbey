@@ -91,7 +91,7 @@ pub trait InsertQueryBuilder<V: Clone> {
     ///
     /// Panics if the column name duplicates a column already added via
     /// `add_value()` or a previous `add_col_value_expr()` call.
-    fn add_col_value_expr(&mut self, column: impl Into<Col>, expr: RawSql) -> &mut Self;
+    fn add_col_value_expr(&mut self, column: impl Into<Col>, expr: RawSql<V>) -> &mut Self;
 
     /// Use a SELECT query as the source of rows (INSERT ... SELECT ...).
     ///
@@ -138,7 +138,7 @@ pub struct InsertQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) source: InsertSource<V>,
     /// Extra columns whose values are raw SQL expressions (e.g., `NOW()`).
     /// These are appended after the normal bind-value columns in every row.
-    pub(crate) col_exprs: Vec<(String, RawSql)>,
+    pub(crate) col_exprs: Vec<(String, RawSql<V>)>,
 }
 
 impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
@@ -199,7 +199,7 @@ impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
         self
     }
 
-    fn add_col_value_expr(&mut self, column: impl Into<Col>, expr: RawSql) -> &mut Self {
+    fn add_col_value_expr(&mut self, column: impl Into<Col>, expr: RawSql<V>) -> &mut Self {
         let column = column.into().column;
         assert!(
             matches!(self.source, InsertSource::Values(_)),

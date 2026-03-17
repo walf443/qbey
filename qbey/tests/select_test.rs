@@ -827,3 +827,155 @@ fn test_select_distinct_with_where() {
     );
     assert_eq!(binds, vec![Value::Bool(true)]);
 }
+
+// ── RawSql with binds ──
+
+#[test]
+fn test_select_expr_with_binds() {
+    let mut q = qbey("users");
+    q.select(&["id"]);
+    q.add_select_expr(
+        RawSql::new("CONCAT({}, {})").binds(&["foo", "bar"]),
+        Some("full_name"),
+    );
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", CONCAT(?, ?) AS "full_name" FROM "users""#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("foo".to_string()),
+            Value::String("bar".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn test_select_expr_with_binds_and_where() {
+    let mut q = qbey("users");
+    q.select(&["id"]);
+    q.add_select_expr(
+        RawSql::new("CONCAT({}, {})").binds(&["hello", "world"]),
+        Some("greeting"),
+    );
+    q.and_where(col("active").eq(true));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", CONCAT(?, ?) AS "greeting" FROM "users" WHERE "active" = ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("hello".to_string()),
+            Value::String("world".to_string()),
+            Value::Bool(true),
+        ]
+    );
+}
+
+#[test]
+fn test_select_expr_with_binds_pg_placeholders() {
+    let mut q = qbey("users");
+    q.select(&["id"]);
+    q.add_select_expr(
+        RawSql::new("COALESCE({}, {})").binds(&["default_name", "fallback"]),
+        Some("name"),
+    );
+    q.and_where(col("id").eq(42));
+
+    let (sql, binds) = q.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"SELECT "id", COALESCE($1, $2) AS "name" FROM "users" WHERE "id" = $3"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("default_name".to_string()),
+            Value::String("fallback".to_string()),
+            Value::Int(42),
+        ]
+    );
+}
+
+#[test]
+fn test_select_expr_no_binds_unchanged() {
+    let mut q = qbey("users");
+    q.add_select_expr(RawSql::new("NOW()"), Some("current_time"));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(sql, r#"SELECT NOW() AS "current_time" FROM "users""#);
+    assert!(binds.is_empty());
+}
+
+#[test]
+fn test_select_expr_with_braces_but_no_binds() {
+    // RawSql containing "{}" but without calling .binds() should pass through as-is.
+    let mut q = qbey("users");
+    q.add_select_expr(RawSql::new(r#"FORMAT("{}", "name")"#), Some("formatted"));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT FORMAT("{}", "name") AS "formatted" FROM "users""#
+    );
+    assert!(binds.is_empty());
+}
+
+#[test]
+#[should_panic(expected = "number of {} placeholders")]
+fn test_raw_sql_binds_count_mismatch_too_many_values() {
+    // More bind values than {} placeholders should panic via debug_assert.
+    let _expr: RawSql = RawSql::new("CONCAT({})").binds(&["a", "b"]);
+}
+
+#[test]
+#[should_panic(expected = "number of {} placeholders")]
+fn test_raw_sql_binds_count_mismatch_too_few_values() {
+    // Fewer bind values than {} placeholders should panic via debug_assert.
+    let _expr: RawSql = RawSql::new("CONCAT({}, {})").binds(&["a"]);
+}
+
+#[test]
+fn test_order_by_expr_with_binds() {
+    let mut q = qbey("users");
+    q.select(&["id", "name"]);
+    q.order_by_expr(RawSql::new("FIELD({}, {}, {})").binds(&["a", "b", "c"]));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" ORDER BY FIELD(?, ?, ?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("a".to_string()),
+            Value::String("b".to_string()),
+            Value::String("c".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn test_order_by_expr_with_binds_and_where() {
+    let mut q = qbey("users");
+    q.select(&["id", "name"]);
+    q.and_where(col("active").eq(true));
+    q.order_by_expr(RawSql::new("FIELD({})").binds(&["x"]));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" WHERE "active" = ? ORDER BY FIELD(?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::Bool(true), Value::String("x".to_string())]
+    );
+}

@@ -8,7 +8,7 @@ enum OnDuplicateKeyUpdateClause<V: Clone> {
     /// A column set to a bind value: `` `col` = ? ``.
     Value(String, V),
     /// A raw SQL expression: `` `col` = `col` + 1 ``.
-    Expr(qbey::RawSql),
+    Expr(qbey::RawSql<V>),
 }
 
 /// MySQL-specific INSERT query builder.
@@ -43,7 +43,7 @@ impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for MysqlInsertQuery<V> {
     fn add_col_value_expr(
         &mut self,
         column: impl Into<qbey::Col>,
-        expr: qbey::RawSql,
+        expr: qbey::RawSql<V>,
     ) -> &mut Self {
         self.inner.add_col_value_expr(column, expr);
         self
@@ -109,7 +109,7 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     ///     "INSERT INTO `users` (`id`, `age`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `age` = `age` + 1"
     /// );
     /// ```
-    pub fn on_duplicate_key_update_expr(&mut self, expr: qbey::RawSql) -> &mut Self {
+    pub fn on_duplicate_key_update_expr(&mut self, expr: qbey::RawSql<V>) -> &mut Self {
         self.on_duplicate_key_updates
             .push(OnDuplicateKeyUpdateClause::Expr(expr));
         self

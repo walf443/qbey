@@ -88,7 +88,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for MysqlQuery<V> {
         self
     }
 
-    fn add_select_expr(&mut self, raw: qbey::RawSql, alias: Option<&str>) -> &mut Self {
+    fn add_select_expr(&mut self, raw: qbey::RawSql<V>, alias: Option<&str>) -> &mut Self {
         self.inner.add_select_expr(raw, alias);
         self
     }
@@ -163,7 +163,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for MysqlQuery<V> {
         self
     }
 
-    fn order_by_expr(&mut self, raw: qbey::RawSql) -> &mut Self {
+    fn order_by_expr(&mut self, raw: qbey::RawSql<V>) -> &mut Self {
         self.inner.order_by_expr(raw);
         self
     }

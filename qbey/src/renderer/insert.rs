@@ -78,7 +78,7 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (Str
                             items.push(format!("{} = {}", (cfg.qi)(col), (cfg.ph)(binds.len())));
                         }
                         crate::SetClause::Expr(expr) => {
-                            items.push(expr.as_str().to_string());
+                            items.push(expr.render(cfg, &mut binds));
                         }
                     }
                 }
