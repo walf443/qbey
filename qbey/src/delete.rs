@@ -1,6 +1,5 @@
 use crate::Dialect;
 use crate::query::CteDefinition;
-use crate::tree::SelectTree;
 use crate::value::Value;
 use crate::where_clause::{IntoWhereClause, WhereEntry};
 

@@ -2,7 +2,6 @@ use crate::Dialect;
 use crate::column::Col;
 use crate::query::CteDefinition;
 use crate::raw_sql::RawSql;
-use crate::tree::SelectTree;
 use crate::value::Value;
 use crate::where_clause::{IntoWhereClause, WhereEntry};
 
