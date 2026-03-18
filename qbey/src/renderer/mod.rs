@@ -561,6 +561,14 @@ fn render_where_clause<V: Clone>(
                 escaped
             )
         }
+        WhereClause::Exists { sub } => {
+            let sub_sql = render_subquery_sql(sub, cfg, binds);
+            format!("EXISTS ({})", sub_sql)
+        }
+        WhereClause::NotExists { sub } => {
+            let sub_sql = render_subquery_sql(sub, cfg, binds);
+            format!("NOT EXISTS ({})", sub_sql)
+        }
         WhereClause::Any(clauses) => {
             let parts: Vec<String> = clauses
                 .iter()
