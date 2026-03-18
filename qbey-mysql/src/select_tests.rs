@@ -723,3 +723,45 @@ fn test_having_in_subquery() {
     );
     assert!(binds.is_empty());
 }
+
+#[test]
+fn test_eq_col_in_where() {
+    let mut q = qbey("users");
+    q.select(&["name"]);
+    q.and_where(
+        table("users")
+            .col("dept_id")
+            .eq_col(table("depts").col("id")),
+    );
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT `name` FROM `users` WHERE `users`.`dept_id` = `depts`.`id`"
+    );
+    assert!(binds.is_empty());
+}
+
+#[test]
+fn test_eq_col_correlated_subquery_with_exists() {
+    use qbey::exists;
+
+    let mut sub = qbey("orders");
+    sub.select(&["id"]);
+    sub.and_where(
+        table("orders")
+            .col("user_id")
+            .eq_col(table("users").col("id")),
+    );
+
+    let mut q = qbey("users");
+    q.select(&["name"]);
+    q.and_where(exists(sub));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT `name` FROM `users` WHERE EXISTS (SELECT `id` FROM `orders` WHERE `orders`.`user_id` = `users`.`id`)"
+    );
+    assert!(binds.is_empty());
+}

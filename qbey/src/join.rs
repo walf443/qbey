@@ -78,6 +78,11 @@ impl<V: Clone> JoinCondition<V> {
 
 impl<V: Clone> From<ColCondition> for JoinCondition<V> {
     fn from(cond: ColCondition) -> Self {
+        assert!(
+            matches!(cond.op, crate::value::Op::Eq),
+            "only Op::Eq ColCondition can be converted to JoinCondition (got {:?})",
+            cond.op
+        );
         JoinCondition::ColEq {
             left: cond.left,
             right: JoinCol::from(cond.right),

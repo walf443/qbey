@@ -458,9 +458,9 @@ impl Col {
 /// A column-to-column comparison, usable in both JOIN ON and WHERE clauses.
 #[derive(Debug, Clone)]
 pub struct ColCondition {
-    pub left: Col,
-    pub op: Op,
-    pub right: Col,
+    pub(crate) left: Col,
+    pub(crate) op: Op,
+    pub(crate) right: Col,
 }
 
 /// An item in a SELECT list — either a column reference or a raw SQL expression.
