@@ -130,10 +130,10 @@ pub(super) fn render_from<V: Clone>(
     s
 }
 
-fn render_join_col(col: &crate::JoinCol, cfg: &RenderConfig) -> String {
+fn render_join_col(col: &Col, cfg: &RenderConfig) -> String {
     match &col.table {
-        Some(table) => format!("{}.{}", (cfg.qi)(table), (cfg.qi)(&col.col)),
-        None => (cfg.qi)(&col.col),
+        Some(table) => format!("{}.{}", (cfg.qi)(table), (cfg.qi)(&col.column)),
+        None => (cfg.qi)(&col.column),
     }
 }
 
