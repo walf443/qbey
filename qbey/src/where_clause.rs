@@ -227,25 +227,13 @@ impl<V: Clone, T: Clone + Into<V>> IntoWhereClause<V> for WhereClause<T> {
     }
 }
 
-/// Convert a `JoinCondition::ColEq` into a `WhereClause::ColEq`.
-///
-/// # Panics
-///
-/// Panics if the condition is not `ColEq` (e.g., `And`, `Using`, `Expr`).
-impl<V: Clone> IntoWhereClause<V> for crate::join::JoinCondition<V> {
+/// Convert a `ColCondition` into a `WhereClause::ColCondition`.
+impl<V: Clone> IntoWhereClause<V> for crate::column::ColCondition {
     fn into_where_clause(self) -> WhereClause<V> {
-        match self {
-            crate::join::JoinCondition::ColEq { left, right } => WhereClause::ColCondition {
-                left,
-                op: Op::Eq,
-                right: Col {
-                    table: right.table,
-                    column: right.col,
-                    alias: None,
-                    aggregate: None,
-                },
-            },
-            _ => panic!("only JoinCondition::ColEq can be converted to WhereClause"),
+        WhereClause::ColCondition {
+            left: self.left,
+            op: self.op,
+            right: self.right,
         }
     }
 }

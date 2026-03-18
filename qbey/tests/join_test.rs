@@ -103,8 +103,8 @@ fn test_join_with_multiple_conditions() {
     q.join(
         "orders",
         JoinCondition::And(vec![
-            table("users").col("id").eq_col("user_id"),
-            table("users").col("region").eq_col("region"),
+            table("users").col("id").eq_col("user_id").into(),
+            table("users").col("region").eq_col("region").into(),
         ]),
     );
     q.select(&["id", "name"]);
@@ -282,7 +282,7 @@ fn test_join_condition_expr_inside_and() {
     q.join(
         "patterns",
         JoinCondition::And(vec![
-            table("texts").col("category").eq_col("category"),
+            table("texts").col("category").eq_col("category").into(),
             join::on_expr(RawSql::new(r#""texts"."text" LIKE "patterns"."pattern""#)),
         ]),
     );
