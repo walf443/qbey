@@ -1,4 +1,3 @@
-use crate::join::{JoinCol, JoinCondition};
 use crate::like::LikeExpression;
 use crate::raw_sql::RawSql;
 use crate::value::{Op, Value};
@@ -442,16 +441,29 @@ impl Col {
         }
     }
 
-    /// Create a JOIN ON condition comparing two columns.
+    /// Create a column-to-column equality comparison.
     ///
-    /// When `self` has no table qualifier (created via `col()`), the left side
-    /// is rendered without a table prefix (e.g., `"id" = "orders"."user_id"`).
-    pub fn eq_col(self, other: impl Into<JoinCol>) -> JoinCondition {
-        JoinCondition::ColEq {
+    /// The result can be used in both JOIN ON and WHERE clauses:
+    /// - JOIN: `q.join("orders", table("users").col("id").eq_col(table("orders").col("user_id")))`
+    /// - WHERE: `q.and_where(table("a").col("x").eq_col(table("b").col("y")))`
+    pub fn eq_col(self, other: impl Into<Col>) -> ColCondition {
+        ColCondition {
             left: self,
+            op: Op::Eq,
             right: other.into(),
         }
     }
+}
+
+/// A column-to-column comparison, usable in both JOIN ON and WHERE clauses.
+///
+/// Created by [`Col::eq_col`]. Can be passed directly to `and_where` / `or_where`
+/// (WHERE clause) or to `join` / `left_join` (JOIN ON clause).
+#[derive(Debug, Clone)]
+pub struct ColCondition {
+    pub(crate) left: Col,
+    pub(crate) op: Op,
+    pub(crate) right: Col,
 }
 
 /// An item in a SELECT list — either a column reference or a raw SQL expression.
