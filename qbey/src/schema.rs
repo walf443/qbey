@@ -67,19 +67,13 @@ macro_rules! qbey_schema {
     ($struct_name:ident, $table_name:expr, [$($col:ident),* $(,)?]) => {
         #[allow(dead_code)]
         pub struct $struct_name {
-            /// Table reference using the effective name (alias or table name)
-            /// for qualifying column references.
-            col_table: $crate::TableRef,
             alias: Option<&'static str>,
         }
 
         #[allow(dead_code)]
         impl $struct_name {
-            pub fn new() -> Self {
-                $struct_name {
-                    col_table: $crate::table($table_name),
-                    alias: None,
-                }
+            pub const fn new() -> Self {
+                $struct_name { alias: None }
             }
 
             pub fn table_name(&self) -> &'static str {
@@ -91,7 +85,7 @@ macro_rules! qbey_schema {
             pub fn table(&self) -> $crate::TableRef {
                 match self.alias {
                     Some(alias) => $crate::table($table_name).as_(alias),
-                    None => self.col_table.clone(),
+                    None => $crate::table($table_name),
                 }
             }
 
@@ -101,15 +95,12 @@ macro_rules! qbey_schema {
             /// alias, and `table()` returns `table("original").as_("alias")` so
             /// it can be passed directly to `join` / `left_join`.
             pub fn as_(self, alias: &'static str) -> Self {
-                $struct_name {
-                    col_table: $crate::table(alias),
-                    alias: Some(alias),
-                }
+                $struct_name { alias: Some(alias) }
             }
 
             $(
                 pub fn $col(&self) -> $crate::Col {
-                    self.col_table.col(stringify!($col))
+                    $crate::table(self.alias.unwrap_or($table_name)).col(stringify!($col))
                 }
             )*
 
