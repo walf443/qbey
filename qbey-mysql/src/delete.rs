@@ -109,11 +109,12 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V> {
         let ph = |_: usize| "?".to_string();
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
-        // ORDER BY is rendered separately and appended as Raw(String) because
-        // DeleteToken has no OrderBy variant. The binds are collected separately
-        // and appended after render_delete. This is correct for MySQL's `?`
-        // placeholders (position-independent) but would need a different approach
-        // for PostgreSQL's `$N` indexed placeholders.
+
+        // MySQL-specific ORDER BY and LIMIT are inserted before the
+        // RETURNING token (if present) so that the final SQL order is:
+        // DELETE FROM ... WHERE ... ORDER BY ... LIMIT ... RETURNING ...
+        let mut extra_tokens: Vec<qbey::tree::DeleteToken<V>> = Vec::new();
+
         let mut order_by_binds: Vec<Value> = Vec::new();
         if let Some(order_by) =
             qbey::renderer::render_order_by(&self.order_bys, &cfg, &mut order_by_binds)
@@ -122,12 +123,28 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V> {
                 order_by_binds.is_empty(),
                 "RawSql binds in MySQL DELETE ORDER BY are not supported with custom value types"
             );
-            tree.tokens.push(qbey::tree::DeleteToken::Raw(order_by));
+            extra_tokens.push(qbey::tree::DeleteToken::Raw(order_by));
         }
         if let Some(n) = self.limit_val {
-            tree.tokens
-                .push(qbey::tree::DeleteToken::Raw(format!("LIMIT {}", n)));
+            extra_tokens.push(qbey::tree::DeleteToken::Raw(format!("LIMIT {}", n)));
         }
+
+        if !extra_tokens.is_empty() {
+            // Find the position of the Returning token (if any) and insert before it.
+            #[cfg(feature = "returning")]
+            let insert_pos = tree
+                .tokens
+                .iter()
+                .position(|t| matches!(t, qbey::tree::DeleteToken::Returning(_)))
+                .unwrap_or(tree.tokens.len());
+            #[cfg(not(feature = "returning"))]
+            let insert_pos = tree.tokens.len();
+
+            for (i, token) in extra_tokens.into_iter().enumerate() {
+                tree.tokens.insert(insert_pos + i, token);
+            }
+        }
+
         qbey::renderer::delete::render_delete(&tree, &cfg)
     }
 }
