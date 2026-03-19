@@ -65,6 +65,8 @@
 #[macro_export]
 macro_rules! qbey_schema {
     ($struct_name:ident, $table_name:expr, [$($col:ident),* $(,)?]) => {
+        const _: &str = $table_name;
+
         #[allow(dead_code)]
         pub struct $struct_name {
             alias: Option<&'static str>,

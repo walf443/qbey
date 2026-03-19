@@ -154,6 +154,19 @@ fn test_schema_delete() {
 }
 
 #[test]
+fn test_schema_const_initialization() {
+    const USERS: Users = Users::new();
+    let mut q = qbey("users");
+    q.select(&USERS.all_columns());
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "users"."id", "users"."name", "users"."email" FROM "users""#
+    );
+}
+
+#[test]
 fn test_schema_trailing_comma_in_columns() {
     qbey_schema!(Items, "items", [id, name, price,]);
 

@@ -726,7 +726,7 @@ assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ? RETURNING "id", "name""
 
 See [qbey-mysql](./qbey-mysql/README.md) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).
 
-### Schema macro
+## Schema macro
 
 `qbey_schema!` generates a typed struct for a table, providing column accessor methods that return qualified `Col` references. This avoids repeating string-based column names and enables compile-time checks.
 
