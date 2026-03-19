@@ -3,6 +3,16 @@ use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 use testcontainers::runners::AsyncRunner;
 use testcontainers_modules::mysql::Mysql;
 
+#[ctor::dtor]
+fn cleanup() {
+    if let Some(shared) = SHARED_CONTAINER.get() {
+        if let Some(container) = shared.container.lock().unwrap().take() {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async { container.rm().await.unwrap() });
+        }
+    }
+}
+
 /// Custom value type for MySQL — maps directly to sqlx bind types.
 #[derive(Debug, Clone)]
 pub enum MysqlValue {
@@ -43,7 +53,7 @@ impl From<String> for MysqlValue {
 }
 
 struct SharedContainer {
-    _container: testcontainers::ContainerAsync<Mysql>,
+    container: std::sync::Mutex<Option<testcontainers::ContainerAsync<Mysql>>>,
     host_port: u16,
 }
 
@@ -57,7 +67,7 @@ async fn get_shared_container() -> &'static SharedContainer {
             let container = Mysql::default().start().await.unwrap();
             let host_port = container.get_host_port_ipv4(3306).await.unwrap();
             SharedContainer {
-                _container: container,
+                container: std::sync::Mutex::new(Some(container)),
                 host_port,
             }
         })

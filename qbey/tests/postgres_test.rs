@@ -12,6 +12,16 @@ use testcontainers_modules::postgres::Postgres;
 
 use qbey::PgDialect as PostgresDialect;
 
+#[ctor::dtor]
+fn cleanup() {
+    if let Some(shared) = SHARED_CONTAINER.get() {
+        if let Some(container) = shared.container.lock().unwrap().take() {
+            let rt = tokio::runtime::Runtime::new().unwrap();
+            rt.block_on(async { container.rm().await.unwrap() });
+        }
+    }
+}
+
 /// Custom value type for PostgreSQL — stores i32 directly.
 #[derive(Debug, Clone)]
 enum PgValue {
@@ -74,7 +84,7 @@ fn to_pg_params(binds: &[PgValue]) -> Vec<Box<dyn ToSql + Sync>> {
 }
 
 struct SharedContainer {
-    _container: testcontainers::ContainerAsync<Postgres>,
+    container: std::sync::Mutex<Option<testcontainers::ContainerAsync<Postgres>>>,
     host_port: u16,
 }
 
@@ -88,7 +98,7 @@ async fn get_shared_container() -> &'static SharedContainer {
             let container = Postgres::default().start().await.unwrap();
             let host_port = container.get_host_port_ipv4(5432).await.unwrap();
             SharedContainer {
-                _container: container,
+                container: std::sync::Mutex::new(Some(container)),
                 host_port,
             }
         })
