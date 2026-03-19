@@ -1,6 +1,6 @@
 use crate::like::LikeExpression;
 use crate::raw_sql::RawSql;
-use crate::value::{Op, Value};
+use crate::value::{ConditionValue, Op, Value};
 use crate::where_clause::{IntoIncluded, IntoRangeClause, WhereClause};
 
 #[derive(Debug, Clone)]
@@ -125,6 +125,38 @@ impl From<&str> for Col {
     }
 }
 
+/// Trait for the right-hand side of a comparison condition.
+///
+/// Implemented for [`Col`] (column-to-column comparison) and for all types
+/// that implement [`ConditionValue`] (value comparison with bind parameters).
+///
+/// The associated type `Output` determines the return type of
+/// [`ConditionExpr::eq`] and friends:
+/// - `Col` → [`ColCondition`] (usable in both JOIN ON and WHERE clauses)
+/// - value types → [`WhereClause<V>`]
+pub trait ConditionRhs {
+    type Output;
+    fn apply_condition(self, col: Col, op: Op) -> Self::Output;
+}
+
+impl ConditionRhs for Col {
+    type Output = ColCondition;
+    fn apply_condition(self, left: Col, op: Op) -> ColCondition {
+        ColCondition {
+            left,
+            op,
+            right: self,
+        }
+    }
+}
+
+impl<V: ConditionValue> ConditionRhs for V {
+    type Output = WhereClause<V>;
+    fn apply_condition(self, col: Col, op: Op) -> WhereClause<V> {
+        WhereClause::Condition { col, op, val: self }
+    }
+}
+
 /// Trait for types that can produce WHERE/HAVING conditions.
 ///
 /// Implemented by [`Col`] and [`SelectItem`]. Adding a new condition method
@@ -135,57 +167,38 @@ pub trait ConditionExpr: Sized {
     fn into_condition_col(self) -> Col;
 
     /// Generate an equality (`=`) condition.
-    fn eq<V: Clone>(self, val: V) -> WhereClause<V> {
-        WhereClause::Condition {
-            col: self.into_condition_col(),
-            op: Op::Eq,
-            val,
-        }
+    ///
+    /// Accepts either a value (producing a bind-parameter condition) or a
+    /// [`Col`] (producing a column-to-column comparison):
+    /// - `col("id").eq(1)` → `"id" = ?`
+    /// - `col("id").eq(col("other_id"))` → `"id" = "other_id"`
+    fn eq<R: ConditionRhs>(self, rhs: R) -> R::Output {
+        rhs.apply_condition(self.into_condition_col(), Op::Eq)
     }
 
     /// Generate an inequality (`!=`) condition.
-    fn ne<V: Clone>(self, val: V) -> WhereClause<V> {
-        WhereClause::Condition {
-            col: self.into_condition_col(),
-            op: Op::Ne,
-            val,
-        }
+    fn ne<R: ConditionRhs>(self, rhs: R) -> R::Output {
+        rhs.apply_condition(self.into_condition_col(), Op::Ne)
     }
 
     /// Generate a greater-than (`>`) condition.
-    fn gt<V: Clone>(self, val: V) -> WhereClause<V> {
-        WhereClause::Condition {
-            col: self.into_condition_col(),
-            op: Op::Gt,
-            val,
-        }
+    fn gt<R: ConditionRhs>(self, rhs: R) -> R::Output {
+        rhs.apply_condition(self.into_condition_col(), Op::Gt)
     }
 
     /// Generate a less-than (`<`) condition.
-    fn lt<V: Clone>(self, val: V) -> WhereClause<V> {
-        WhereClause::Condition {
-            col: self.into_condition_col(),
-            op: Op::Lt,
-            val,
-        }
+    fn lt<R: ConditionRhs>(self, rhs: R) -> R::Output {
+        rhs.apply_condition(self.into_condition_col(), Op::Lt)
     }
 
     /// Generate a greater-than-or-equal (`>=`) condition.
-    fn gte<V: Clone>(self, val: V) -> WhereClause<V> {
-        WhereClause::Condition {
-            col: self.into_condition_col(),
-            op: Op::Gte,
-            val,
-        }
+    fn gte<R: ConditionRhs>(self, rhs: R) -> R::Output {
+        rhs.apply_condition(self.into_condition_col(), Op::Gte)
     }
 
     /// Generate a less-than-or-equal (`<=`) condition.
-    fn lte<V: Clone>(self, val: V) -> WhereClause<V> {
-        WhereClause::Condition {
-            col: self.into_condition_col(),
-            op: Op::Lte,
-            val,
-        }
+    fn lte<R: ConditionRhs>(self, rhs: R) -> R::Output {
+        rhs.apply_condition(self.into_condition_col(), Op::Lte)
     }
 
     /// Generate a `LIKE` condition.
@@ -446,6 +459,10 @@ impl Col {
     /// The result can be used in both JOIN ON and WHERE clauses:
     /// - JOIN: `q.join("orders", table("users").col("id").eq_col(table("orders").col("user_id")))`
     /// - WHERE: `q.and_where(table("a").col("x").eq_col(table("b").col("y")))`
+    #[deprecated(
+        since = "0.2.0",
+        note = "use `eq(col(...))` instead, e.g., `col(\"a\").eq(col(\"b\"))`"
+    )]
     pub fn eq_col(self, other: impl Into<Col>) -> ColCondition {
         ColCondition {
             left: self,
