@@ -726,6 +726,42 @@ assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ? RETURNING "id", "name""
 
 See [qbey-mysql](./qbey-mysql/README.md) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).
 
+### Schema macro
+
+`qbey_schema!` generates a typed struct for a table, providing column accessor methods that return qualified `Col` references. This avoids repeating string-based column names and enables compile-time checks.
+
+```rust
+# use qbey::{qbey_schema, qbey, col, ConditionExpr, SelectQueryBuilder};
+qbey_schema!(Users, "users", [id, name, email]);
+
+let u = Users::new();
+let mut q = qbey("users");
+q.select(&u.all_columns());
+q.and_where(u.name().eq("Alice"));
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, r#"SELECT "users"."id", "users"."name", "users"."email" FROM "users" WHERE "users"."name" = ?"#);
+```
+
+Self-joins are supported via `as_()`:
+
+```rust
+# use qbey::{qbey_schema, qbey, col, ConditionExpr, SelectQueryBuilder};
+qbey_schema!(Users, "users", [id, name, manager_id]);
+
+let u = Users::new();
+let m = Users::new().as_("managers");
+let mut q = qbey("users");
+q.select(&[u.name(), m.name().as_("manager_name")]);
+q.left_join(
+    m.table(),
+    u.manager_id().eq_col(m.id()),
+);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, r#"SELECT "users"."name", "managers"."name" AS "manager_name" FROM "users" LEFT JOIN "users" AS "managers" ON "users"."manager_id" = "managers"."id""#);
+```
+
 # Example
 
 You can see [walf443/isucon#3](https://github.com/walf443/isucon13/pull/3) for the practical example.
