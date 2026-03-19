@@ -89,6 +89,31 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         self
     }
 
+    /// Add columns to the RETURNING clause (MariaDB extension).
+    ///
+    /// Use `"*"` to return all columns.
+    ///
+    /// ```
+    /// use qbey::{col, Value, ConditionExpr};
+    /// use qbey_mysql::qbey;
+    /// use qbey::UpdateQueryBuilder;
+    ///
+    /// let mut u = qbey("users").into_update();
+    /// u.set(col("name"), "Alice");
+    /// u.and_where(col("id").eq(1));
+    /// u.returning(&["id", "name"]);
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     "UPDATE `users` SET `name` = ? WHERE `id` = ? RETURNING `id`, `name`"
+    /// );
+    /// ```
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+        self.inner.returning(cols);
+        self
+    }
+
     /// Build standard SQL with MySQL dialect.
     ///
     /// Bind values are returned in SQL clause order: SET values first, then WHERE values.

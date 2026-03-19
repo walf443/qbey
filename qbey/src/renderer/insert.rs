@@ -84,6 +84,12 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> (Str
                 }
                 parts.push(format!("{} {}", keyword, items.join(", ")));
             }
+            #[cfg(feature = "returning")]
+            InsertToken::Returning(cols) => {
+                if let Some(returning_sql) = super::render_returning(cols, cfg) {
+                    parts.push(returning_sql);
+                }
+            }
         }
     }
 

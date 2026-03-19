@@ -601,6 +601,28 @@ fn render_where_clause<V: Clone>(
     }
 }
 
+/// Render a RETURNING clause from a list of column names.
+///
+/// Returns `None` if the list is empty; otherwise returns `Some("RETURNING ...")`.
+/// `"*"` is passed through unquoted; all other names are identifier-quoted.
+#[cfg(feature = "returning")]
+pub(crate) fn render_returning(cols: &[String], cfg: &RenderConfig) -> Option<String> {
+    if cols.is_empty() {
+        return None;
+    }
+    let quoted: Vec<String> = cols
+        .iter()
+        .map(|c| {
+            if c == "*" {
+                "*".to_string()
+            } else {
+                (cfg.qi)(c)
+            }
+        })
+        .collect();
+    Some(format!("RETURNING {}", quoted.join(", ")))
+}
+
 /// Render an ORDER BY clause from a slice of `OrderByClause`.
 ///
 /// Returns `None` if the slice is empty; otherwise returns `Some("ORDER BY ...")`.

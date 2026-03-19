@@ -79,6 +79,30 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V> {
         self
     }
 
+    /// Add columns to the RETURNING clause (MariaDB extension).
+    ///
+    /// Use `"*"` to return all columns.
+    ///
+    /// ```
+    /// use qbey::{col, Value, ConditionExpr};
+    /// use qbey_mysql::qbey;
+    /// use qbey::DeleteQueryBuilder;
+    ///
+    /// let mut d = qbey("users").into_delete();
+    /// d.and_where(col("id").eq(1));
+    /// d.returning(&["id", "name"]);
+    /// let (sql, _) = d.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     "DELETE FROM `users` WHERE `id` = ? RETURNING `id`, `name`"
+    /// );
+    /// ```
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+        self.inner.returning(cols);
+        self
+    }
+
     /// Build standard SQL with MySQL dialect.
     pub fn to_sql(&self) -> (String, Vec<V>) {
         let mut tree = self.inner.to_tree();

@@ -48,6 +48,12 @@ pub fn render_update<V: Clone>(tree: &UpdateTree<V>, cfg: &RenderConfig) -> (Str
             UpdateToken::Raw(s) => {
                 parts.push(s.clone());
             }
+            #[cfg(feature = "returning")]
+            UpdateToken::Returning(cols) => {
+                if let Some(returning_sql) = super::render_returning(cols, cfg) {
+                    parts.push(returning_sql);
+                }
+            }
         }
     }
 

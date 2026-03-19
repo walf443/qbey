@@ -22,9 +22,10 @@ name = "query_bench"
 harness = false
 
 [features]
+returning = []
 test-sqlx = []
 test-sqlx-mysql = []
 test-rusqlite = []
 test-tokio-postgres = []
 test-postgres = []
-full = ["test-sqlx", "test-sqlx-mysql", "test-rusqlite", "test-tokio-postgres", "test-postgres"]
+full = ["returning", "test-sqlx", "test-sqlx-mysql", "test-rusqlite", "test-tokio-postgres", "test-postgres"]
