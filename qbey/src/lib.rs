@@ -11,6 +11,7 @@ pub mod prelude;
 pub mod query;
 pub mod raw_sql;
 pub mod renderer;
+pub mod schema;
 pub mod tree;
 pub mod update;
 pub mod value;
