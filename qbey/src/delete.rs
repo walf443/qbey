@@ -84,7 +84,7 @@ pub struct DeleteQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) ctes: Vec<CteDefinition<V>>,
     /// Columns to return via RETURNING clause (non-standard SQL).
     #[cfg(feature = "returning")]
-    pub(crate) returning_columns: Vec<String>,
+    pub(crate) returning_columns: Vec<crate::Col>,
 }
 
 impl<V: Clone + std::fmt::Debug> DeleteQueryBuilder<V> for DeleteQuery<V> {
@@ -156,21 +156,21 @@ impl<V: Clone + std::fmt::Debug> DeleteQuery<V> {
 
     /// Add columns to the RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     ///
-    /// Use `"*"` to return all columns.
+    /// Accepts `&[Col]` for table-qualified columns or `&str` columns:
     ///
     /// ```
     /// use qbey::{qbey, col, ConditionExpr, DeleteQueryBuilder};
     ///
     /// let mut d = qbey("employee").into_delete();
     /// d.and_where(col("id").eq(1));
-    /// d.returning(&["id", "name"]);
+    /// d.returning(&[col("id"), col("name")]);
     /// let (sql, _) = d.to_sql();
     /// assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ? RETURNING "id", "name""#);
     /// ```
     #[cfg(feature = "returning")]
-    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+    pub fn returning(&mut self, cols: &[crate::Col]) -> &mut Self {
         for col in cols {
-            self.returning_columns.push(col.to_string());
+            self.returning_columns.push(col.clone());
         }
         self
     }

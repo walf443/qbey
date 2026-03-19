@@ -156,7 +156,7 @@ pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) ctes: Vec<CteDefinition<V>>,
     /// Columns to return via RETURNING clause (non-standard SQL).
     #[cfg(feature = "returning")]
-    pub(crate) returning_columns: Vec<String>,
+    pub(crate) returning_columns: Vec<crate::Col>,
 }
 
 impl<V: Clone + std::fmt::Debug> UpdateQueryBuilder<V> for UpdateQuery<V> {
@@ -239,7 +239,7 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
 
     /// Add columns to the RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     ///
-    /// Use `"*"` to return all columns.
+    /// Accepts `&[Col]` for table-qualified columns or `&str` columns:
     ///
     /// ```
     /// use qbey::{qbey, col, ConditionExpr, UpdateQueryBuilder};
@@ -247,14 +247,14 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
     /// let mut u = qbey("employee").into_update();
     /// u.set(col("name"), "Alice");
     /// u.and_where(col("id").eq(1));
-    /// u.returning(&["id", "name"]);
+    /// u.returning(&[col("id"), col("name")]);
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ? RETURNING "id", "name""#);
     /// ```
     #[cfg(feature = "returning")]
-    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+    pub fn returning(&mut self, cols: &[crate::Col]) -> &mut Self {
         for col in cols {
-            self.returning_columns.push(col.to_string());
+            self.returning_columns.push(col.clone());
         }
         self
     }

@@ -117,8 +117,6 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
 
     /// Add columns to the RETURNING clause (MariaDB extension).
     ///
-    /// Use `"*"` to return all columns.
-    ///
     /// ```
     /// use qbey::{col, Value};
     /// use qbey_mysql::qbey;
@@ -126,7 +124,7 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     ///
     /// let mut ins = qbey("users").into_insert();
     /// ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
-    /// ins.returning(&["id"]);
+    /// ins.returning(&[col("id")]);
     /// let (sql, _) = ins.to_sql();
     /// assert_eq!(
     ///     sql,
@@ -134,7 +132,7 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     /// );
     /// ```
     #[cfg(feature = "returning")]
-    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+    pub fn returning(&mut self, cols: &[qbey::Col]) -> &mut Self {
         self.inner.returning(cols);
         self
     }

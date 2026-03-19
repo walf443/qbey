@@ -141,7 +141,7 @@ pub struct InsertQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) col_exprs: Vec<(String, RawSql<V>)>,
     /// Columns to return via RETURNING clause (non-standard SQL).
     #[cfg(feature = "returning")]
-    pub(crate) returning_columns: Vec<String>,
+    pub(crate) returning_columns: Vec<crate::Col>,
 }
 
 impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
@@ -245,21 +245,21 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
 
     /// Add columns to the RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     ///
-    /// Use `"*"` to return all columns.
+    /// Accepts `&[Col]` for table-qualified columns or `&str` columns:
     ///
     /// ```
-    /// use qbey::{qbey, Value, InsertQueryBuilder};
+    /// use qbey::{qbey, col, Value, InsertQueryBuilder};
     ///
     /// let mut ins = qbey("employee").into_insert();
     /// ins.add_value(&[("name", "Alice".into())]);
-    /// ins.returning(&["id", "created_at"]);
+    /// ins.returning(&[col("id"), col("created_at")]);
     /// let (sql, _) = ins.to_sql();
     /// assert_eq!(sql, r#"INSERT INTO "employee" ("name") VALUES (?) RETURNING "id", "created_at""#);
     /// ```
     #[cfg(feature = "returning")]
-    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+    pub fn returning(&mut self, cols: &[crate::Col]) -> &mut Self {
         for col in cols {
-            self.returning_columns.push(col.to_string());
+            self.returning_columns.push(col.clone());
         }
         self
     }

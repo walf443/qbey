@@ -127,7 +127,7 @@ pub enum InsertToken<V: Clone = crate::Value> {
     },
     /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     #[cfg(feature = "returning")]
-    Returning(Vec<String>),
+    Returning(Vec<crate::Col>),
 }
 
 /// Token for UPDATE query construction.
@@ -146,7 +146,7 @@ pub enum UpdateToken<V: Clone = crate::Value> {
     Raw(String),
     /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     #[cfg(feature = "returning")]
-    Returning(Vec<String>),
+    Returning(Vec<crate::Col>),
 }
 
 /// Token for DELETE query construction.
@@ -164,7 +164,7 @@ pub enum DeleteToken<V: Clone = crate::Value> {
     Raw(String),
     /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     #[cfg(feature = "returning")]
-    Returning(Vec<String>),
+    Returning(Vec<crate::Col>),
 }
 
 /// AST for a SELECT query, generic over bind value type.

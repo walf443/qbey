@@ -91,8 +91,6 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
 
     /// Add columns to the RETURNING clause (MariaDB extension).
     ///
-    /// Use `"*"` to return all columns.
-    ///
     /// ```
     /// use qbey::{col, Value, ConditionExpr};
     /// use qbey_mysql::qbey;
@@ -101,7 +99,7 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
     /// let mut u = qbey("users").into_update();
     /// u.set(col("name"), "Alice");
     /// u.and_where(col("id").eq(1));
-    /// u.returning(&["id", "name"]);
+    /// u.returning(&[col("id"), col("name")]);
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(
     ///     sql,
@@ -109,7 +107,7 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
     /// );
     /// ```
     #[cfg(feature = "returning")]
-    pub fn returning(&mut self, cols: &[&str]) -> &mut Self {
+    pub fn returning(&mut self, cols: &[qbey::Col]) -> &mut Self {
         self.inner.returning(cols);
         self
     }

@@ -219,7 +219,7 @@ pub(super) fn render_select_columns<V: Clone>(
 
 // ── Private helpers ──
 
-fn render_col_ref(col: &Col, cfg: &RenderConfig) -> String {
+pub(crate) fn render_col_ref(col: &Col, cfg: &RenderConfig) -> String {
     if let Some((func, inner_col)) = &col.aggregate {
         let arg = match (func, inner_col) {
             (SelectFunc::CountOne, _) => "1".to_string(),
@@ -601,25 +601,16 @@ fn render_where_clause<V: Clone>(
     }
 }
 
-/// Render a RETURNING clause from a list of column names.
+/// Render a RETURNING clause from a list of column references.
 ///
 /// Returns `None` if the list is empty; otherwise returns `Some("RETURNING ...")`.
-/// `"*"` is passed through unquoted; all other names are identifier-quoted.
+/// Supports table-qualified columns (e.g., `table("t").col("id")` → `"t"."id"`).
 #[cfg(feature = "returning")]
-pub(crate) fn render_returning(cols: &[String], cfg: &RenderConfig) -> Option<String> {
+pub(crate) fn render_returning(cols: &[Col], cfg: &RenderConfig) -> Option<String> {
     if cols.is_empty() {
         return None;
     }
-    let quoted: Vec<String> = cols
-        .iter()
-        .map(|c| {
-            if c == "*" {
-                "*".to_string()
-            } else {
-                (cfg.qi)(c)
-            }
-        })
-        .collect();
+    let quoted: Vec<String> = cols.iter().map(|c| render_col_ref(c, cfg)).collect();
     Some(format!("RETURNING {}", quoted.join(", ")))
 }
 
