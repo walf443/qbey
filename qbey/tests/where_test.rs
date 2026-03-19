@@ -365,7 +365,7 @@ fn test_col_alias_ignored_in_where() {
 #[test]
 fn test_qualified_col_alias_ignored_in_where() {
     let mut q = qbey("employee");
-    q.join("dept", table("employee").col("dept_id").eq_col("id"));
+    q.join("dept", table("employee").col("dept_id").eq(col("id")));
     q.and_where(table("employee").col("name").as_("n").eq("Alice"));
 
     let (sql, _) = q.to_sql();
@@ -380,11 +380,7 @@ fn test_qualified_col_alias_ignored_in_where() {
 fn test_eq_col_in_where() {
     let mut q = qbey("users");
     q.select(&["name"]);
-    q.and_where(
-        table("users")
-            .col("dept_id")
-            .eq_col(table("depts").col("id")),
-    );
+    q.and_where(table("users").col("dept_id").eq(table("depts").col("id")));
 
     let (sql, binds) = q.to_sql();
     assert_eq!(
@@ -398,11 +394,7 @@ fn test_eq_col_in_where() {
 fn test_eq_col_correlated_subquery_with_exists() {
     let mut sub = qbey("orders");
     sub.select(&["id"]);
-    sub.and_where(
-        table("orders")
-            .col("user_id")
-            .eq_col(table("users").col("id")),
-    );
+    sub.and_where(table("orders").col("user_id").eq(table("users").col("id")));
 
     let mut q = qbey("users");
     q.select(&["name"]);
@@ -413,5 +405,41 @@ fn test_eq_col_correlated_subquery_with_exists() {
         sql,
         r#"SELECT "name" FROM "users" WHERE EXISTS (SELECT "id" FROM "orders" WHERE "orders"."user_id" = "users"."id")"#
     );
+    assert!(binds.is_empty());
+}
+
+#[test]
+fn test_ne_col_via_ne() {
+    let mut q = qbey("users");
+    q.select(&["name"]);
+    q.and_where(table("a").col("x").ne(table("b").col("y")));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "name" FROM "users" WHERE "a"."x" != "b"."y""#
+    );
+    assert!(binds.is_empty());
+}
+
+#[test]
+fn test_gt_col_via_gt() {
+    let mut q = qbey("users");
+    q.select(&["name"]);
+    q.and_where(table("a").col("x").gt(table("b").col("y")));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(sql, r#"SELECT "name" FROM "users" WHERE "a"."x" > "b"."y""#);
+    assert!(binds.is_empty());
+}
+
+#[test]
+fn test_lt_col_via_lt() {
+    let mut q = qbey("users");
+    q.select(&["name"]);
+    q.and_where(table("a").col("x").lt(table("b").col("y")));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(sql, r#"SELECT "name" FROM "users" WHERE "a"."x" < "b"."y""#);
     assert!(binds.is_empty());
 }

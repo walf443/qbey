@@ -43,6 +43,32 @@ impl From<bool> for Value {
     }
 }
 
+/// Marker trait for types that can be used as bind parameter values in conditions.
+///
+/// This is automatically implemented for common types (integers, strings, booleans, floats)
+/// and for the built-in [`Value`] enum. If you use a custom value type with
+/// [`ConditionExpr::eq`](crate::ConditionExpr::eq) and similar methods, implement this
+/// trait for your type.
+///
+/// [`Col`](crate::Col) intentionally does **not** implement this trait so that the
+/// compiler can distinguish column references from scalar values.
+pub trait ConditionValue: Clone {}
+
+impl ConditionValue for i8 {}
+impl ConditionValue for i16 {}
+impl ConditionValue for i32 {}
+impl ConditionValue for i64 {}
+impl ConditionValue for u8 {}
+impl ConditionValue for u16 {}
+impl ConditionValue for u32 {}
+impl ConditionValue for u64 {}
+impl ConditionValue for f32 {}
+impl ConditionValue for f64 {}
+impl ConditionValue for bool {}
+impl ConditionValue for String {}
+impl ConditionValue for &str {}
+impl ConditionValue for Value {}
+
 /// Comparison operator.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Op {

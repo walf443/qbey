@@ -71,7 +71,7 @@ fn test_schema_alias_table_ref_for_join() {
     let mut q = qbey("users");
     q.select(&[u.name()]);
     q.add_select(o.total());
-    q.join(o.table(), u.id().eq_col(o.user_id()));
+    q.join(o.table(), u.id().eq(o.user_id()));
 
     let (sql, _) = q.to_sql();
     assert_eq!(
@@ -88,7 +88,7 @@ fn test_schema_self_join_with_alias() {
     let m = Employees::new().as_("mgr");
     let mut q = qbey("employees");
     q.select(&[e.name(), m.name().as_("manager_name")]);
-    q.left_join(m.table(), e.manager_id().eq_col(m.id()));
+    q.left_join(m.table(), e.manager_id().eq(m.id()));
 
     let (sql, _) = q.to_sql();
     assert_eq!(
