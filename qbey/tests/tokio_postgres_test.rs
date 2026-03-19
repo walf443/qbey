@@ -1126,3 +1126,157 @@ async fn test_exists_with_outer_binds() {
     assert_eq!(rows[0].get::<_, String>("name"), "Alice");
     assert_eq!(rows[1].get::<_, String>("name"), "Charlie");
 }
+
+// ── RETURNING clause ──
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_insert_returning() {
+    let client = setup_client().await;
+
+    let mut ins = qbey_with::<PgValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", PgValue::Int(4)),
+        ("name", PgValue::Text("Dave".to_string())),
+        ("age", PgValue::Int(40)),
+    ]);
+    ins.returning(&[col("id"), col("name")]);
+    let (sql, binds) = ins.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i32>("id"), 4);
+    assert_eq!(rows[0].get::<_, String>("name"), "Dave");
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_insert_returning_star() {
+    let client = setup_client().await;
+
+    let mut ins = qbey_with::<PgValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", PgValue::Int(4)),
+        ("name", PgValue::Text("Dave".to_string())),
+        ("age", PgValue::Int(40)),
+    ]);
+    ins.returning(&[col("*")]);
+    let (sql, binds) = ins.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i32>("id"), 4);
+    assert_eq!(rows[0].get::<_, String>("name"), "Dave");
+    assert_eq!(rows[0].get::<_, i32>("age"), 40);
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_insert_multiple_rows_returning() {
+    let client = setup_client().await;
+
+    let mut ins = qbey_with::<PgValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", PgValue::Int(4)),
+        ("name", PgValue::Text("Dave".to_string())),
+        ("age", PgValue::Int(40)),
+    ]);
+    ins.add_value(&[
+        ("id", PgValue::Int(5)),
+        ("name", PgValue::Text("Eve".to_string())),
+        ("age", PgValue::Int(28)),
+    ]);
+    ins.returning(&[col("id"), col("name")]);
+    let (sql, binds) = ins.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].get::<_, String>("name"), "Dave");
+    assert_eq!(rows[1].get::<_, String>("name"), "Eve");
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_update_returning() {
+    let client = setup_client().await;
+
+    let mut u = qbey_with::<PgValue>("users").into_update();
+    u.set(col("name"), "Alicia");
+    u.and_where(col("id").eq(1));
+    u.returning(&[col("id"), col("name")]);
+    let (sql, binds) = u.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i32>("id"), 1);
+    assert_eq!(rows[0].get::<_, String>("name"), "Alicia");
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_update_returning_multiple_rows() {
+    let client = setup_client().await;
+
+    let mut u = qbey_with::<PgValue>("users").into_update();
+    u.set(col("age"), 99);
+    u.and_where(col("age").gte(30));
+    u.returning(&[col("id"), col("name"), col("age")]);
+    let (sql, binds) = u.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    // Alice(30) and Charlie(35) match age >= 30
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.get::<_, i32>("age") == 99));
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_delete_returning() {
+    let client = setup_client().await;
+
+    let mut d = qbey_with::<PgValue>("users").into_delete();
+    d.and_where(col("id").eq(1));
+    d.returning(&[col("id"), col("name")]);
+    let (sql, binds) = d.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<_, i32>("id"), 1);
+    assert_eq!(rows[0].get::<_, String>("name"), "Alice");
+
+    // Verify Alice was actually deleted
+    let remaining = client.query("SELECT id FROM users", &[]).await.unwrap();
+    assert_eq!(remaining.len(), 2);
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_delete_returning_multiple_rows() {
+    let client = setup_client().await;
+
+    let mut d = qbey_with::<PgValue>("users").into_delete();
+    d.and_where(col("age").gte(30));
+    d.returning(&[col("name"), col("age")]);
+    let (sql, binds) = d.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+    let rows = client.query(&sql, &param_refs).await.unwrap();
+    // Alice(30) and Charlie(35)
+    assert_eq!(rows.len(), 2);
+
+    let remaining = client.query("SELECT id FROM users", &[]).await.unwrap();
+    assert_eq!(remaining.len(), 1); // Only Bob remains
+}
