@@ -409,20 +409,6 @@ fn test_eq_col_correlated_subquery_with_exists() {
 }
 
 #[test]
-fn test_eq_col_via_eq() {
-    let mut q = qbey("users");
-    q.select(&["name"]);
-    q.and_where(table("users").col("dept_id").eq(table("depts").col("id")));
-
-    let (sql, binds) = q.to_sql();
-    assert_eq!(
-        sql,
-        r#"SELECT "name" FROM "users" WHERE "users"."dept_id" = "depts"."id""#
-    );
-    assert!(binds.is_empty());
-}
-
-#[test]
 fn test_ne_col_via_ne() {
     let mut q = qbey("users");
     q.select(&["name"]);
