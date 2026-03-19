@@ -139,6 +139,9 @@ pub struct InsertQuery<V: Clone + std::fmt::Debug = Value> {
     /// Extra columns whose values are raw SQL expressions (e.g., `NOW()`).
     /// These are appended after the normal bind-value columns in every row.
     pub(crate) col_exprs: Vec<(String, RawSql<V>)>,
+    /// Columns to return via RETURNING clause (non-standard SQL).
+    #[cfg(feature = "returning")]
+    pub(crate) returning_columns: Vec<crate::Col>,
 }
 
 impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
@@ -235,7 +238,31 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
             columns: Vec::new(),
             source: InsertSource::Values(Vec::new()),
             col_exprs: Vec::new(),
+            #[cfg(feature = "returning")]
+            returning_columns: Vec::new(),
         }
+    }
+
+    /// Add columns to the RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
+    ///
+    /// Columns are accumulated — calling this method multiple times appends
+    /// to the existing list rather than replacing it.
+    ///
+    /// ```
+    /// use qbey::{qbey, col, Value, InsertQueryBuilder};
+    ///
+    /// let mut ins = qbey("employee").into_insert();
+    /// ins.add_value(&[("name", "Alice".into())]);
+    /// ins.returning(&[col("id"), col("created_at")]);
+    /// let (sql, _) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "employee" ("name") VALUES (?) RETURNING "id", "created_at""#);
+    /// ```
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, cols: &[crate::Col]) -> &mut Self {
+        for col in cols {
+            self.returning_columns.push(col.clone());
+        }
+        self
     }
 
     /// Build an InsertTree AST from this query.
@@ -278,6 +305,12 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
                 });
                 tokens.push(crate::tree::InsertToken::SelectSource(sub.clone()));
             }
+        }
+        #[cfg(feature = "returning")]
+        if !self.returning_columns.is_empty() {
+            tokens.push(crate::tree::InsertToken::Returning(
+                self.returning_columns.clone(),
+            ));
         }
         crate::tree::InsertTree { tokens }
     }

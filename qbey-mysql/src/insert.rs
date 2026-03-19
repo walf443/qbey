@@ -115,6 +115,30 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
         self
     }
 
+    /// Add columns to the RETURNING clause (MariaDB 10.5+ extension).
+    ///
+    /// Not supported by MySQL. Requires MariaDB 10.5 or later.
+    ///
+    /// ```
+    /// use qbey::{col, Value};
+    /// use qbey_mysql::qbey;
+    /// use qbey::InsertQueryBuilder;
+    ///
+    /// let mut ins = qbey("users").into_insert();
+    /// ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    /// ins.returning(&[col("id")]);
+    /// let (sql, _) = ins.to_sql();
+    /// assert_eq!(
+    ///     sql,
+    ///     "INSERT INTO `users` (`id`, `name`) VALUES (?, ?) RETURNING `id`"
+    /// );
+    /// ```
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, cols: &[qbey::Col]) -> &mut Self {
+        self.inner.returning(cols);
+        self
+    }
+
     /// Build standard SQL with MySQL dialect.
     pub fn to_sql(&self) -> (String, Vec<V>) {
         let mut tree = self.inner.to_tree();
@@ -130,11 +154,25 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
                     OnDuplicateKeyUpdateClause::Expr(expr) => qbey::SetClause::Expr(expr.clone()),
                 })
                 .collect();
-            tree.tokens
-                .push(qbey::tree::InsertToken::KeywordAssignments {
-                    keyword: "ON DUPLICATE KEY UPDATE".to_string(),
-                    sets,
-                });
+
+            // Insert ODKU before the RETURNING token (if present) so that
+            // the final SQL order is:
+            // INSERT INTO ... VALUES (...) ON DUPLICATE KEY UPDATE ... RETURNING ...
+            let odku_token = qbey::tree::InsertToken::KeywordAssignments {
+                keyword: "ON DUPLICATE KEY UPDATE".to_string(),
+                sets,
+            };
+
+            #[cfg(feature = "returning")]
+            let insert_pos = tree
+                .tokens
+                .iter()
+                .position(|t| matches!(t, qbey::tree::InsertToken::Returning(_)))
+                .unwrap_or(tree.tokens.len());
+            #[cfg(not(feature = "returning"))]
+            let insert_pos = tree.tokens.len();
+
+            tree.tokens.insert(insert_pos, odku_token);
         }
 
         let ph = |_: usize| "?".to_string();

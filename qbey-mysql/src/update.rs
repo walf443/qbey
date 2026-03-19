@@ -89,6 +89,21 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         self
     }
 
+    /// RETURNING clause is not supported for UPDATE in MySQL/MariaDB.
+    ///
+    /// MariaDB supports RETURNING only for INSERT (10.5+) and DELETE (10.0+).
+    ///
+    /// # Panics
+    ///
+    /// Always panics. Use a separate SELECT query to retrieve updated rows.
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, _cols: &[qbey::Col]) -> &mut Self {
+        panic!(
+            "RETURNING is not supported for UPDATE in MySQL/MariaDB. \
+             Use a separate SELECT query to retrieve updated rows."
+        );
+    }
+
     /// Build standard SQL with MySQL dialect.
     ///
     /// Bind values are returned in SQL clause order: SET values first, then WHERE values.

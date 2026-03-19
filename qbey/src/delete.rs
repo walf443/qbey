@@ -82,6 +82,9 @@ pub struct DeleteQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) allow_without_where: bool,
     pub(crate) ctes: Vec<CteDefinition<V>>,
+    /// Columns to return via RETURNING clause (non-standard SQL).
+    #[cfg(feature = "returning")]
+    pub(crate) returning_columns: Vec<crate::Col>,
 }
 
 impl<V: Clone + std::fmt::Debug> DeleteQueryBuilder<V> for DeleteQuery<V> {
@@ -146,7 +149,31 @@ impl<V: Clone + std::fmt::Debug> DeleteQuery<V> {
             wheres,
             allow_without_where: false,
             ctes,
+            #[cfg(feature = "returning")]
+            returning_columns: Vec::new(),
         }
+    }
+
+    /// Add columns to the RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
+    ///
+    /// Columns are accumulated — calling this method multiple times appends
+    /// to the existing list rather than replacing it.
+    ///
+    /// ```
+    /// use qbey::{qbey, col, ConditionExpr, DeleteQueryBuilder};
+    ///
+    /// let mut d = qbey("employee").into_delete();
+    /// d.and_where(col("id").eq(1));
+    /// d.returning(&[col("id"), col("name")]);
+    /// let (sql, _) = d.to_sql();
+    /// assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ? RETURNING "id", "name""#);
+    /// ```
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, cols: &[crate::Col]) -> &mut Self {
+        for col in cols {
+            self.returning_columns.push(col.clone());
+        }
+        self
     }
 
     /// Build a DeleteTree AST from this query.
@@ -169,6 +196,12 @@ impl<V: Clone + std::fmt::Debug> DeleteQuery<V> {
         });
         if !self.wheres.is_empty() {
             tokens.push(crate::tree::DeleteToken::Where(self.wheres.clone()));
+        }
+        #[cfg(feature = "returning")]
+        if !self.returning_columns.is_empty() {
+            tokens.push(crate::tree::DeleteToken::Returning(
+                self.returning_columns.clone(),
+            ));
         }
         crate::tree::DeleteTree { tokens }
     }

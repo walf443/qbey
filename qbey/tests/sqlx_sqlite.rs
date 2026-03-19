@@ -1,5 +1,7 @@
 #![cfg(feature = "test-sqlx")]
 
+#[cfg(feature = "returning")]
+use qbey::RawSql;
 use qbey::{
     ConditionExpr, DeleteQueryBuilder, InsertQueryBuilder, LikeExpression, SelectQueryBuilder,
     UpdateQueryBuilder, col, count_all, exists, not, not_exists, qbey_from_subquery_with,
@@ -1078,4 +1080,170 @@ async fn test_named_window() {
     assert_eq!(rows[0].get::<String, _>("name"), "Charlie");
     assert_eq!(rows[2].get::<i64, _>("rn"), 3);
     assert_eq!(rows[2].get::<String, _>("name"), "Bob");
+}
+
+// ── RETURNING clause ──
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_insert_returning() {
+    let pool = setup_db().await;
+
+    let mut ins = qbey_with::<SqliteValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", SqliteValue::Integer(4)),
+        ("name", SqliteValue::Text("Dave".to_string())),
+        ("age", SqliteValue::Integer(40)),
+    ]);
+    ins.returning(&[col("id"), col("name")]);
+    let (sql, binds) = ins.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<i64, _>("id"), 4);
+    assert_eq!(rows[0].get::<String, _>("name"), "Dave");
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_insert_multiple_rows_returning() {
+    let pool = setup_db().await;
+
+    let mut ins = qbey_with::<SqliteValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", SqliteValue::Integer(4)),
+        ("name", SqliteValue::Text("Dave".to_string())),
+        ("age", SqliteValue::Integer(40)),
+    ]);
+    ins.add_value(&[
+        ("id", SqliteValue::Integer(5)),
+        ("name", SqliteValue::Text("Eve".to_string())),
+        ("age", SqliteValue::Integer(28)),
+    ]);
+    ins.returning(&[col("id"), col("name")]);
+    let (sql, binds) = ins.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert_eq!(rows[0].get::<String, _>("name"), "Dave");
+    assert_eq!(rows[1].get::<String, _>("name"), "Eve");
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_insert_returning_with_col_expr() {
+    let pool = setup_db().await;
+
+    let mut ins = qbey_with::<SqliteValue>("users").into_insert();
+    ins.add_value(&[
+        ("id", SqliteValue::Integer(4)),
+        ("name", SqliteValue::Text("Dave".to_string())),
+    ]);
+    ins.add_col_value_expr(col("age"), RawSql::new("20 + 20"));
+    ins.returning(&[col("id"), col("age")]);
+    let (sql, binds) = ins.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<i64, _>("id"), 4);
+    assert_eq!(rows[0].get::<i64, _>("age"), 40);
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_update_returning() {
+    let pool = setup_db().await;
+
+    let mut u = qbey_with::<SqliteValue>("users").into_update();
+    u.set(col("name"), "Alicia");
+    u.and_where(col("id").eq(1));
+    u.returning(&[col("id"), col("name")]);
+    let (sql, binds) = u.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<i64, _>("id"), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Alicia");
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_update_returning_multiple_rows() {
+    let pool = setup_db().await;
+
+    let mut u = qbey_with::<SqliteValue>("users").into_update();
+    u.set(col("age"), 99);
+    u.and_where(col("age").gte(30));
+    u.returning(&[col("id"), col("name"), col("age")]);
+    let (sql, binds) = u.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    // Alice(30) and Charlie(35) match age >= 30
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| r.get::<i64, _>("age") == 99));
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_delete_returning() {
+    let pool = setup_db().await;
+
+    let mut d = qbey_with::<SqliteValue>("users").into_delete();
+    d.and_where(col("id").eq(1));
+    d.returning(&[col("id"), col("name")]);
+    let (sql, binds) = d.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].get::<i64, _>("id"), 1);
+    assert_eq!(rows[0].get::<String, _>("name"), "Alice");
+
+    // Verify Alice was actually deleted
+    let remaining = sqlx::query(r#"SELECT "id" FROM "users""#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining.len(), 2);
+}
+
+#[cfg(feature = "returning")]
+#[tokio::test]
+async fn test_delete_returning_multiple_rows() {
+    let pool = setup_db().await;
+
+    let mut d = qbey_with::<SqliteValue>("users").into_delete();
+    d.and_where(col("age").gte(30));
+    d.returning(&[col("name"), col("age")]);
+    let (sql, binds) = d.to_sql();
+
+    let rows = bind_params(sqlx::query(&sql), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    // Alice(30) and Charlie(35)
+    assert_eq!(rows.len(), 2);
+
+    let remaining = sqlx::query(r#"SELECT "id" FROM "users""#)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(remaining.len(), 1); // Only Bob remains
 }

@@ -154,6 +154,9 @@ pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value> {
     pub(crate) wheres: Vec<WhereEntry<V>>,
     pub(crate) allow_without_where: bool,
     pub(crate) ctes: Vec<CteDefinition<V>>,
+    /// Columns to return via RETURNING clause (non-standard SQL).
+    #[cfg(feature = "returning")]
+    pub(crate) returning_columns: Vec<crate::Col>,
 }
 
 impl<V: Clone + std::fmt::Debug> UpdateQueryBuilder<V> for UpdateQuery<V> {
@@ -229,7 +232,32 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
             wheres,
             allow_without_where: false,
             ctes,
+            #[cfg(feature = "returning")]
+            returning_columns: Vec::new(),
         }
+    }
+
+    /// Add columns to the RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
+    ///
+    /// Columns are accumulated — calling this method multiple times appends
+    /// to the existing list rather than replacing it.
+    ///
+    /// ```
+    /// use qbey::{qbey, col, ConditionExpr, UpdateQueryBuilder};
+    ///
+    /// let mut u = qbey("employee").into_update();
+    /// u.set(col("name"), "Alice");
+    /// u.and_where(col("id").eq(1));
+    /// u.returning(&[col("id"), col("name")]);
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ? RETURNING "id", "name""#);
+    /// ```
+    #[cfg(feature = "returning")]
+    pub fn returning(&mut self, cols: &[crate::Col]) -> &mut Self {
+        for col in cols {
+            self.returning_columns.push(col.clone());
+        }
+        self
     }
 
     /// Build an UpdateTree AST from this query.
@@ -253,6 +281,12 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V> {
         tokens.push(crate::tree::UpdateToken::Set(self.sets.clone()));
         if !self.wheres.is_empty() {
             tokens.push(crate::tree::UpdateToken::Where(self.wheres.clone()));
+        }
+        #[cfg(feature = "returning")]
+        if !self.returning_columns.is_empty() {
+            tokens.push(crate::tree::UpdateToken::Returning(
+                self.returning_columns.clone(),
+            ));
         }
         crate::tree::UpdateTree { tokens }
     }

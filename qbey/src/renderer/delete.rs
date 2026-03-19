@@ -28,6 +28,12 @@ pub fn render_delete<V: Clone>(tree: &DeleteTree<V>, cfg: &RenderConfig) -> (Str
             DeleteToken::Raw(s) => {
                 parts.push(s.clone());
             }
+            #[cfg(feature = "returning")]
+            DeleteToken::Returning(cols) => {
+                if let Some(returning_sql) = super::render_returning(cols, cfg) {
+                    parts.push(returning_sql);
+                }
+            }
         }
     }
 

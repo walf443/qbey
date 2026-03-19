@@ -125,6 +125,9 @@ pub enum InsertToken<V: Clone = crate::Value> {
         keyword: String,
         sets: Vec<crate::SetClause<V>>,
     },
+    /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
+    #[cfg(feature = "returning")]
+    Returning(Vec<crate::Col>),
 }
 
 /// Token for UPDATE query construction.
@@ -141,6 +144,9 @@ pub enum UpdateToken<V: Clone = crate::Value> {
     /// Raw SQL fragment (no binds). Dialect crates use this for
     /// dialect-specific clauses like ORDER BY and LIMIT.
     Raw(String),
+    /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
+    #[cfg(feature = "returning")]
+    Returning(Vec<crate::Col>),
 }
 
 /// Token for DELETE query construction.
@@ -156,6 +162,9 @@ pub enum DeleteToken<V: Clone = crate::Value> {
     /// Raw SQL fragment (no binds). Dialect crates use this for
     /// dialect-specific clauses like ORDER BY and LIMIT.
     Raw(String),
+    /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
+    #[cfg(feature = "returning")]
+    Returning(Vec<crate::Col>),
 }
 
 /// AST for a SELECT query, generic over bind value type.
@@ -416,6 +425,8 @@ impl<V: Clone> UpdateTree<V> {
                         UpdateToken::Where(wheres.into_iter().map(|w| w.map_values(f)).collect())
                     }
                     UpdateToken::Raw(s) => UpdateToken::Raw(s),
+                    #[cfg(feature = "returning")]
+                    UpdateToken::Returning(cols) => UpdateToken::Returning(cols),
                 })
                 .collect(),
         }
@@ -470,6 +481,8 @@ impl<V: Clone> InsertTree<V> {
                                 .collect(),
                         }
                     }
+                    #[cfg(feature = "returning")]
+                    InsertToken::Returning(cols) => InsertToken::Returning(cols),
                 })
                 .collect(),
         }
@@ -500,6 +513,8 @@ impl<V: Clone> DeleteTree<V> {
                         DeleteToken::Where(wheres.into_iter().map(|w| w.map_values(f)).collect())
                     }
                     DeleteToken::Raw(s) => DeleteToken::Raw(s),
+                    #[cfg(feature = "returning")]
+                    DeleteToken::Returning(cols) => DeleteToken::Returning(cols),
                 })
                 .collect(),
         }
