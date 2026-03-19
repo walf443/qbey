@@ -89,27 +89,18 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V> {
         self
     }
 
-    /// Add columns to the RETURNING clause (MariaDB extension).
+    /// RETURNING clause is not supported for UPDATE in MySQL/MariaDB.
     ///
-    /// ```
-    /// use qbey::{col, Value, ConditionExpr};
-    /// use qbey_mysql::qbey;
-    /// use qbey::UpdateQueryBuilder;
+    /// # Panics
     ///
-    /// let mut u = qbey("users").into_update();
-    /// u.set(col("name"), "Alice");
-    /// u.and_where(col("id").eq(1));
-    /// u.returning(&[col("id"), col("name")]);
-    /// let (sql, _) = u.to_sql();
-    /// assert_eq!(
-    ///     sql,
-    ///     "UPDATE `users` SET `name` = ? WHERE `id` = ? RETURNING `id`, `name`"
-    /// );
-    /// ```
+    /// Always panics. MariaDB only supports RETURNING for INSERT and DELETE.
+    /// Use a separate SELECT query to retrieve updated rows.
     #[cfg(feature = "returning")]
-    pub fn returning(&mut self, cols: &[qbey::Col]) -> &mut Self {
-        self.inner.returning(cols);
-        self
+    pub fn returning(&mut self, _cols: &[qbey::Col]) -> &mut Self {
+        panic!(
+            "RETURNING is not supported for UPDATE in MySQL/MariaDB. \
+             Use a separate SELECT query to retrieve updated rows."
+        );
     }
 
     /// Build standard SQL with MySQL dialect.

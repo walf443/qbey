@@ -1,12 +1,12 @@
 #![cfg(feature = "test-sqlx")]
 
+#[cfg(feature = "returning")]
+use qbey::RawSql;
 use qbey::{
     ConditionExpr, DeleteQueryBuilder, InsertQueryBuilder, LikeExpression, SelectQueryBuilder,
     UpdateQueryBuilder, col, count_all, exists, not, not_exists, qbey_from_subquery_with,
     qbey_with, row_number, table, window,
 };
-#[cfg(feature = "returning")]
-use qbey::RawSql;
 use sqlx::{Row, SqlitePool};
 
 #[derive(Debug, Clone)]

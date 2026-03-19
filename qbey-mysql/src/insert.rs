@@ -142,6 +142,17 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
         let mut tree = self.inner.to_tree();
 
         if !self.on_duplicate_key_updates.is_empty() {
+            // When RETURNING is present, move it after ODKU so the SQL order is:
+            // INSERT INTO ... VALUES (...) ON DUPLICATE KEY UPDATE ... RETURNING ...
+            #[cfg(feature = "returning")]
+            let returning_token = {
+                let pos = tree
+                    .tokens
+                    .iter()
+                    .position(|t| matches!(t, qbey::tree::InsertToken::Returning(_)));
+                pos.map(|i| tree.tokens.remove(i))
+            };
+
             let sets: Vec<qbey::SetClause<V>> = self
                 .on_duplicate_key_updates
                 .iter()
@@ -157,6 +168,11 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
                     keyword: "ON DUPLICATE KEY UPDATE".to_string(),
                     sets,
                 });
+
+            #[cfg(feature = "returning")]
+            if let Some(token) = returning_token {
+                tree.tokens.push(token);
+            }
         }
 
         let ph = |_: usize| "?".to_string();
