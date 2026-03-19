@@ -40,6 +40,28 @@
 /// let (sql, _binds) = q.to_sql();
 /// assert_eq!(sql, r#"SELECT "users"."name", "managers"."name" AS "manager_name" FROM "users" LEFT JOIN "users" AS "managers" ON "users"."manager_id" = "managers"."id""#);
 /// ```
+///
+/// # Adding custom methods
+///
+/// The generated struct is a regular Rust struct, so you can add your own
+/// methods with a separate `impl` block:
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::Col;
+///
+/// qbey_schema!(Users, "users", [id, name, email]);
+///
+/// impl Users {
+///     /// Returns columns typically needed for a list view.
+///     pub fn list_columns(&self) -> Vec<Col> {
+///         vec![self.id(), self.name()]
+///     }
+/// }
+///
+/// let u = Users::new();
+/// assert_eq!(u.list_columns().len(), 2);
+/// ```
 #[macro_export]
 macro_rules! qbey_schema {
     ($struct_name:ident, $table_name:expr, [$($col:ident),* $(,)?]) => {
