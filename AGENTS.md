@@ -43,46 +43,6 @@ Use `cargo` commands directly rather than `act` or other CI runners for local ve
 
 When introducing new SQL syntax, write driver integration tests (sqlx, rusqlite, etc.) to verify the generated SQL executes correctly against real databases.
 
-## Feature Flags
-
-- `returning` — Enables RETURNING clause support (PostgreSQL, SQLite, MariaDB)
-- `test-sqlx`, `test-sqlx-mysql`, `test-rusqlite`, `test-tokio-postgres`, `test-postgres` — Enable integration tests for specific drivers
-- `full` — Enables all features above
-
-## Project Structure
-
-```
-qbey/
-  src/
-    lib.rs          — Public API re-exports
-    query.rs        — Core Query builder
-    column.rs       — Column types and expressions
-    join.rs         — JOIN support
-    insert.rs       — INSERT builder
-    update.rs       — UPDATE builder (type-state WHERE enforcement)
-    delete.rs       — DELETE builder (type-state WHERE enforcement)
-    like.rs         — LikeExpression (injection-safe LIKE patterns)
-    raw_sql.rs      — RawSql wrapper for raw SQL injection points
-    value.rs        — Value enum for bind parameters
-    where_clause.rs — WHERE clause building
-    schema.rs       — qbey_schema! macro
-    prelude.rs      — Prelude module
-    renderer/       — SQL rendering
-  tests/            — Integration tests (per-feature, per-driver)
-  benches/          — Benchmarks
-
-qbey-mysql/
-  src/
-    lib.rs          — MySQL dialect and extensions
-    select.rs       — MySQL SELECT (index hints, STRAIGHT_JOIN)
-    insert.rs       — MySQL INSERT extensions
-    update.rs       — MySQL UPDATE extensions
-    delete.rs       — MySQL DELETE extensions
-    index_hint.rs   — Index hint types
-    *_tests.rs      — Unit tests
-  tests/            — Integration tests (sqlx + MySQL/MariaDB)
-```
-
 ## Design Principles
 
 - **Safety by default** — UPDATE/DELETE without WHERE is a compile error (type-state pattern). LIKE requires `LikeExpression`. Raw SQL requires `RawSql` wrapper.
