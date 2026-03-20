@@ -150,14 +150,14 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V, WhereNotSet> {
 
 impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V, WhereProvided> {
     /// Add an additional AND WHERE condition.
-    pub fn and_where(&mut self, cond: impl qbey::IntoWhereClause<V>) -> &mut Self {
-        self.inner.and_where(cond);
+    pub fn and_where(mut self, cond: impl qbey::IntoWhereClause<V>) -> Self {
+        self.inner = self.inner.and_where(cond);
         self
     }
 
     /// Add an additional OR WHERE condition.
-    pub fn or_where(&mut self, cond: impl qbey::IntoWhereClause<V>) -> &mut Self {
-        self.inner.or_where(cond);
+    pub fn or_where(mut self, cond: impl qbey::IntoWhereClause<V>) -> Self {
+        self.inner = self.inner.or_where(cond);
         self
     }
 

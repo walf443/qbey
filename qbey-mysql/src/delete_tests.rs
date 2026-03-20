@@ -75,10 +75,10 @@ fn test_delete_with_like() {
 
 #[test]
 fn test_delete_with_or_where() {
-    let mut d = qbey("users")
+    let d = qbey("users")
         .into_delete()
         .and_where(col("status").eq("pending"));
-    d.or_where(col("status").eq("draft"));
+    let d = d.or_where(col("status").eq("draft"));
 
     let (sql, binds) = d.to_sql();
     assert_eq!(

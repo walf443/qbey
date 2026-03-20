@@ -38,10 +38,32 @@ fn test_delete_with_dialect() {
 
 #[test]
 fn test_delete_with_complex_where() {
-    let mut d = qbey("employee")
+    let d = qbey("employee")
         .into_delete()
         .and_where(col("age").between(20, 60));
-    d.and_where(col("role").included(&["admin", "manager"]));
+    let d = d.and_where(col("role").included(&["admin", "manager"]));
+    let (sql, binds) = d.to_sql();
+    assert_eq!(
+        sql,
+        r#"DELETE FROM "employee" WHERE "age" BETWEEN ? AND ? AND "role" IN (?, ?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(20),
+            Value::Int(60),
+            Value::String("admin".to_string()),
+            Value::String("manager".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn test_delete_chained_and_where() {
+    let d = qbey("employee")
+        .into_delete()
+        .and_where(col("age").between(20, 60))
+        .and_where(col("role").included(&["admin", "manager"]));
     let (sql, binds) = d.to_sql();
     assert_eq!(
         sql,
@@ -60,10 +82,10 @@ fn test_delete_with_complex_where() {
 
 #[test]
 fn test_delete_with_or_where() {
-    let mut d = qbey("employee")
+    let d = qbey("employee")
         .into_delete()
         .and_where(col("status").eq("pending"));
-    d.or_where(col("status").eq("draft"));
+    let d = d.or_where(col("status").eq("draft"));
     let (sql, binds) = d.to_sql();
     assert_eq!(
         sql,
