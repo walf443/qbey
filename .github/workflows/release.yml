@@ -45,7 +45,7 @@ jobs:
 
   github-release:
     runs-on: ubuntu-latest
-    needs: publish-qbey-mysql
+    needs: [publish-qbey, publish-qbey-mysql]
     permissions:
       contents: write
     steps:
