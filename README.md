@@ -737,7 +737,7 @@ let m = Users::new().as_("managers");
 let mut q = qbey("users");
 q.left_join(
     m.table(),
-    u.manager_id().eq_col(m.id()),
+    u.manager_id().eq(m.id()),
 );
 q.select(&[u.name(), m.name().as_("manager_name")]);
 

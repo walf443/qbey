@@ -15,9 +15,6 @@ pub use qbey::MySqlDialect;
 pub use select::MysqlQuery;
 pub use update::MysqlUpdateQuery;
 
-#[deprecated(note = "use MySqlDialect (re-exported from this crate) or qbey::MySqlDialect instead")]
-pub type MySQL = qbey::MySqlDialect;
-
 use qbey::Value;
 
 /// Create a MySQL-specific query builder for the given table.
