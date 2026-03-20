@@ -456,24 +456,6 @@ let (sql, binds) = q.to_sql();
 assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\" FROM \"employee\" GROUP BY \"dept\" HAVING COUNT(*) > ?");
 ```
 
-For multiple conditions, use `and_having` / `or_having`:
-
-```rust
-# use qbey::{qbey, col, count_all, ConditionExpr, SelectQueryBuilder};
-let mut q = qbey("employee");
-q.group_by(&["dept"]);
-q.select(&["dept"]);
-let cnt = count_all().as_("cnt");
-let total = col("salary").sum().as_("total");
-q.add_select(cnt.clone());
-q.add_select(total.clone());
-q.and_having(cnt.gt(5));
-q.and_having(total.gt(100000));
-
-let (sql, binds) = q.to_sql();
-assert_eq!(sql, "SELECT \"dept\", COUNT(*) AS \"cnt\", SUM(\"salary\") AS \"total\" FROM \"employee\" GROUP BY \"dept\" HAVING COUNT(*) > ? AND SUM(\"salary\") > ?");
-```
-
 ### UNION / UNION ALL
 
 `union()` / `union_all()` returns a new `Query`, so you can use the same `order_by()`, `limit()`, etc. on the result:
