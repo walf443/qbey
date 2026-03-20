@@ -468,23 +468,6 @@ impl Col {
             dir: SortDir::Desc,
         }
     }
-
-    /// Create a column-to-column equality comparison.
-    ///
-    /// The result can be used in both JOIN ON and WHERE clauses:
-    /// - JOIN: `q.join("orders", table("users").col("id").eq_col(table("orders").col("user_id")))`
-    /// - WHERE: `q.and_where(table("a").col("x").eq_col(table("b").col("y")))`
-    #[deprecated(
-        since = "0.2.0",
-        note = "use `eq(col(...))` instead, e.g., `col(\"a\").eq(col(\"b\"))`. Note: `eq(\"b\")` compares against a string value, not a column — use `eq(col(\"b\"))` for column comparison."
-    )]
-    pub fn eq_col(self, other: impl Into<Col>) -> ColCondition {
-        ColCondition {
-            left: self,
-            op: Op::Eq,
-            right: other.into(),
-        }
-    }
 }
 
 /// A column-to-column comparison, usable in both JOIN ON and WHERE clauses.

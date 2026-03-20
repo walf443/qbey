@@ -35,7 +35,7 @@
 /// q.select(&[u.name(), m.name().as_("manager_name")]);
 /// q.left_join(
 ///     m.table(),
-///     u.manager_id().eq_col(m.id()),
+///     u.manager_id().eq(m.id()),
 /// );
 /// let (sql, _binds) = q.to_sql();
 /// assert_eq!(sql, r#"SELECT "users"."name", "managers"."name" AS "manager_name" FROM "users" LEFT JOIN "users" AS "managers" ON "users"."manager_id" = "managers"."id""#);
