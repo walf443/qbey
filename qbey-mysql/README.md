@@ -139,13 +139,13 @@ use qbey::col;
 
 let mut u = qbey("users").into_update();
 u.set(col("name"), "Alice");
-u.and_where(col("id").eq(1));
+let u = u.and_where(col("id").eq(1));
 
 let (sql, binds) = u.to_sql();
 assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");
 ```
 
-By default, UPDATE without WHERE will panic. Use `allow_without_where()` to explicitly allow full-table updates:
+By default, UPDATE without WHERE is a compile error. Use `allow_without_where()` to explicitly allow full-table updates:
 
 ```rust
 use qbey_mysql::qbey;
@@ -154,7 +154,7 @@ use qbey::col;
 
 let mut u = qbey("users").into_update();
 u.set(col("age"), 99);
-u.allow_without_where();
+let u = u.allow_without_where();
 
 let (sql, binds) = u.to_sql();
 assert_eq!(sql, "UPDATE `users` SET `age` = ?");
@@ -169,7 +169,7 @@ use qbey::col;
 
 let mut u = qbey("users").into_update();
 u.set(col("status"), "inactive");
-u.and_where(col("dept").eq("eng"));
+let mut u = u.and_where(col("dept").eq("eng"));
 u.order_by(col("created_at").asc());
 u.limit(10);
 
@@ -181,24 +181,22 @@ assert_eq!(sql, "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY `crea
 
 ```rust
 use qbey_mysql::qbey;
-use qbey::{ConditionExpr, DeleteQueryBuilder};
-use qbey::col;
+use qbey::{ConditionExpr, col};
 
-let mut d = qbey("users").into_delete();
-d.and_where(col("id").eq(1));
+let d = qbey("users").into_delete()
+    .and_where(col("id").eq(1));
 
 let (sql, binds) = d.to_sql();
 assert_eq!(sql, "DELETE FROM `users` WHERE `id` = ?");
 ```
 
-By default, DELETE without WHERE will panic. Use `allow_without_where()` to explicitly allow full-table deletes:
+By default, DELETE without WHERE is a compile error. Use `allow_without_where()` to explicitly allow full-table deletes:
 
 ```rust
 use qbey_mysql::qbey;
-use qbey::DeleteQueryBuilder;
 
-let mut d = qbey("users").into_delete();
-d.allow_without_where();
+let d = qbey("users").into_delete()
+    .allow_without_where();
 
 let (sql, binds) = d.to_sql();
 assert_eq!(sql, "DELETE FROM `users`");
@@ -208,11 +206,10 @@ MySQL supports `ORDER BY` and `LIMIT` in DELETE statements (not available in sta
 
 ```rust
 use qbey_mysql::qbey;
-use qbey::{ConditionExpr, DeleteQueryBuilder};
-use qbey::col;
+use qbey::{ConditionExpr, col};
 
-let mut d = qbey("users").into_delete();
-d.and_where(col("dept").eq("eng"));
+let mut d = qbey("users").into_delete()
+    .and_where(col("dept").eq("eng"));
 d.order_by(col("created_at").asc());
 d.limit(10);
 
@@ -244,10 +241,10 @@ assert_eq!(sql, "INSERT INTO `users` (`id`, `name`) VALUES (?, ?) RETURNING `id`
 # #[cfg(feature = "returning")]
 # {
 use qbey_mysql::qbey;
-use qbey::{ConditionExpr, DeleteQueryBuilder, col};
+use qbey::{ConditionExpr, col};
 
-let mut d = qbey("users").into_delete();
-d.and_where(col("id").eq(1));
+let mut d = qbey("users").into_delete()
+    .and_where(col("id").eq(1));
 d.returning(&[col("id"), col("name")]);
 
 let (sql, binds) = d.to_sql();
