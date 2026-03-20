@@ -154,9 +154,10 @@ pub trait SelectQueryBuilder<V: Clone + std::fmt::Debug> {
     /// doing so opens the door to SQL injection. Only use hard-coded or
     /// application-controlled expressions.
     fn add_select_expr(&mut self, raw: RawSql<V>, alias: Option<&str>) -> &mut Self;
-    /// Set the GROUP BY columns.
+    /// Append columns to the GROUP BY clause.
     ///
     /// Accepts `&[&str]` for simple column names or `&[Col]` for qualified/aliased columns.
+    /// Can be called multiple times — each call appends to the existing list.
     fn group_by(&mut self, cols: &[impl Into<Col> + Clone]) -> &mut Self;
     /// Add an INNER JOIN clause.
     fn join(&mut self, table: impl IntoJoinTable, condition: impl Into<JoinCondition>)
