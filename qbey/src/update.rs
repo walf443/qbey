@@ -36,7 +36,7 @@ pub trait UpdateQueryBuilder<V: Clone> {
     ///
     /// let mut u = qbey("employee").into_update();
     /// u.set(col("name"), "Alice");
-    /// let mut u = u.and_where(col("id").eq(1));
+    /// let u = u.and_where(col("id").eq(1));
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
     /// ```
@@ -58,7 +58,7 @@ pub trait UpdateQueryBuilder<V: Clone> {
     ///
     /// let mut u = qbey("employee").into_update();
     /// u.set_expr(RawSql::new(r#""visit_count" = "visit_count" + 1"#));
-    /// let mut u = u.and_where(col("id").eq(1));
+    /// let u = u.and_where(col("id").eq(1));
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "visit_count" = "visit_count" + 1 WHERE "id" = ?"#);
     /// ```
@@ -76,7 +76,7 @@ pub trait UpdateQueryBuilder<V: Clone> {
     /// let mut u = qbey("employee").into_update();
     /// u.with_cte("active_depts", &[], cte_q);
     /// u.set(col("status"), "active");
-    /// let mut u = u.and_where(col("dept_id").eq(1));
+    /// let u = u.and_where(col("dept_id").eq(1));
     /// let (sql, _) = u.to_sql();
     /// assert!(sql.starts_with(r#"WITH "active_depts" AS"#));
     /// ```
@@ -108,7 +108,7 @@ pub trait UpdateQueryBuilder<V: Clone> {
     /// let mut u = qbey("employees").into_update();
     /// u.with_recursive_cte("org_tree", &["id", "name", "manager_id"], cte_query);
     /// u.set(col("active"), true);
-    /// let mut u = u.and_where(col("id").eq(1));
+    /// let u = u.and_where(col("id").eq(1));
     /// let (sql, _) = u.to_sql();
     /// assert!(sql.starts_with(r#"WITH RECURSIVE "org_tree""#));
     /// ```
@@ -134,7 +134,7 @@ pub trait UpdateQueryBuilder<V: Clone> {
 ///
 /// let mut u = qbey("employee").into_update();
 /// u.set(col("name"), "Alice");
-/// let mut u = u.and_where(col("id").eq(1));
+/// let u = u.and_where(col("id").eq(1));
 /// let (sql, _) = u.to_sql();
 /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
 /// ```

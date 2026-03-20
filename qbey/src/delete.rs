@@ -25,7 +25,7 @@ pub trait DeleteQueryBuilder<V: Clone> {
     ///
     /// let mut d = qbey("users").into_delete();
     /// d.with_cte("old_users", &[], cte_q);
-    /// let mut d = d.and_where(col("id").eq(1));
+    /// let d = d.and_where(col("id").eq(1));
     /// let (sql, _) = d.to_sql();
     /// assert!(sql.starts_with(r#"WITH "old_users" AS"#));
     /// ```
@@ -56,7 +56,7 @@ pub trait DeleteQueryBuilder<V: Clone> {
     ///
     /// let mut d = qbey("items").into_delete();
     /// d.with_recursive_cte("cat_tree", &["id"], cte_query);
-    /// let mut d = d.and_where(col("category_id").eq(1));
+    /// let d = d.and_where(col("category_id").eq(1));
     /// let (sql, _) = d.to_sql();
     /// assert!(sql.starts_with(r#"WITH RECURSIVE "cat_tree""#));
     /// ```
@@ -81,7 +81,7 @@ pub trait DeleteQueryBuilder<V: Clone> {
 /// use qbey::{qbey, col, ConditionExpr};
 ///
 /// let mut d = qbey("employee").into_delete();
-/// let mut d = d.and_where(col("id").eq(1));
+/// let d = d.and_where(col("id").eq(1));
 /// let (sql, _) = d.to_sql();
 /// assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ?"#);
 /// ```

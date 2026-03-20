@@ -918,7 +918,7 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
     ///
     /// let mut u = qbey("employee").into_update();
     /// u.set(col("name"), "Alice");
-    /// let mut u = u.and_where(col("id").eq(1));
+    /// let u = u.and_where(col("id").eq(1));
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
     /// ```

@@ -544,7 +544,7 @@ When building rows from a dynamic collection, the caller is responsible for ensu
 // Basic UPDATE
 let mut u = qbey("employee").into_update();
 u.set(col("name"), "Alice");
-let mut u = u.and_where(col("id").eq(1));
+let u = u.and_where(col("id").eq(1));
 
 let (sql, binds) = u.to_sql();
 assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);

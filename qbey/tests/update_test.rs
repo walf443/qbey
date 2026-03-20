@@ -104,6 +104,30 @@ fn test_update_with_complex_where() {
 }
 
 #[test]
+fn test_update_chained_and_where() {
+    let mut u = qbey("employee").into_update();
+    u.set(col("status"), "active");
+    let u = u
+        .and_where(col("age").between(20, 60))
+        .and_where(col("role").included(&["admin", "manager"]));
+    let (sql, binds) = u.to_sql();
+    assert_eq!(
+        sql,
+        r#"UPDATE "employee" SET "status" = ? WHERE "age" BETWEEN ? AND ? AND "role" IN (?, ?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("active".to_string()),
+            Value::Int(20),
+            Value::Int(60),
+            Value::String("admin".to_string()),
+            Value::String("manager".to_string()),
+        ]
+    );
+}
+
+#[test]
 fn test_update_with_or_where() {
     let mut u = qbey("employee").into_update();
     u.set(col("reviewed"), true);
