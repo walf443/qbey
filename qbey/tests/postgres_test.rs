@@ -2,7 +2,7 @@
 
 use postgres::{Client, NoTls, types::ToSql};
 use qbey::{
-    ConditionExpr, DeleteQueryBuilder, InsertQueryBuilder, LikeExpression, SelectQueryBuilder,
+    ConditionExpr, InsertQueryBuilder, LikeExpression, SelectQueryBuilder,
     UpdateQueryBuilder, col, count_all, exists, not_exists, qbey_from_subquery_with, qbey_with,
     row_number, table, window,
 };

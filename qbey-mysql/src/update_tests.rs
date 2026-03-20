@@ -5,7 +5,7 @@ use qbey::{ConditionExpr, SelectQueryBuilder, UpdateQueryBuilder, col};
 fn test_update_basic() {
     let mut u = qbey("users").into_update();
     u.set(col("name"), "Alicia");
-    let mut u = u.and_where(col("id").eq(1));
+    let u = u.and_where(col("id").eq(1));
 
     let (sql, binds) = u.to_sql();
     assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `id` = ?");

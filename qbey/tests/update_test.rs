@@ -4,7 +4,7 @@ use qbey::*;
 fn test_update_basic() {
     let mut u = qbey("employee").into_update();
     u.set(col("name"), "Alice");
-    let mut u = u.and_where(col("id").eq(1));
+    let u = u.and_where(col("id").eq(1));
     let (sql, binds) = u.to_sql();
     assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
     assert_eq!(
@@ -18,7 +18,7 @@ fn test_update_multiple_sets() {
     let mut u = qbey("employee").into_update();
     u.set(col("name"), "Alice");
     u.set(col("age"), 30);
-    let mut u = u.and_where(col("id").eq(1));
+    let u = u.and_where(col("id").eq(1));
     let (sql, binds) = u.to_sql();
     assert_eq!(
         sql,
@@ -64,7 +64,7 @@ fn test_update_with_dialect() {
     let mut u = qbey("employee").into_update();
     u.set(col("name"), "Alice");
     u.set(col("age"), 30);
-    let mut u = u.and_where(col("id").eq(1));
+    let u = u.and_where(col("id").eq(1));
     let (sql, binds) = u.to_sql_with(&PgDialect);
     assert_eq!(
         sql,
@@ -291,7 +291,7 @@ fn test_update_with_cte() {
     let mut u = qbey("employee").into_update();
     u.with_cte("active_depts", &[], cte_q);
     u.set(col("status"), "active");
-    let mut u = u.and_where(col("dept_id").eq(1));
+    let u = u.and_where(col("dept_id").eq(1));
     let (sql, binds) = u.to_sql();
     assert_eq!(
         sql,

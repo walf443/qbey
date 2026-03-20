@@ -3,7 +3,7 @@
 // Revisit when sqlx adds proper RETURNING support for MariaDB.
 
 use super::common::{MysqlValue, bind_params, setup_pool};
-use qbey::{ConditionExpr, DeleteQueryBuilder, col};
+use qbey::{ConditionExpr, col};
 use qbey_mysql::qbey_with;
 use sqlx::Row;
 
