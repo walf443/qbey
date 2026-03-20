@@ -3,8 +3,6 @@
 
 sql query builder
 
-> **Note:** This project is in early development. APIs may change without backward compatibility.
-
 ## SYNOPSIS
 
 ### Basic usage
