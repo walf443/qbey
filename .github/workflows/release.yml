@@ -24,5 +24,8 @@ jobs:
       - name: Publish qbey to crates.io
         run: cargo publish -p qbey
 
+      - name: Wait for crates.io index update
+        run: sleep 30
+
       - name: Publish qbey-mysql to crates.io
         run: cargo publish -p qbey-mysql
