@@ -269,13 +269,13 @@ impl<V: Clone + std::fmt::Debug> DeleteQuery<V, WhereNotSet> {
 
 impl<V: Clone + std::fmt::Debug> DeleteQuery<V, WhereProvided> {
     /// Add an additional AND WHERE condition.
-    pub fn and_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
+    pub fn and_where(mut self, cond: impl IntoWhereClause<V>) -> Self {
         self.wheres.push(WhereEntry::And(cond.into_where_clause()));
         self
     }
 
     /// Add an additional OR WHERE condition.
-    pub fn or_where(&mut self, cond: impl IntoWhereClause<V>) -> &mut Self {
+    pub fn or_where(mut self, cond: impl IntoWhereClause<V>) -> Self {
         self.wheres.push(WhereEntry::Or(cond.into_where_clause()));
         self
     }
