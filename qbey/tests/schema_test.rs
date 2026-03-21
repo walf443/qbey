@@ -53,6 +53,8 @@ fn test_schema_alias() {
     let m = Users::new().as_("managers");
     assert_eq!(m.table_name(), "users");
 
+    // Use a string here because qbey(&m) would produce FROM "users" AS "managers",
+    // while this test verifies column qualification with just the alias name.
     let mut q = qbey("managers");
     q.add_select(m.id());
     q.add_select(m.name());
