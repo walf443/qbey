@@ -41,6 +41,45 @@
 /// assert_eq!(sql, r#"SELECT "users"."name", "managers"."name" AS "manager_name" FROM "users" LEFT JOIN "users" AS "managers" ON "users"."manager_id" = "managers"."id""#);
 /// ```
 ///
+/// # Reserved words as column names
+///
+/// Use Rust raw identifiers for columns whose names are Rust reserved words:
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::qbey;
+///
+/// qbey_schema!(Events, "events", [id, r#type]);
+///
+/// let e = Events::new();
+/// let mut q = qbey(&e);
+/// q.add_select(e.r#type());
+/// let (sql, _binds) = q.to_sql();
+/// assert_eq!(sql, r#"SELECT "events"."type" FROM "events""#);
+/// ```
+///
+/// # Renaming columns
+///
+/// Use `rust_name = "sql_name"` when you want the Rust method name to differ
+/// from the SQL column name. This is useful for columns that conflict with
+/// built-in method names (`table`, `table_name`, `as_`, `all_columns`, `new`):
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::qbey;
+///
+/// qbey_schema!(Features, "features", [id, name, is_new = "new"]);
+///
+/// let f = Features::new();
+/// let mut q = qbey(&f);
+/// q.select(&f.all_columns());
+/// q.and_where(f.is_new().eq(true));
+/// let (sql, _binds) = q.to_sql();
+/// assert_eq!(sql, r#"SELECT "features"."id", "features"."name", "features"."new" FROM "features" WHERE "features"."new" = ?"#);
+/// ```
+///
 /// # Adding custom methods
 ///
 /// The generated struct is a regular Rust struct, so you can add your own
