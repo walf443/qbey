@@ -178,3 +178,68 @@ fn test_schema_trailing_comma_in_columns() {
         r#"SELECT "items"."id", "items"."name", "items"."price" FROM "items""#
     );
 }
+
+#[test]
+fn test_schema_raw_identifier_column() {
+    qbey_schema!(Events, "events", [id, r#type, r#match]);
+
+    let e = Events::new();
+    let mut q = qbey(&e);
+    q.select(&e.all_columns());
+    q.and_where(e.r#type().eq("click"));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "events"."id", "events"."type", "events"."match" FROM "events" WHERE "events"."type" = ?"#
+    );
+    assert_eq!(binds, vec![Value::String("click".to_string())]);
+}
+
+#[test]
+fn test_schema_renamed_column() {
+    qbey_schema!(Nodes, "nodes", [id, name, table_col = "table"]);
+
+    let n = Nodes::new();
+    let mut q = qbey(&n);
+    q.select(&n.all_columns());
+    q.and_where(n.table_col().eq("foo"));
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "nodes"."id", "nodes"."name", "nodes"."table" FROM "nodes" WHERE "nodes"."table" = ?"#
+    );
+    assert_eq!(binds, vec![Value::String("foo".to_string())]);
+}
+
+#[test]
+fn test_schema_renamed_column_mixed_with_raw_identifier() {
+    qbey_schema!(Records, "records", [id, r#type, status_col = "status"]);
+
+    let r = Records::new();
+    let mut q = qbey(&r);
+    q.select(&r.all_columns());
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "records"."id", "records"."type", "records"."status" FROM "records""#
+    );
+}
+
+#[test]
+fn test_schema_many_columns() {
+    qbey_schema!(
+        Wide,
+        "wide",
+        [
+            c01, c02, c03, c04, c05, c06, c07, c08, c09, c10, c11, c12, c13, c14, c15, c16, c17,
+            c18, c19, c20, c21, c22, c23, c24, c25, c26, c27, c28, c29, c30,
+        ]
+    );
+
+    let w = Wide::new();
+    let cols = w.all_columns();
+    assert_eq!(cols.len(), 30);
+}

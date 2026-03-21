@@ -41,6 +41,53 @@
 /// assert_eq!(sql, r#"SELECT "users"."name", "managers"."name" AS "manager_name" FROM "users" LEFT JOIN "users" AS "managers" ON "users"."manager_id" = "managers"."id""#);
 /// ```
 ///
+/// # Reserved words as column names
+///
+/// Use Rust raw identifiers for columns whose names are Rust reserved words:
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::qbey;
+///
+/// qbey_schema!(Events, "events", [id, r#type]);
+///
+/// let e = Events::new();
+/// let mut q = qbey(&e);
+/// q.add_select(e.r#type());
+/// let (sql, _binds) = q.to_sql();
+/// assert_eq!(sql, r#"SELECT "events"."type" FROM "events""#);
+/// ```
+///
+/// # Renaming columns
+///
+/// Use `rust_name = "sql_name"` when you want the Rust method name to differ
+/// from the SQL column name. This is useful for columns that conflict with
+/// built-in method names (`table`, `table_name`, `as_`, `all_columns`, `new`):
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::qbey;
+///
+/// qbey_schema!(Features, "features", [id, name, is_new = "new"]);
+///
+/// let f = Features::new();
+/// let mut q = qbey(&f);
+/// q.select(&f.all_columns());
+/// q.and_where(f.is_new().eq(true));
+/// let (sql, _binds) = q.to_sql();
+/// assert_eq!(sql, r#"SELECT "features"."id", "features"."name", "features"."new" FROM "features" WHERE "features"."new" = ?"#);
+/// ```
+///
+/// The SQL name must be a string literal:
+///
+/// ```compile_fail
+/// use qbey::qbey_schema;
+///
+/// qbey_schema!(Bad, "bad", [id, col = 42]);
+/// ```
+///
 /// # Adding custom methods
 ///
 /// The generated struct is a regular Rust struct, so you can add your own
@@ -64,7 +111,47 @@
 /// ```
 #[macro_export]
 macro_rules! qbey_schema {
-    ($struct_name:ident, $table_name:expr, [$($col:ident),* $(,)?]) => {
+    // Entry point: parse column definitions and forward to internal macro
+    ($struct_name:ident, $table_name:expr, [$($col_def:tt)*]) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [] $($col_def)*);
+    };
+}
+
+/// Internal macro that parses column definitions one by one.
+/// Accumulates parsed columns as `[rust_ident, sql_name]` pairs.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __qbey_schema_parse {
+    // Renamed column: `col = "sql_name"` followed by comma and more
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident = $sql_name:expr, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col, $sql_name]] $($rest)*);
+    };
+    // Renamed column: `col = "sql_name"` at end
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident = $sql_name:expr) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col, $sql_name]]);
+    };
+    // Plain column followed by comma and more
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col]] $($rest)*);
+    };
+    // Plain column at end
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col]]);
+    };
+    // Trailing comma only
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] ,) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)*]);
+    };
+    // Terminal: all columns parsed, generate the struct
+    ($struct_name:ident, $table_name:expr, [$([$($col_spec:tt)*])*]) => {
+        $crate::__qbey_schema_emit!($struct_name, $table_name, $([$($col_spec)*]),*);
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __qbey_schema_emit {
+    ($struct_name:ident, $table_name:expr, $([$($col_spec:tt)*]),*) => {
         const _: &str = $table_name;
 
         #[allow(dead_code)]
@@ -100,14 +187,10 @@ macro_rules! qbey_schema {
                 $struct_name { alias: Some(alias) }
             }
 
-            $(
-                pub fn $col(&self) -> $crate::Col {
-                    $crate::table(self.alias.unwrap_or($table_name)).col(stringify!($col))
-                }
-            )*
+            $($crate::__qbey_schema_col!($table_name, $($col_spec)*);)*
 
             pub fn all_columns(&self) -> Vec<$crate::Col> {
-                vec![$(self.$col()),*]
+                vec![$($crate::__qbey_schema_col_call!(self, $($col_spec)*)),*]
             }
         }
 
@@ -116,5 +199,29 @@ macro_rules! qbey_schema {
                 self.table().into_from_table()
             }
         }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __qbey_schema_col {
+    ($table_name:expr, $col:ident, $sql_name:expr) => {
+        pub fn $col(&self) -> $crate::Col {
+            $crate::table(self.alias.unwrap_or($table_name)).col($sql_name)
+        }
+    };
+    ($table_name:expr, $col:ident) => {
+        pub fn $col(&self) -> $crate::Col {
+            let col_name = stringify!($col).trim_start_matches("r#");
+            $crate::table(self.alias.unwrap_or($table_name)).col(col_name)
+        }
+    };
+}
+
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __qbey_schema_col_call {
+    ($self:ident, $col:ident $(, $sql_name:expr)?) => {
+        $self.$col()
     };
 }
