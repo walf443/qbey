@@ -25,7 +25,16 @@ jobs:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test -p qbey --features full
+      - run: cargo test -p qbey --features returning,test-sqlx,test-sqlx-mysql,test-rusqlite,test-libsql
+
+  test-qbey-postgres:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - run: cargo test -p qbey --features returning,test-tokio-postgres,test-postgres
 
   test-qbey-mysql:
     needs: build
