@@ -55,6 +55,7 @@ pub enum MysqlValue {
     Int(i64),
     Float(f64),
     Bool(bool),
+    Blob(Vec<u8>),
 }
 
 impl From<&str> for MysqlValue {
@@ -84,6 +85,12 @@ impl From<bool> for MysqlValue {
 impl From<String> for MysqlValue {
     fn from(s: String) -> Self {
         MysqlValue::Text(s)
+    }
+}
+
+impl From<Vec<u8>> for MysqlValue {
+    fn from(b: Vec<u8>) -> Self {
+        MysqlValue::Blob(b)
     }
 }
 
@@ -132,6 +139,7 @@ pub fn bind_params<'a>(
             MysqlValue::Int(n) => query.bind(*n),
             MysqlValue::Float(f) => query.bind(*f),
             MysqlValue::Bool(b) => query.bind(*b),
+            MysqlValue::Blob(b) => query.bind(b.as_slice()),
         };
     }
     query
