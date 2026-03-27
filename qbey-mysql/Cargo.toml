@@ -16,7 +16,7 @@ qbey = { version = "0.1", path = "../qbey" }
 sqlx = { version = "0.8", features = ["runtime-tokio", "mysql"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 testcontainers = { version = "0.27", features = ["watchdog"] }
-ctor = "0.6"
+ctor = "0.7"
 testcontainers-modules = { version = "0.15", features = ["mysql", "mariadb"] }
 
 [features]
