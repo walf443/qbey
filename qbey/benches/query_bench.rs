@@ -229,9 +229,26 @@ fn bench_tree_to_sql(c: &mut Criterion) {
     });
 }
 
+/// Full into_sql (build query + into_tree + render, one fewer clone than to_sql).
+fn bench_into_sql(c: &mut Criterion) {
+    c.bench_function("complex_select_into_sql", |b| {
+        b.iter(|| make_complex_select_query().into_sql())
+    });
+    c.bench_function("union_5parts_into_sql", |b| {
+        b.iter(|| make_union_query().into_sql())
+    });
+    c.bench_function("bulk_insert_100rows_into_sql", |b| {
+        b.iter(|| make_bulk_insert_query().into_sql())
+    });
+    c.bench_function("nested_subquery_3level_into_sql", |b| {
+        b.iter(|| make_nested_subquery().into_sql())
+    });
+}
+
 criterion_group!(
     benches,
     bench_to_sql,
+    bench_into_sql,
     bench_build_tree,
     bench_render,
     bench_tree_to_sql
