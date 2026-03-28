@@ -158,6 +158,9 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
                 })
                 .collect();
 
+            // Insert ODKU before the RETURNING token (if present) so that
+            // the final SQL order is:
+            // INSERT INTO ... VALUES (...) ON DUPLICATE KEY UPDATE ... RETURNING ...
             let odku_token = qbey::tree::InsertToken::KeywordAssignments {
                 keyword: "ON DUPLICATE KEY UPDATE".to_string(),
                 sets,

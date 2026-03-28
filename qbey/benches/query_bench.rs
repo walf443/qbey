@@ -229,55 +229,11 @@ fn bench_tree_to_sql(c: &mut Criterion) {
     });
 }
 
-/// Two-step API with into_tree: move values instead of cloning.
-fn bench_into_tree_to_sql(c: &mut Criterion) {
-    c.bench_function("bulk_insert_100rows_into_tree_to_sql", |b| {
-        b.iter(|| {
-            let ins = make_bulk_insert_query();
-            let tree = ins.into_tree();
-            let (sql, binds) = tree.to_sql();
-            (sql, binds.len())
-        })
-    });
-}
-
-/// Compare build_tree vs into_tree (query pre-built, clone each iter for fairness).
-fn bench_into_tree(c: &mut Criterion) {
-    let insert_query = make_bulk_insert_query();
-    c.bench_function("bulk_insert_100rows_build_into_tree", |b| {
-        b.iter(|| {
-            let cloned = insert_query.clone();
-            cloned.into_tree()
-        })
-    });
-
-    // End-to-end: into_tree + to_sql (query pre-built, clone for fairness)
-    c.bench_function("bulk_insert_100rows_into_tree_then_to_sql", |b| {
-        b.iter(|| {
-            let cloned = insert_query.clone();
-            let tree = cloned.into_tree();
-            let (sql, binds) = tree.to_sql();
-            (sql, binds.len())
-        })
-    });
-
-    // Comparison: to_tree + to_sql (query pre-built)
-    c.bench_function("bulk_insert_100rows_to_tree_then_to_sql", |b| {
-        b.iter(|| {
-            let tree = insert_query.to_tree();
-            let (sql, binds) = tree.to_sql();
-            (sql, binds.len())
-        })
-    });
-}
-
 criterion_group!(
     benches,
     bench_to_sql,
     bench_build_tree,
     bench_render,
-    bench_tree_to_sql,
-    bench_into_tree_to_sql,
-    bench_into_tree
+    bench_tree_to_sql
 );
 criterion_main!(benches);

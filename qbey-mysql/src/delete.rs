@@ -193,6 +193,7 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V, WhereProvided> {
         }
 
         if !extra_tokens.is_empty() {
+            // Find the position of the Returning token (if any) and insert before it.
             #[cfg(feature = "returning")]
             let insert_pos = tree
                 .tokens
