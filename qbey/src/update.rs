@@ -398,4 +398,27 @@ impl<V: Clone + std::fmt::Debug> UpdateQuery<V, WhereProvided> {
         );
         (sql, binds.into_iter().cloned().collect())
     }
+
+    /// Consume this query and build standard SQL with `?` placeholders.
+    /// More efficient than `to_sql()` as it avoids cloning the query into a tree.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    pub fn into_sql(self) -> (String, Vec<V>) {
+        self.into_sql_with(&crate::DefaultDialect)
+    }
+
+    /// Consume this query and build SQL with dialect-specific placeholders and quoting.
+    /// More efficient than `to_sql_with()` as it avoids cloning the query into a tree.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    pub fn into_sql_with(self, dialect: &dyn Dialect) -> (String, Vec<V>) {
+        let tree = self.into_tree();
+        let ph = |n: usize| dialect.placeholder(n);
+        let qi = |name: &str| dialect.quote_identifier(name);
+        let (sql, binds) = crate::renderer::update::render_update(
+            &tree,
+            &RenderConfig::from_dialect(&ph, &qi, dialect),
+        );
+        (sql, binds.into_iter().cloned().collect())
+    }
 }

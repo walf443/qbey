@@ -494,6 +494,21 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         (sql, binds.into_iter().cloned().collect())
     }
 
+    /// Consume this query and build standard SQL with MySQL dialect.
+    /// More efficient than `to_sql()` as it avoids cloning the query into a tree.
+    pub fn into_sql(self) -> (String, Vec<V>) {
+        let tree = if self.set_operations.is_empty() {
+            self.into_tree()
+        } else {
+            self.to_compound_tree()
+        };
+        let ph = |n: usize| MySqlDialect.placeholder(n);
+        let qi = |name: &str| MySqlDialect.quote_identifier(name);
+        let (sql, binds) = StandardSqlRenderer
+            .render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySqlDialect));
+        (sql, binds.into_iter().cloned().collect())
+    }
+
     /// Convert this MySQL query builder into an UPDATE query builder.
     ///
     /// Consumes `self` and transfers the table name, alias, and WHERE conditions.
