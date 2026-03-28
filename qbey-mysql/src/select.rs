@@ -429,13 +429,11 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
 
     /// Build a SelectTree with MySQL-specific index hints applied.
     pub fn to_tree(&self) -> SelectTree<V> {
-        let mut tree = self.inner.to_tree();
-        self.apply_index_hints(&mut tree);
-        tree
+        self.clone().into_tree()
     }
 
-    /// Convert into a SelectTree by moving fields, with MySQL-specific index hints applied.
-    pub(crate) fn into_tree(self) -> SelectTree<V> {
+    /// Consume this query and build a SelectTree by moving fields, with MySQL-specific index hints applied.
+    pub fn into_tree(self) -> SelectTree<V> {
         let mut tree = qbey::tree::SelectTree::from_query_owned(self.inner);
         apply_index_hints_to(&mut tree, &self.index_hints);
         tree
@@ -491,8 +489,9 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
         };
         let ph = |n: usize| MySqlDialect.placeholder(n);
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
-        StandardSqlRenderer
-            .render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySqlDialect))
+        let (sql, binds) = StandardSqlRenderer
+            .render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, &MySqlDialect));
+        (sql, binds.into_iter().cloned().collect())
     }
 
     /// Convert this MySQL query builder into an UPDATE query builder.
@@ -517,9 +516,5 @@ impl<V: Clone + std::fmt::Debug> MysqlQuery<V> {
     /// The generated SQL uses MySQL dialect (backtick quoting, `?` placeholders).
     pub fn into_insert(self) -> MysqlInsertQuery<V> {
         MysqlInsertQuery::new(self.inner.into_insert())
-    }
-
-    fn apply_index_hints(&self, tree: &mut SelectTree<V>) {
-        apply_index_hints_to(tree, &self.index_hints);
     }
 }

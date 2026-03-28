@@ -892,6 +892,11 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
         SelectTree::from_query(self)
     }
 
+    /// Consume this query and build a SelectTree by moving values instead of cloning.
+    pub fn into_tree(self) -> SelectTree<V> {
+        SelectTree::from_query_owned(self)
+    }
+
     /// Build standard SQL with `?` placeholders and double-quote identifiers.
     pub fn to_sql(&self) -> (String, Vec<V>) {
         self.to_sql_with(&crate::DefaultDialect)
@@ -902,7 +907,9 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
         let tree = self.to_tree();
         let ph = |n: usize| dialect.placeholder(n);
         let qi = |name: &str| dialect.quote_identifier(name);
-        StandardSqlRenderer.render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, dialect))
+        let (sql, binds) = StandardSqlRenderer
+            .render_select(&tree, &RenderConfig::from_dialect(&ph, &qi, dialect));
+        (sql, binds.into_iter().cloned().collect())
     }
 }
 

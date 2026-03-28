@@ -162,20 +162,20 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V, WhereProvided> {
         self
     }
 
-    /// Build standard SQL with MySQL dialect.
-    ///
-    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
-    pub fn to_sql(&self) -> (String, Vec<V>) {
-        let mut tree = self.inner.to_tree();
+    /// Build an UpdateTree with MySQL-specific ORDER BY and LIMIT applied.
+    pub fn to_tree(&self) -> qbey::tree::UpdateTree<V> {
+        self.clone().into_tree()
+    }
+
+    /// Consume this query and build an UpdateTree by moving values.
+    pub fn into_tree(self) -> qbey::tree::UpdateTree<V> {
+        let mut tree = self.inner.into_tree();
         let ph = |_: usize| "?".to_string();
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
         // ORDER BY is rendered separately and appended as Raw(String) because
-        // UpdateToken has no OrderBy variant. The binds are collected separately
-        // and appended after render_update. This is correct for MySQL's `?`
-        // placeholders (position-independent) but would need a different approach
-        // for PostgreSQL's `$N` indexed placeholders.
-        let mut order_by_binds: Vec<Value> = Vec::new();
+        // UpdateToken has no OrderBy variant.
+        let mut order_by_binds: Vec<&Value> = Vec::new();
         if let Some(order_by) =
             qbey::renderer::render_order_by(&self.order_bys, &cfg, &mut order_by_binds)
         {
@@ -189,6 +189,18 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V, WhereProvided> {
             tree.tokens
                 .push(qbey::tree::UpdateToken::Raw(format!("LIMIT {}", n)));
         }
-        qbey::renderer::update::render_update(&tree, &cfg)
+        tree
+    }
+
+    /// Build standard SQL with MySQL dialect.
+    ///
+    /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
+    pub fn to_sql(&self) -> (String, Vec<V>) {
+        let tree = self.to_tree();
+        let ph = |_: usize| "?".to_string();
+        let qi = |name: &str| MySqlDialect.quote_identifier(name);
+        let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
+        let (sql, binds) = qbey::renderer::update::render_update(&tree, &cfg);
+        (sql, binds.into_iter().cloned().collect())
     }
 }
