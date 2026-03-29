@@ -645,9 +645,10 @@ Customize placeholder style and identifier quoting via the `Dialect` trait:
 
 ```rust
 # use qbey::{qbey, col, ConditionExpr, Dialect, SelectQueryBuilder};
+use std::borrow::Cow;
 struct PgDialect;
 impl Dialect for PgDialect {
-    fn placeholder(&self, index: usize) -> String { format!("${}", index) }
+    fn placeholder(&self, index: usize) -> Cow<'static, str> { Cow::Owned(format!("${}", index)) }
 }
 
 let mut q = qbey("employee");

@@ -163,7 +163,7 @@ fn bench_build_tree(c: &mut Criterion) {
 
 /// Rendering only (tree already built).
 fn bench_render(c: &mut Criterion) {
-    let ph = |_: usize| "?".to_string();
+    let ph = |_: usize| std::borrow::Cow::Borrowed("?");
     let qi = |name: &str| format!("\"{}\"", name);
     let dialect = qbey::DefaultDialect;
     let cfg = RenderConfig::from_dialect(&ph, &qi, &dialect);

@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::{
     Col, JoinClause, JoinCondition, JoinType, OrderByClause, SelectFunc, SelectItem, SortDir,
     WhereClause, WhereEntry, WindowSpec,
@@ -12,7 +14,7 @@ use crate::tree::{FromClause, FromSource, SelectToken, SelectTree};
 
 /// Configuration for rendering SQL from trees.
 pub struct RenderConfig<'a> {
-    pub ph: &'a dyn Fn(usize) -> String,
+    pub ph: &'a dyn Fn(usize) -> Cow<'static, str>,
     pub qi: &'a dyn Fn(&str) -> String,
     /// When true, backslashes inside SQL string literals are doubled (`\\`).
     /// MySQL requires this by default (when `NO_BACKSLASH_ESCAPES` is not set).
@@ -22,7 +24,7 @@ pub struct RenderConfig<'a> {
 impl<'a> RenderConfig<'a> {
     /// Build a `RenderConfig` from pre-built closures and a [`Dialect`](crate::Dialect).
     pub fn from_dialect(
-        ph: &'a dyn Fn(usize) -> String,
+        ph: &'a dyn Fn(usize) -> Cow<'static, str>,
         qi: &'a dyn Fn(&str) -> String,
         dialect: &dyn crate::Dialect,
     ) -> Self {
@@ -499,7 +501,7 @@ fn render_where_clause<'a, V: Clone>(
         }
         WhereClause::In { col: _, vals } if vals.is_empty() => "1 = 0".to_string(),
         WhereClause::In { col, vals } => {
-            let placeholders: Vec<String> = vals
+            let placeholders: Vec<Cow<'static, str>> = vals
                 .iter()
                 .map(|v| {
                     binds.push(v);
@@ -518,7 +520,7 @@ fn render_where_clause<'a, V: Clone>(
         }
         WhereClause::NotIn { col: _, vals } if vals.is_empty() => "1 = 1".to_string(),
         WhereClause::NotIn { col, vals } => {
-            let placeholders: Vec<String> = vals
+            let placeholders: Vec<Cow<'static, str>> = vals
                 .iter()
                 .map(|v| {
                     binds.push(v);
