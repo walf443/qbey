@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use qbey::Dialect;
 use qbey::Value;
 use qbey::{MySqlDialect, UpdateQueryBuilder, WhereNotSet, WhereProvided};
@@ -170,7 +172,7 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V, WhereProvided> {
     /// Consume this query and build an UpdateTree by moving values.
     pub fn into_tree(self) -> qbey::tree::UpdateTree<V> {
         let mut tree = self.inner.into_tree();
-        let ph = |_: usize| std::borrow::Cow::Borrowed("?");
+        let ph = |_: usize| Cow::Borrowed("?");
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
         // ORDER BY is rendered separately and appended as Raw(String) because
@@ -208,7 +210,7 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V, WhereProvided> {
     /// Bind values are returned in SQL clause order: SET values first, then WHERE values.
     pub fn into_sql(self) -> (String, Vec<V>) {
         let tree = self.into_tree();
-        let ph = |_: usize| std::borrow::Cow::Borrowed("?");
+        let ph = |_: usize| Cow::Borrowed("?");
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
         let (sql, binds) = qbey::renderer::update::render_update(&tree, &cfg);

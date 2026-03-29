@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use qbey::Dialect;
 use qbey::Value;
 use qbey::{DeleteQueryBuilder, MySqlDialect, WhereNotSet, WhereProvided};
@@ -169,7 +171,7 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V, WhereProvided> {
     /// Consume this query and build a DeleteTree by moving values.
     pub fn into_tree(self) -> qbey::tree::DeleteTree<V> {
         let mut tree = self.inner.into_tree();
-        let ph = |_: usize| std::borrow::Cow::Borrowed("?");
+        let ph = |_: usize| Cow::Borrowed("?");
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
 
@@ -220,7 +222,7 @@ impl<V: Clone + std::fmt::Debug> MysqlDeleteQuery<V, WhereProvided> {
     /// More efficient than `to_sql()` as it avoids cloning the query into a tree.
     pub fn into_sql(self) -> (String, Vec<V>) {
         let tree = self.into_tree();
-        let ph = |_: usize| std::borrow::Cow::Borrowed("?");
+        let ph = |_: usize| Cow::Borrowed("?");
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
         let (sql, binds) = qbey::renderer::delete::render_delete(&tree, &cfg);
