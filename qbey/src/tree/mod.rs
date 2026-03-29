@@ -601,6 +601,9 @@ impl<V: Clone> SelectTree<V> {
 
     /// Consume this tree and build SQL with dialect-specific placeholders and quoting.
     /// More efficient than `to_sql_with()` as it avoids cloning bind values.
+    ///
+    /// Uses a two-pass approach: first renders with references to obtain the SQL
+    /// string, then walks the tree a second time to extract owned bind values.
     pub fn into_sql_with(self, dialect: &dyn crate::Dialect) -> (String, Vec<V>) {
         let (sql, _) = self.to_sql_with(dialect);
         let mut binds = Vec::new();
@@ -618,6 +621,9 @@ impl<V: Clone> InsertTree<V> {
 
     /// Consume this tree and build SQL with dialect-specific placeholders and quoting.
     /// More efficient than `to_sql_with()` as it avoids cloning bind values.
+    ///
+    /// Uses a two-pass approach: first renders with references to obtain the SQL
+    /// string, then walks the tree a second time to extract owned bind values.
     pub fn into_sql_with(self, dialect: &dyn crate::Dialect) -> (String, Vec<V>) {
         let (sql, _) = self.to_sql_with(dialect);
         let mut binds = Vec::new();
@@ -635,6 +641,9 @@ impl<V: Clone> UpdateTree<V> {
 
     /// Consume this tree and build SQL with dialect-specific placeholders and quoting.
     /// More efficient than `to_sql_with()` as it avoids cloning bind values.
+    ///
+    /// Uses a two-pass approach: first renders with references to obtain the SQL
+    /// string, then walks the tree a second time to extract owned bind values.
     pub fn into_sql_with(self, dialect: &dyn crate::Dialect) -> (String, Vec<V>) {
         let (sql, _) = self.to_sql_with(dialect);
         let mut binds = Vec::new();
@@ -652,6 +661,9 @@ impl<V: Clone> DeleteTree<V> {
 
     /// Consume this tree and build SQL with dialect-specific placeholders and quoting.
     /// More efficient than `to_sql_with()` as it avoids cloning bind values.
+    ///
+    /// Uses a two-pass approach: first renders with references to obtain the SQL
+    /// string, then walks the tree a second time to extract owned bind values.
     pub fn into_sql_with(self, dialect: &dyn crate::Dialect) -> (String, Vec<V>) {
         let (sql, _) = self.to_sql_with(dialect);
         let mut binds = Vec::new();
