@@ -17,9 +17,11 @@ pub mod update;
 pub mod value;
 pub mod where_clause;
 
+use std::borrow::Cow;
+
 /// Trait for SQL dialect placeholder and quoting styles.
 pub trait Dialect {
-    fn placeholder(&self, index: usize) -> String;
+    fn placeholder(&self, index: usize) -> Cow<'static, str>;
 
     fn quote_identifier(&self, name: &str) -> String {
         format!("\"{}\"", name.replace('"', "\"\""))
@@ -39,8 +41,8 @@ pub trait Dialect {
 pub struct DefaultDialect;
 
 impl Dialect for DefaultDialect {
-    fn placeholder(&self, _index: usize) -> String {
-        "?".to_string()
+    fn placeholder(&self, _index: usize) -> Cow<'static, str> {
+        Cow::Borrowed("?")
     }
 }
 
@@ -48,8 +50,8 @@ impl Dialect for DefaultDialect {
 pub struct PgDialect;
 
 impl Dialect for PgDialect {
-    fn placeholder(&self, index: usize) -> String {
-        format!("${}", index)
+    fn placeholder(&self, index: usize) -> Cow<'static, str> {
+        Cow::Owned(format!("${}", index))
     }
 }
 
@@ -57,8 +59,8 @@ impl Dialect for PgDialect {
 pub struct MySqlDialect;
 
 impl Dialect for MySqlDialect {
-    fn placeholder(&self, _index: usize) -> String {
-        "?".to_string()
+    fn placeholder(&self, _index: usize) -> Cow<'static, str> {
+        Cow::Borrowed("?")
     }
 
     fn quote_identifier(&self, name: &str) -> String {

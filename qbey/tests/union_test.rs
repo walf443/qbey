@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use qbey::*;
 
 #[test]
@@ -298,8 +300,8 @@ fn test_compound_query_with_dialect() {
 
     struct Postgres;
     impl Dialect for Postgres {
-        fn placeholder(&self, index: usize) -> String {
-            format!("${}", index)
+        fn placeholder(&self, index: usize) -> Cow<'static, str> {
+            Cow::Owned(format!("${}", index))
         }
     }
 

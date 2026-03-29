@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use criterion::{Criterion, criterion_group, criterion_main};
 use qbey::{
     ConditionExpr, InsertQueryBuilder, SelectQueryBuilder, col, count_all, qbey,
@@ -163,7 +165,7 @@ fn bench_build_tree(c: &mut Criterion) {
 
 /// Rendering only (tree already built).
 fn bench_render(c: &mut Criterion) {
-    let ph = |_: usize| "?".to_string();
+    let ph = |_: usize| Cow::Borrowed("?");
     let qi = |name: &str| format!("\"{}\"", name);
     let dialect = qbey::DefaultDialect;
     let cfg = RenderConfig::from_dialect(&ph, &qi, &dialect);

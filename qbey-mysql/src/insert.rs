@@ -190,7 +190,7 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     /// More efficient than `to_sql()` as it avoids cloning the query into a tree.
     pub fn into_sql(self) -> (String, Vec<V>) {
         let tree = self.into_tree();
-        let ph = |_: usize| "?".to_string();
+        let ph = |n: usize| MySqlDialect.placeholder(n);
         let qi = |name: &str| MySqlDialect.quote_identifier(name);
         let cfg = qbey::renderer::RenderConfig::from_dialect(&ph, &qi, &MySqlDialect);
         let (sql, binds) = qbey::renderer::insert::render_insert(&tree, &cfg);
