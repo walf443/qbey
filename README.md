@@ -31,7 +31,7 @@ assert_eq!(sql, r#"SELECT "employee"."id", "employee"."name" FROM "employee" WHE
 - **Driver agnostic** — Works with any database driver. Tested with [sqlx](https://github.com/launchbadge/sqlx) (SQLite, MySQL), [rusqlite](https://github.com/rusqlite/rusqlite), [tokio-postgres](https://github.com/sfackler/rust-postgres), and [postgres](https://github.com/sfackler/rust-postgres)
 - **Extensible bind value types** — Use the built-in `Value` enum for quick prototyping, or define your own type with `qbey_with::<V>()` to match your driver's parameter types
 - **Dialect support** — Customize placeholder style (`?`, `$1`, ...) and identifier quoting via the `Dialect` trait. MySQL dialect is available as a separate crate:
-  - [qbey-mysql](./qbey-mysql/README.md) — backtick quoting, index hints, STRAIGHT_JOIN
+  - [qbey-mysql](https://github.com/walf443/qbey/tree/main/qbey-mysql) — backtick quoting, index hints, STRAIGHT_JOIN
 - **Schema macro** — `qbey_schema!` generates typed column accessors for compile-time checked, qualified column references
 
 ## Table of Contents
@@ -743,7 +743,7 @@ assert_eq!(sql, r#"DELETE FROM "employee" WHERE "id" = ? RETURNING "id", "name""
 
 ## MySQL dialect
 
-See [qbey-mysql](./qbey-mysql/README.md) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).
+See [qbey-mysql](https://github.com/walf443/qbey/tree/main/qbey-mysql) for MySQL-specific features (backtick quoting, index hints, STRAIGHT_JOIN, etc.).
 
 ## Schema macro
 
