@@ -15,6 +15,9 @@ pub enum SetClause<V: Clone> {
     Value(String, V),
     /// Raw SQL expression via [`RawSql`].
     Expr(RawSql<V>),
+    /// `"col" = EXCLUDED."col"` — used by ON CONFLICT DO UPDATE.
+    #[cfg(feature = "conflict")]
+    Excluded(String),
 }
 
 /// Trait for UPDATE query builder methods that do not change the WHERE state.

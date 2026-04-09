@@ -124,6 +124,31 @@ pub(crate) enum InsertSource<V: Clone> {
     Select(Box<SelectTree<V>>),
 }
 
+/// A clause in the ON CONFLICT DO UPDATE SET list.
+#[cfg(feature = "conflict")]
+#[derive(Debug, Clone)]
+pub(crate) enum OnConflictUpdateClause<V: Clone> {
+    /// A column set to a bind value: `"col" = ?`.
+    Value(String, V),
+    /// A raw SQL expression: `"col" = "col" + 1`.
+    Expr(RawSql<V>),
+    /// A column set to EXCLUDED."col".
+    Excluded(String),
+}
+
+/// The action to take on conflict.
+#[cfg(feature = "conflict")]
+#[derive(Debug, Clone)]
+pub(crate) enum OnConflict<V: Clone> {
+    DoNothing {
+        columns: Vec<String>,
+    },
+    DoUpdate {
+        columns: Vec<String>,
+        sets: Vec<OnConflictUpdateClause<V>>,
+    },
+}
+
 /// An INSERT query builder, generic over the bind value type `V`.
 ///
 /// Created via [`SelectQuery::into_insert()`] to convert a SELECT query builder
@@ -152,6 +177,9 @@ pub struct InsertQuery<V: Clone + std::fmt::Debug = Value> {
     /// Extra columns whose values are raw SQL expressions (e.g., `NOW()`).
     /// These are appended after the normal bind-value columns in every row.
     pub(crate) col_exprs: Vec<(String, RawSql<V>)>,
+    /// ON CONFLICT action (PostgreSQL, SQLite).
+    #[cfg(feature = "conflict")]
+    pub(crate) on_conflict: Option<OnConflict<V>>,
     /// Columns to return via RETURNING clause (non-standard SQL).
     #[cfg(feature = "returning")]
     pub(crate) returning_columns: Vec<crate::Col>,
@@ -251,6 +279,8 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
             columns: Vec::new(),
             source: InsertSource::Values(Vec::new()),
             col_exprs: Vec::new(),
+            #[cfg(feature = "conflict")]
+            on_conflict: None,
             #[cfg(feature = "returning")]
             returning_columns: Vec::new(),
         }
@@ -275,6 +305,174 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
         for col in cols {
             self.returning_columns.push(col.clone());
         }
+        self
+    }
+
+    /// Add an ON CONFLICT (...) DO NOTHING clause (PostgreSQL, SQLite).
+    ///
+    /// Accepts `&str` or `Col` (from `qbey_schema!`). When `Col` is passed,
+    /// the table prefix is ignored — only the column name is used.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if `columns` is empty.
+    /// - Panics if an ON CONFLICT clause has already been set.
+    ///
+    /// ```
+    /// use qbey::{qbey, Value, InsertQueryBuilder};
+    ///
+    /// let mut ins = qbey("employee").into_insert();
+    /// ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    /// ins.on_conflict_do_nothing(&["id"]);
+    /// let (sql, _) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "employee" ("id", "name") VALUES (?, ?) ON CONFLICT ("id") DO NOTHING"#);
+    /// ```
+    #[cfg(feature = "conflict")]
+    pub fn on_conflict_do_nothing(&mut self, columns: &[impl Into<Col> + Clone]) -> &mut Self {
+        assert!(
+            !columns.is_empty(),
+            "on_conflict_do_nothing: columns must not be empty"
+        );
+        assert!(
+            self.on_conflict.is_none(),
+            "on_conflict_do_nothing: ON CONFLICT clause already set"
+        );
+        self.on_conflict = Some(OnConflict::DoNothing {
+            columns: columns.iter().map(|c| c.clone().into().column).collect(),
+        });
+        self
+    }
+
+    /// Add an ON CONFLICT (...) DO UPDATE SET col = ? clause with a bind value.
+    ///
+    /// Accepts `&str` or `Col` for `columns` and `col`. When `Col` is passed,
+    /// the table prefix is ignored — only the column name is used.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if `columns` is empty.
+    /// - Panics if an ON CONFLICT clause has already been set.
+    ///
+    /// ```
+    /// use qbey::{qbey, Value, InsertQueryBuilder};
+    ///
+    /// let mut ins = qbey("employee").into_insert();
+    /// ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    /// ins.on_conflict_do_update(&["id"], "name", "Bob");
+    /// let (sql, _) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "employee" ("id", "name") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = ?"#);
+    /// ```
+    #[cfg(feature = "conflict")]
+    pub fn on_conflict_do_update(
+        &mut self,
+        columns: &[impl Into<Col> + Clone],
+        col: impl Into<Col>,
+        val: impl Into<V>,
+    ) -> &mut Self {
+        assert!(
+            !columns.is_empty(),
+            "on_conflict_do_update: columns must not be empty"
+        );
+        assert!(
+            self.on_conflict.is_none(),
+            "on_conflict_do_update: ON CONFLICT clause already set"
+        );
+        self.on_conflict = Some(OnConflict::DoUpdate {
+            columns: columns.iter().map(|c| c.clone().into().column).collect(),
+            sets: vec![OnConflictUpdateClause::Value(col.into().column, val.into())],
+        });
+        self
+    }
+
+    /// Add an ON CONFLICT (...) DO UPDATE SET with a raw SQL expression.
+    ///
+    /// Accepts `&str` or `Col` for `columns`. When `Col` is passed,
+    /// the table prefix is ignored — only the column name is used.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if `columns` is empty.
+    /// - Panics if an ON CONFLICT clause has already been set.
+    ///
+    /// ```
+    /// use qbey::{qbey, Value, RawSql, InsertQueryBuilder};
+    ///
+    /// let mut ins = qbey("employee").into_insert();
+    /// ins.add_value(&[("id", 1.into()), ("age", 30.into())]);
+    /// ins.on_conflict_do_update_expr(&["id"], RawSql::new(r#""age" = "age" + 1"#));
+    /// let (sql, _) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "employee" ("id", "age") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "age" = "age" + 1"#);
+    /// ```
+    #[cfg(feature = "conflict")]
+    pub fn on_conflict_do_update_expr(
+        &mut self,
+        columns: &[impl Into<Col> + Clone],
+        expr: RawSql<V>,
+    ) -> &mut Self {
+        assert!(
+            !columns.is_empty(),
+            "on_conflict_do_update_expr: columns must not be empty"
+        );
+        assert!(
+            self.on_conflict.is_none(),
+            "on_conflict_do_update_expr: ON CONFLICT clause already set"
+        );
+        self.on_conflict = Some(OnConflict::DoUpdate {
+            columns: columns.iter().map(|c| c.clone().into().column).collect(),
+            sets: vec![OnConflictUpdateClause::Expr(expr)],
+        });
+        self
+    }
+
+    /// Add an ON CONFLICT (...) DO UPDATE SET col = EXCLUDED.col for each update column.
+    ///
+    /// Accepts `&str` or `Col` (from `qbey_schema!`). When `Col` is passed,
+    /// the table prefix is ignored — only the column name is used.
+    ///
+    /// # Panics
+    ///
+    /// - Panics if `columns` is empty.
+    /// - Panics if `update_columns` is empty.
+    /// - Panics if an ON CONFLICT clause has already been set.
+    ///
+    /// ```
+    /// use qbey::{qbey, Value, InsertQueryBuilder};
+    ///
+    /// let mut ins = qbey("employee").into_insert();
+    /// ins.add_value(&[("id", 1.into()), ("name", "Alice".into()), ("age", 30.into())]);
+    /// ins.on_conflict_do_update_with_excluded(&["id"], &["name", "age"]);
+    /// let (sql, _) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "employee" ("id", "name", "age") VALUES (?, ?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "age" = EXCLUDED."age""#);
+    /// ```
+    #[cfg(feature = "conflict")]
+    pub fn on_conflict_do_update_with_excluded(
+        &mut self,
+        columns: &[impl Into<Col> + Clone],
+        update_columns: &[impl Into<Col> + Clone],
+    ) -> &mut Self {
+        assert!(
+            !columns.is_empty(),
+            "on_conflict_do_update_with_excluded: columns must not be empty"
+        );
+        assert!(
+            !update_columns.is_empty(),
+            "on_conflict_do_update_with_excluded: update_columns must not be empty"
+        );
+        assert!(
+            self.on_conflict.is_none(),
+            "on_conflict_do_update_with_excluded: ON CONFLICT clause already set"
+        );
+        let sets: Vec<OnConflictUpdateClause<V>> = update_columns
+            .iter()
+            .map(|c| {
+                let col: Col = c.clone().into();
+                OnConflictUpdateClause::Excluded(col.column)
+            })
+            .collect();
+        self.on_conflict = Some(OnConflict::DoUpdate {
+            columns: columns.iter().map(|c| c.clone().into().column).collect(),
+            sets,
+        });
         self
     }
 
@@ -321,6 +519,32 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
                     col_exprs: Vec::new(),
                 });
                 tokens.push(crate::tree::InsertToken::SelectSource(sub));
+            }
+        }
+        #[cfg(feature = "conflict")]
+        if let Some(on_conflict) = self.on_conflict {
+            match on_conflict {
+                OnConflict::DoNothing { columns } => {
+                    tokens.push(crate::tree::InsertToken::OnConflictDoNothing { columns });
+                }
+                OnConflict::DoUpdate { columns, sets } => {
+                    let set_clauses = sets
+                        .into_iter()
+                        .map(|clause| match clause {
+                            OnConflictUpdateClause::Value(col, val) => {
+                                crate::SetClause::Value(col, val)
+                            }
+                            OnConflictUpdateClause::Expr(expr) => crate::SetClause::Expr(expr),
+                            OnConflictUpdateClause::Excluded(col) => {
+                                crate::SetClause::Excluded(col)
+                            }
+                        })
+                        .collect();
+                    tokens.push(crate::tree::InsertToken::OnConflictDoUpdate {
+                        columns,
+                        sets: set_clauses,
+                    });
+                }
             }
         }
         #[cfg(feature = "returning")]

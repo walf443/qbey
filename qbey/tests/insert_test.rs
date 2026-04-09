@@ -335,6 +335,201 @@ fn test_insert_tree_map_values() {
     assert!(found_values, "expected Values token");
 }
 
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_nothing() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    ins.on_conflict_do_nothing(&["id"]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "name") VALUES (?, ?) ON CONFLICT ("id") DO NOTHING"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::Int(1), Value::String("Alice".to_string())]
+    );
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_nothing_multiple_columns() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[
+        ("id", 1.into()),
+        ("email", "alice@example.com".into()),
+        ("name", "Alice".into()),
+    ]);
+    ins.on_conflict_do_nothing(&["id", "email"]);
+    let (sql, _) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "email", "name") VALUES (?, ?, ?) ON CONFLICT ("id", "email") DO NOTHING"#
+    );
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_update() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[
+        ("id", 1.into()),
+        ("name", "Alice".into()),
+        ("age", 30.into()),
+    ]);
+    ins.on_conflict_do_update(&["id"], "name", "Alice");
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "name", "age") VALUES (?, ?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::String("Alice".to_string()),
+            Value::Int(30),
+            Value::String("Alice".to_string()),
+        ]
+    );
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_update_expr() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("age", 30.into())]);
+    ins.on_conflict_do_update_expr(&["id"], RawSql::new(r#""age" = "age" + 1"#));
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "age") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "age" = "age" + 1"#
+    );
+    assert_eq!(binds, vec![Value::Int(1), Value::Int(30)]);
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_update_with_excluded() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[
+        ("id", 1.into()),
+        ("name", "Alice".into()),
+        ("age", 30.into()),
+    ]);
+    ins.on_conflict_do_update_with_excluded(&["id"], &["name", "age"]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "name", "age") VALUES (?, ?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "age" = EXCLUDED."age""#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::String("Alice".to_string()),
+            Value::Int(30),
+        ]
+    );
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_update_with_excluded_col() {
+    qbey_schema!(Employees, "employees", [id, name, age]);
+    let e = Employees::new();
+    let mut ins = qbey("employees").into_insert();
+    ins.add_value(&[
+        ("id", 1.into()),
+        ("name", "Alice".into()),
+        ("age", 30.into()),
+    ]);
+    ins.on_conflict_do_update_with_excluded(&[e.id()], &[e.name(), e.age()]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employees" ("id", "name", "age") VALUES (?, ?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "age" = EXCLUDED."age""#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::String("Alice".to_string()),
+            Value::Int(30),
+        ]
+    );
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+fn test_insert_on_conflict_do_update_with_pg_dialect() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    ins.on_conflict_do_update(&["id"], "name", "Bob");
+    let (sql, binds) = ins.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "name") VALUES ($1, $2) ON CONFLICT ("id") DO UPDATE SET "name" = $3"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::String("Alice".to_string()),
+            Value::String("Bob".to_string()),
+        ]
+    );
+}
+
+#[cfg(all(feature = "conflict", feature = "returning"))]
+#[test]
+fn test_insert_on_conflict_with_returning() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    ins.on_conflict_do_update_with_excluded(&["id"], &["name"]);
+    ins.returning(&[col("id"), col("name")]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "employee" ("id", "name") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name" RETURNING "id", "name""#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::Int(1), Value::String("Alice".to_string())]
+    );
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+#[should_panic(expected = "columns must not be empty")]
+fn test_insert_on_conflict_do_nothing_empty_columns_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into())]);
+    let empty: &[&str] = &[];
+    ins.on_conflict_do_nothing(empty);
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+#[should_panic(expected = "ON CONFLICT clause already set")]
+fn test_insert_on_conflict_called_twice_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    ins.on_conflict_do_nothing(&["id"]);
+    ins.on_conflict_do_update_with_excluded(&["id"], &["name"]);
+}
+
+#[cfg(feature = "conflict")]
+#[test]
+#[should_panic(expected = "update_columns must not be empty")]
+fn test_insert_on_conflict_do_update_with_excluded_empty_update_columns_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    let empty: &[&str] = &[];
+    ins.on_conflict_do_update_with_excluded(&["id"], empty);
+}
+
 #[test]
 fn test_insert_with_bytes_value() {
     let mut ins = qbey("files").into_insert();
