@@ -72,9 +72,42 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> Stri
                         crate::SetClause::Expr(expr) => {
                             items.push(expr.render(cfg, &mut bind_count));
                         }
+                        #[cfg(feature = "conflict")]
+                        crate::SetClause::Excluded(col) => {
+                            items.push(format!("{} = EXCLUDED.{}", (cfg.qi)(col), (cfg.qi)(col)));
+                        }
                     }
                 }
                 parts.push(format!("{} {}", keyword, items.join(", ")));
+            }
+            #[cfg(feature = "conflict")]
+            InsertToken::OnConflictDoNothing { columns } => {
+                let quoted: Vec<String> = columns.iter().map(|c| (cfg.qi)(c)).collect();
+                parts.push(format!("ON CONFLICT ({}) DO NOTHING", quoted.join(", ")));
+            }
+            #[cfg(feature = "conflict")]
+            InsertToken::OnConflictDoUpdate { columns, sets } => {
+                let quoted_cols: Vec<String> = columns.iter().map(|c| (cfg.qi)(c)).collect();
+                let mut items = Vec::new();
+                for clause in sets {
+                    match clause {
+                        crate::SetClause::Value(col, _val) => {
+                            bind_count += 1;
+                            items.push(format!("{} = {}", (cfg.qi)(col), (cfg.ph)(bind_count)));
+                        }
+                        crate::SetClause::Expr(expr) => {
+                            items.push(expr.render(cfg, &mut bind_count));
+                        }
+                        crate::SetClause::Excluded(col) => {
+                            items.push(format!("{} = EXCLUDED.{}", (cfg.qi)(col), (cfg.qi)(col)));
+                        }
+                    }
+                }
+                parts.push(format!(
+                    "ON CONFLICT ({}) DO UPDATE SET {}",
+                    quoted_cols.join(", "),
+                    items.join(", ")
+                ));
             }
             #[cfg(feature = "returning")]
             InsertToken::Returning(cols) => {

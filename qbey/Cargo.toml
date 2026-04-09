@@ -30,10 +30,11 @@ harness = false
 
 [features]
 returning = []
+conflict = []
 test-sqlx = []
 test-sqlx-mysql = []
 test-rusqlite = []
 test-tokio-postgres = []
 test-postgres = []
 test-libsql = []
-full = ["returning", "test-sqlx", "test-sqlx-mysql", "test-rusqlite", "test-tokio-postgres", "test-postgres", "test-libsql"]
+full = ["returning", "conflict", "test-sqlx", "test-sqlx-mysql", "test-rusqlite", "test-tokio-postgres", "test-postgres", "test-libsql"]

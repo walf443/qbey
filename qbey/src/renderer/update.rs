@@ -36,6 +36,10 @@ pub fn render_update<V: Clone>(tree: &UpdateTree<V>, cfg: &RenderConfig) -> Stri
                             format!("{} = {}", (cfg.qi)(col), placeholder)
                         }
                         SetClause::Expr(expr) => expr.render(cfg, &mut bind_count),
+                        #[cfg(feature = "conflict")]
+                        SetClause::Excluded(col) => {
+                            format!("{} = EXCLUDED.{}", (cfg.qi)(col), (cfg.qi)(col))
+                        }
                     })
                     .collect();
                 parts.push(format!("SET {}", set_items.join(", ")));

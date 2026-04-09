@@ -126,6 +126,15 @@ pub enum InsertToken<V: Clone = crate::Value> {
         keyword: String,
         sets: Vec<crate::SetClause<V>>,
     },
+    /// ON CONFLICT (...) DO NOTHING clause (PostgreSQL, SQLite).
+    #[cfg(feature = "conflict")]
+    OnConflictDoNothing { columns: Vec<String> },
+    /// ON CONFLICT (...) DO UPDATE SET ... clause (PostgreSQL, SQLite).
+    #[cfg(feature = "conflict")]
+    OnConflictDoUpdate {
+        columns: Vec<String>,
+        sets: Vec<crate::SetClause<V>>,
+    },
     /// RETURNING clause (non-standard SQL; PostgreSQL, SQLite, MariaDB).
     #[cfg(feature = "returning")]
     Returning(Vec<crate::Col>),
@@ -419,6 +428,8 @@ impl<V: Clone> UpdateTree<V> {
                                 crate::SetClause::Expr(e) => {
                                     crate::SetClause::Expr(e.map_values(f))
                                 }
+                                #[cfg(feature = "conflict")]
+                                crate::SetClause::Excluded(col) => crate::SetClause::Excluded(col),
                             })
                             .collect(),
                     ),
@@ -477,6 +488,34 @@ impl<V: Clone> InsertTree<V> {
                                     }
                                     crate::SetClause::Expr(e) => {
                                         crate::SetClause::Expr(e.map_values(f))
+                                    }
+                                    #[cfg(feature = "conflict")]
+                                    crate::SetClause::Excluded(col) => {
+                                        crate::SetClause::Excluded(col)
+                                    }
+                                })
+                                .collect(),
+                        }
+                    }
+                    #[cfg(feature = "conflict")]
+                    InsertToken::OnConflictDoNothing { columns } => {
+                        InsertToken::OnConflictDoNothing { columns }
+                    }
+                    #[cfg(feature = "conflict")]
+                    InsertToken::OnConflictDoUpdate { columns, sets } => {
+                        InsertToken::OnConflictDoUpdate {
+                            columns,
+                            sets: sets
+                                .into_iter()
+                                .map(|s| match s {
+                                    crate::SetClause::Value(col, val) => {
+                                        crate::SetClause::Value(col, f(val))
+                                    }
+                                    crate::SetClause::Expr(e) => {
+                                        crate::SetClause::Expr(e.map_values(f))
+                                    }
+                                    crate::SetClause::Excluded(col) => {
+                                        crate::SetClause::Excluded(col)
                                     }
                                 })
                                 .collect(),
@@ -714,6 +753,12 @@ fn drain_insert_tree_binds<V: Clone>(tree: InsertTree<V>, out: &mut Vec<V>) {
                 drain_set_clause_binds(sets, out);
             }
             InsertToken::InsertInto { .. } | InsertToken::Raw(_) => {}
+            #[cfg(feature = "conflict")]
+            InsertToken::OnConflictDoNothing { .. } => {}
+            #[cfg(feature = "conflict")]
+            InsertToken::OnConflictDoUpdate { sets, .. } => {
+                drain_set_clause_binds(sets, out);
+            }
             #[cfg(feature = "returning")]
             InsertToken::Returning(_) => {}
         }
@@ -766,6 +811,8 @@ fn drain_set_clause_binds<V: Clone>(sets: Vec<crate::SetClause<V>>, out: &mut Ve
         match clause {
             crate::SetClause::Value(_, val) => out.push(val),
             crate::SetClause::Expr(raw) => out.extend(raw.binds),
+            #[cfg(feature = "conflict")]
+            crate::SetClause::Excluded(_) => {}
         }
     }
 }
