@@ -73,8 +73,8 @@ pub fn render_insert<V: Clone>(tree: &InsertTree<V>, cfg: &RenderConfig) -> Stri
                             items.push(expr.render(cfg, &mut bind_count));
                         }
                         #[cfg(feature = "conflict")]
-                        crate::SetClause::Excluded(col) => {
-                            items.push(format!("{} = EXCLUDED.{}", (cfg.qi)(col), (cfg.qi)(col)));
+                        crate::SetClause::Excluded(_) => {
+                            unreachable!("SetClause::Excluded is only used in ON CONFLICT context")
                         }
                     }
                 }

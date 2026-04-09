@@ -432,6 +432,7 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// # Panics
     ///
     /// - Panics if `columns` is empty.
+    /// - Panics if `update_columns` is empty.
     /// - Panics if an ON CONFLICT clause has already been set.
     ///
     /// ```
@@ -452,6 +453,10 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
         assert!(
             !columns.is_empty(),
             "on_conflict_do_update_with_excluded: columns must not be empty"
+        );
+        assert!(
+            !update_columns.is_empty(),
+            "on_conflict_do_update_with_excluded: update_columns must not be empty"
         );
         assert!(
             self.on_conflict.is_none(),

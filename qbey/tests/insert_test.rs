@@ -520,6 +520,16 @@ fn test_insert_on_conflict_called_twice_panics() {
     ins.on_conflict_do_update_with_excluded(&["id"], &["name"]);
 }
 
+#[cfg(feature = "conflict")]
+#[test]
+#[should_panic(expected = "update_columns must not be empty")]
+fn test_insert_on_conflict_do_update_with_excluded_empty_update_columns_panics() {
+    let mut ins = qbey("employee").into_insert();
+    ins.add_value(&[("id", 1.into()), ("name", "Alice".into())]);
+    let empty: &[&str] = &[];
+    ins.on_conflict_do_update_with_excluded(&["id"], empty);
+}
+
 #[test]
 fn test_insert_with_bytes_value() {
     let mut ins = qbey("files").into_insert();
