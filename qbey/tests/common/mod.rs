@@ -60,7 +60,11 @@ macro_rules! define_shared_container {
 /// The default tag is the oldest MySQL release still under upstream maintenance —
 /// i.e. the minimum version this crate supports. It is deliberately NOT the
 /// latest release and should only move when the supported range changes. CI
-/// overrides `QBEY_TEST_MYSQL_TAG` to additionally run against the newest LTS.
+/// overrides `QBEY_TEST_MYSQL_TAG` to additionally run against a recent release.
+///
+/// NOTE: the same default is hardcoded in `qbey-mysql/tests/sqlx_mysql/common.rs`.
+/// Keep both in sync — otherwise the two crates would silently test
+/// different MySQL floors while the READMEs claim a single number.
 #[derive(Debug, Clone)]
 pub struct Mysql {
     tag: String,
@@ -120,7 +124,7 @@ impl testcontainers::Image for Mysql {
 /// The default tag is the oldest PostgreSQL release still under upstream maintenance —
 /// i.e. the minimum version this crate supports. It is deliberately NOT the
 /// latest release and should only move when the supported range changes. CI
-/// overrides `QBEY_TEST_POSTGRES_TAG` to additionally run against the newest LTS.
+/// overrides `QBEY_TEST_POSTGRES_TAG` to additionally run against a recent release.
 #[derive(Debug, Clone)]
 pub struct Postgres {
     tag: String,

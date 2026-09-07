@@ -36,17 +36,20 @@ assert_eq!(sql, r#"SELECT "employee"."id", "employee"."name" FROM "employee" WHE
 
 ## Supported database versions
 
-Integration tests run against both ends of the supported range: the minimum
-version listed below, and the newest stable release. The minimum is the oldest
-release still under upstream maintenance at the time it was chosen — it is
-deliberately not bumped just because a newer release exists, since raising it
-narrows what this library promises to work with.
+Integration tests run against both ends of the supported range. The minimum is
+the oldest release still under upstream maintenance at the time it was chosen —
+it is deliberately not bumped just because a newer release exists, since raising
+it narrows what this library promises to work with.
 
-| Database   | Minimum   | Also tested against |
-| ---------- | --------- | ------------------- |
-| PostgreSQL | 15        | 18                  |
-| MySQL      | 8.4 LTS   | 9.7 LTS             |
-| MariaDB    | 10.11 LTS | 12.3 LTS            |
+| Database   | Minimum   |
+| ---------- | --------- |
+| PostgreSQL | 15        |
+| MySQL      | 8.4 LTS   |
+| MariaDB    | 10.11 LTS |
+
+CI additionally runs every suite against a recent release of each, pinned in
+`.github/workflows/ci.yml` and kept current by Renovate. Those versions are not
+repeated here so that this table cannot drift out of date.
 
 Older releases are not tested and may still work; the floor reflects what is
 verified in CI, not the earliest version the generated SQL happens to parse on.

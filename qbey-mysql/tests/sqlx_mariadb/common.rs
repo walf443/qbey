@@ -155,7 +155,7 @@ pub fn bind_params<'a>(
 /// The default tag is the oldest MariaDB release still under upstream maintenance —
 /// i.e. the minimum version this crate supports. It is deliberately NOT the
 /// latest release and should only move when the supported range changes. CI
-/// overrides `QBEY_TEST_MARIADB_TAG` to additionally run against the newest LTS.
+/// overrides `QBEY_TEST_MARIADB_TAG` to additionally run against a recent release.
 #[derive(Debug, Clone)]
 pub struct Mariadb {
     tag: String,
