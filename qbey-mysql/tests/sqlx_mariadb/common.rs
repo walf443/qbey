@@ -149,10 +149,25 @@ pub fn bind_params<'a>(
 
 /// Minimal `mariadb` image definition.
 ///
-/// Replaces `testcontainers_modules::mariadb::Mariadb` so that this crate does
-/// not depend on the `testcontainers-modules` release cycle.
-#[derive(Debug, Default, Clone)]
-pub struct Mariadb;
+/// Replaces `testcontainers_modules::mariadb::Mariadb` so that this crate does not depend on
+/// the `testcontainers-modules` release cycle.
+///
+/// The default tag is the oldest MariaDB release still under upstream maintenance —
+/// i.e. the minimum version this crate supports. It is deliberately NOT the
+/// latest release and should only move when the supported range changes. CI
+/// overrides `QBEY_TEST_MARIADB_TAG` to additionally run against the newest LTS.
+#[derive(Debug, Clone)]
+pub struct Mariadb {
+    tag: String,
+}
+
+impl Default for Mariadb {
+    fn default() -> Self {
+        Self {
+            tag: std::env::var("QBEY_TEST_MARIADB_TAG").unwrap_or_else(|_| "10.11".to_owned()),
+        }
+    }
+}
 
 impl testcontainers::Image for Mariadb {
     fn name(&self) -> &str {
@@ -160,7 +175,7 @@ impl testcontainers::Image for Mariadb {
     }
 
     fn tag(&self) -> &str {
-        "11.3"
+        &self.tag
     }
 
     fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {

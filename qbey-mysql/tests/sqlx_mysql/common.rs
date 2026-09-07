@@ -166,10 +166,25 @@ pub fn bind_params<'a>(
 
 /// Minimal `mysql` image definition.
 ///
-/// Replaces `testcontainers_modules::mysql::Mysql` so that this crate does not
-/// depend on the `testcontainers-modules` release cycle.
-#[derive(Debug, Default, Clone)]
-pub struct Mysql;
+/// Replaces `testcontainers_modules::mysql::Mysql` so that this crate does not depend on
+/// the `testcontainers-modules` release cycle.
+///
+/// The default tag is the oldest MySQL release still under upstream maintenance —
+/// i.e. the minimum version this crate supports. It is deliberately NOT the
+/// latest release and should only move when the supported range changes. CI
+/// overrides `QBEY_TEST_MYSQL_TAG` to additionally run against the newest LTS.
+#[derive(Debug, Clone)]
+pub struct Mysql {
+    tag: String,
+}
+
+impl Default for Mysql {
+    fn default() -> Self {
+        Self {
+            tag: std::env::var("QBEY_TEST_MYSQL_TAG").unwrap_or_else(|_| "8.4".to_owned()),
+        }
+    }
+}
 
 impl testcontainers::Image for Mysql {
     fn name(&self) -> &str {
@@ -177,7 +192,7 @@ impl testcontainers::Image for Mysql {
     }
 
     fn tag(&self) -> &str {
-        "8.1"
+        &self.tag
     }
 
     fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
