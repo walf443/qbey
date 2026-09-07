@@ -2,5 +2,18 @@
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": [
     "config:base"
+  ],
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Track the newest database releases exercised by the CI test matrix. Only the 'max' axis is tracked here; the minimum supported versions are the defaults baked into the test helpers and are deliberately left for a human to bump, since raising them narrows the supported range.",
+      "datasourceTemplate": "docker",
+      "managerFilePatterns": [
+        "/^\\.github/workflows/ci\\.yml$/"
+      ],
+      "matchStrings": [
+        "#\\s*renovate: image=(?<depName>\\S+)\\s*\\n\\s*\\w+: \"(?<currentValue>[^\"]+)\""
+      ]
+    }
   ]
 }

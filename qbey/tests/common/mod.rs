@@ -69,7 +69,10 @@ pub struct Mysql {
 impl Default for Mysql {
     fn default() -> Self {
         Self {
-            tag: std::env::var("QBEY_TEST_MYSQL_TAG").unwrap_or_else(|_| "8.4".to_owned()),
+            tag: std::env::var("QBEY_TEST_MYSQL_TAG")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "8.4".to_owned()),
         }
     }
 }
@@ -126,7 +129,10 @@ pub struct Postgres {
 impl Default for Postgres {
     fn default() -> Self {
         Self {
-            tag: std::env::var("QBEY_TEST_POSTGRES_TAG").unwrap_or_else(|_| "15-alpine".to_owned()),
+            tag: std::env::var("QBEY_TEST_POSTGRES_TAG")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "15-alpine".to_owned()),
         }
     }
 }

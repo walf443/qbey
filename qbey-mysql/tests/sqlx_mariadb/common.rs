@@ -164,7 +164,10 @@ pub struct Mariadb {
 impl Default for Mariadb {
     fn default() -> Self {
         Self {
-            tag: std::env::var("QBEY_TEST_MARIADB_TAG").unwrap_or_else(|_| "10.11".to_owned()),
+            tag: std::env::var("QBEY_TEST_MARIADB_TAG")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "10.11".to_owned()),
         }
     }
 }

@@ -181,7 +181,10 @@ pub struct Mysql {
 impl Default for Mysql {
     fn default() -> Self {
         Self {
-            tag: std::env::var("QBEY_TEST_MYSQL_TAG").unwrap_or_else(|_| "8.4".to_owned()),
+            tag: std::env::var("QBEY_TEST_MYSQL_TAG")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "8.4".to_owned()),
         }
     }
 }
