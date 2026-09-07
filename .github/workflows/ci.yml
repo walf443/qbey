@@ -37,7 +37,7 @@ jobs:
             mysql_tag: ""
           - axis: max
             # renovate: image=mysql
-            mysql_tag: "9.7"
+            mysql_tag: "26.7"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -98,7 +98,7 @@ jobs:
             mariadb_tag: ""
           - axis: max
             # renovate: image=mysql
-            mysql_tag: "9.7"
+            mysql_tag: "26.7"
             # renovate: image=mariadb
             mariadb_tag: "12.3"
     runs-on: ubuntu-latest
