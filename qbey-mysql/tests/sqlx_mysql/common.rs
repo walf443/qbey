@@ -1,7 +1,6 @@
 use sqlx::MySqlPool;
 use std::sync::atomic::Ordering::Relaxed;
 use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::mysql::Mysql;
 
 // NOTE: The same macro is defined in `qbey/tests/common/mod.rs`.
 // Keep both in sync when making changes.
@@ -163,4 +162,68 @@ pub fn bind_params<'a>(
         };
     }
     query
+}
+
+/// Minimal `mysql` image definition.
+///
+/// Replaces `testcontainers_modules::mysql::Mysql` so that this crate does not depend on
+/// the `testcontainers-modules` release cycle.
+///
+/// The default tag is the oldest MySQL release still under upstream maintenance —
+/// i.e. the minimum version this crate supports. It is deliberately NOT the
+/// latest release and should only move when the supported range changes. CI
+/// overrides `QBEY_TEST_MYSQL_TAG` to additionally run against a recent release.
+///
+/// NOTE: the same default is hardcoded in `qbey/tests/common/mod.rs`.
+/// Keep both in sync — otherwise the two crates would silently test
+/// different MySQL floors while the READMEs claim a single number.
+#[derive(Debug, Clone)]
+pub struct Mysql {
+    tag: String,
+}
+
+impl Default for Mysql {
+    fn default() -> Self {
+        Self {
+            tag: std::env::var("QBEY_TEST_MYSQL_TAG")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "8.4".to_owned()),
+        }
+    }
+}
+
+impl testcontainers::Image for Mysql {
+    fn name(&self) -> &str {
+        "mysql"
+    }
+
+    fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
+        vec![
+            testcontainers::core::WaitFor::message_on_stderr(
+                "X Plugin ready for connections. Bind-address",
+            ),
+            testcontainers::core::WaitFor::message_on_stderr(
+                "/usr/sbin/mysqld: ready for connections.",
+            ),
+        ]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
+        [
+            ("MYSQL_DATABASE", "test"),
+            ("MYSQL_ALLOW_EMPTY_PASSWORD", "yes"),
+        ]
+    }
 }

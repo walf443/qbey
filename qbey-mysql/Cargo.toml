@@ -18,7 +18,6 @@ sqlx = { version = "0.9", features = ["runtime-tokio", "mysql"] }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 testcontainers = { version = "0.27", features = ["watchdog"] }
 dtor = "1.0"
-testcontainers-modules = { version = "0.15", features = ["mysql", "mariadb"] }
 
 [features]
 returning = ["qbey/returning"]

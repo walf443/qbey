@@ -26,7 +26,18 @@ jobs:
       - run: cargo build --workspace --all-targets --features full
 
   test-qbey:
+    name: test-qbey (${{ matrix.axis }})
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - axis: min
+            # Empty: use the crate default, i.e. the minimum supported version.
+            mysql_tag: ""
+          - axis: max
+            # renovate: image=mysql
+            mysql_tag: "9.7"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -41,9 +52,22 @@ jobs:
           shared-key: cargo-full
           save-if: false
       - run: cargo test -p qbey --features returning,conflict,test-sqlx,test-sqlx-mysql,test-rusqlite,test-libsql
+        env:
+          QBEY_TEST_MYSQL_TAG: ${{ matrix.mysql_tag }}
 
   test-qbey-postgres:
+    name: test-qbey-postgres (${{ matrix.axis }})
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - axis: min
+            # Empty: use the crate default, i.e. the minimum supported version.
+            postgres_tag: ""
+          - axis: max
+            # renovate: image=postgres
+            postgres_tag: "18-alpine"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -58,9 +82,25 @@ jobs:
           shared-key: cargo-full
           save-if: false
       - run: cargo test -p qbey --features returning,conflict,test-tokio-postgres,test-postgres
+        env:
+          QBEY_TEST_POSTGRES_TAG: ${{ matrix.postgres_tag }}
 
   test-qbey-mysql:
+    name: test-qbey-mysql (${{ matrix.axis }})
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - axis: min
+            # Empty: use the crate default, i.e. the minimum supported version.
+            mysql_tag: ""
+            mariadb_tag: ""
+          - axis: max
+            # renovate: image=mysql
+            mysql_tag: "9.7"
+            # renovate: image=mariadb
+            mariadb_tag: "12.3"
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -75,6 +115,9 @@ jobs:
           shared-key: cargo-full
           save-if: false
       - run: cargo test -p qbey-mysql --features full
+        env:
+          QBEY_TEST_MYSQL_TAG: ${{ matrix.mysql_tag }}
+          QBEY_TEST_MARIADB_TAG: ${{ matrix.mariadb_tag }}
 
   fmt:
     runs-on: ubuntu-latest

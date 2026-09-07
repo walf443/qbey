@@ -222,6 +222,11 @@ assert_eq!(sql, "DELETE FROM `users` WHERE `dept` = ? ORDER BY `created_at` ASC 
 MariaDB 10.5+ supports RETURNING for INSERT and DELETE (not UPDATE).
 Not supported by MySQL. Enable via `features = ["returning"]` in `Cargo.toml`.
 
+Note that 10.5 is when MariaDB gained the feature, not the range this crate
+verifies: integration tests run against MariaDB 10.11 — the oldest release still
+under upstream maintenance — as well as a recent release pinned in
+`.github/workflows/ci.yml`.
+
 ```rust
 # #[cfg(feature = "returning")]
 # {

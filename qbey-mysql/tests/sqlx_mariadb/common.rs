@@ -1,7 +1,6 @@
 use sqlx::MySqlPool;
 use std::sync::atomic::Ordering::Relaxed;
 use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::mariadb::Mariadb;
 
 // NOTE: The same macro is defined in `qbey/tests/common/mod.rs`.
 // Keep both in sync when making changes.
@@ -146,4 +145,60 @@ pub fn bind_params<'a>(
         };
     }
     query
+}
+
+/// Minimal `mariadb` image definition.
+///
+/// Replaces `testcontainers_modules::mariadb::Mariadb` so that this crate does not depend on
+/// the `testcontainers-modules` release cycle.
+///
+/// The default tag is the oldest MariaDB release still under upstream maintenance —
+/// i.e. the minimum version this crate supports. It is deliberately NOT the
+/// latest release and should only move when the supported range changes. CI
+/// overrides `QBEY_TEST_MARIADB_TAG` to additionally run against a recent release.
+#[derive(Debug, Clone)]
+pub struct Mariadb {
+    tag: String,
+}
+
+impl Default for Mariadb {
+    fn default() -> Self {
+        Self {
+            tag: std::env::var("QBEY_TEST_MARIADB_TAG")
+                .ok()
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "10.11".to_owned()),
+        }
+    }
+}
+
+impl testcontainers::Image for Mariadb {
+    fn name(&self) -> &str {
+        "mariadb"
+    }
+
+    fn tag(&self) -> &str {
+        &self.tag
+    }
+
+    fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
+        vec![
+            testcontainers::core::WaitFor::message_on_stderr("mariadbd: ready for connections."),
+            testcontainers::core::WaitFor::message_on_stderr("port: 3306"),
+        ]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
+        [
+            ("MARIADB_DATABASE", "test"),
+            ("MARIADB_ALLOW_EMPTY_ROOT_PASSWORD", "1"),
+        ]
+    }
 }
