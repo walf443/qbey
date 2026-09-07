@@ -8,12 +8,12 @@ use qbey::{
 use sqlx::{MySqlPool, Row};
 use std::sync::atomic::Ordering::Relaxed;
 use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::mysql::Mysql;
 
 static DIALECT: qbey::MySqlDialect = qbey::MySqlDialect;
 
 #[macro_use]
 mod common;
+use common::Mysql;
 define_shared_container!(Mysql, 3306);
 
 /// Custom value type for MySQL — maps directly to sqlx bind types.

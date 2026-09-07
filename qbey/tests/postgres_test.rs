@@ -7,12 +7,12 @@ use qbey::{
 };
 use std::sync::atomic::Ordering::Relaxed;
 use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::postgres::Postgres;
 
 use qbey::PgDialect as PostgresDialect;
 
 #[macro_use]
 mod common;
+use common::Postgres;
 define_shared_container!(Postgres, 5432);
 
 /// Custom value type for PostgreSQL — stores i32 directly.

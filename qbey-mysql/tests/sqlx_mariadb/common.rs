@@ -1,7 +1,6 @@
 use sqlx::MySqlPool;
 use std::sync::atomic::Ordering::Relaxed;
 use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::mariadb::Mariadb;
 
 // NOTE: The same macro is defined in `qbey/tests/common/mod.rs`.
 // Keep both in sync when making changes.
@@ -146,4 +145,42 @@ pub fn bind_params<'a>(
         };
     }
     query
+}
+
+/// Minimal `mariadb` image definition.
+///
+/// Replaces `testcontainers_modules::mariadb::Mariadb` so that this crate does
+/// not depend on the `testcontainers-modules` release cycle.
+#[derive(Debug, Default, Clone)]
+pub struct Mariadb;
+
+impl testcontainers::Image for Mariadb {
+    fn name(&self) -> &str {
+        "mariadb"
+    }
+
+    fn tag(&self) -> &str {
+        "11.3"
+    }
+
+    fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
+        vec![
+            testcontainers::core::WaitFor::message_on_stderr("mariadbd: ready for connections."),
+            testcontainers::core::WaitFor::message_on_stderr("port: 3306"),
+        ]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
+        [
+            ("MARIADB_DATABASE", "test"),
+            ("MARIADB_ALLOW_EMPTY_ROOT_PASSWORD", "1"),
+        ]
+    }
 }

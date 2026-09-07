@@ -1,7 +1,6 @@
 use sqlx::MySqlPool;
 use std::sync::atomic::Ordering::Relaxed;
 use testcontainers::runners::AsyncRunner;
-use testcontainers_modules::mysql::Mysql;
 
 // NOTE: The same macro is defined in `qbey/tests/common/mod.rs`.
 // Keep both in sync when making changes.
@@ -163,4 +162,46 @@ pub fn bind_params<'a>(
         };
     }
     query
+}
+
+/// Minimal `mysql` image definition.
+///
+/// Replaces `testcontainers_modules::mysql::Mysql` so that this crate does not
+/// depend on the `testcontainers-modules` release cycle.
+#[derive(Debug, Default, Clone)]
+pub struct Mysql;
+
+impl testcontainers::Image for Mysql {
+    fn name(&self) -> &str {
+        "mysql"
+    }
+
+    fn tag(&self) -> &str {
+        "8.1"
+    }
+
+    fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
+        vec![
+            testcontainers::core::WaitFor::message_on_stderr(
+                "X Plugin ready for connections. Bind-address",
+            ),
+            testcontainers::core::WaitFor::message_on_stderr(
+                "/usr/sbin/mysqld: ready for connections.",
+            ),
+        ]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
+        [
+            ("MYSQL_DATABASE", "test"),
+            ("MYSQL_ALLOW_EMPTY_PASSWORD", "yes"),
+        ]
+    }
 }

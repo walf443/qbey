@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 /// Defines `SharedContainer`, a static `OnceCell`, a `#[dtor::dtor]` cleanup
 /// function, and `get_shared_container()` for the given testcontainers image
 /// and port.
@@ -48,4 +50,94 @@ macro_rules! define_shared_container {
                 .await
         }
     };
+}
+
+/// Minimal `mysql` image definition.
+///
+/// Replaces `testcontainers_modules::mysql::Mysql` so that this crate does not
+/// depend on the `testcontainers-modules` release cycle.
+#[derive(Debug, Default, Clone)]
+pub struct Mysql;
+
+impl testcontainers::Image for Mysql {
+    fn name(&self) -> &str {
+        "mysql"
+    }
+
+    fn tag(&self) -> &str {
+        "8.1"
+    }
+
+    fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
+        vec![
+            testcontainers::core::WaitFor::message_on_stderr(
+                "X Plugin ready for connections. Bind-address",
+            ),
+            testcontainers::core::WaitFor::message_on_stderr(
+                "/usr/sbin/mysqld: ready for connections.",
+            ),
+        ]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
+        [
+            ("MYSQL_DATABASE", "test"),
+            ("MYSQL_ALLOW_EMPTY_PASSWORD", "yes"),
+        ]
+    }
+}
+
+/// Minimal `postgres` image definition.
+///
+/// Replaces `testcontainers_modules::postgres::Postgres` so that this crate does
+/// not depend on the `testcontainers-modules` release cycle.
+#[derive(Debug, Default, Clone)]
+pub struct Postgres;
+
+impl testcontainers::Image for Postgres {
+    fn name(&self) -> &str {
+        "postgres"
+    }
+
+    fn tag(&self) -> &str {
+        "11-alpine"
+    }
+
+    fn ready_conditions(&self) -> Vec<testcontainers::core::WaitFor> {
+        vec![
+            testcontainers::core::WaitFor::message_on_stderr(
+                "database system is ready to accept connections",
+            ),
+            testcontainers::core::WaitFor::message_on_stdout(
+                "database system is ready to accept connections",
+            ),
+        ]
+    }
+
+    fn env_vars(
+        &self,
+    ) -> impl IntoIterator<
+        Item = (
+            impl Into<std::borrow::Cow<'_, str>>,
+            impl Into<std::borrow::Cow<'_, str>>,
+        ),
+    > {
+        [
+            ("POSTGRES_DB", "postgres"),
+            ("POSTGRES_USER", "postgres"),
+            ("POSTGRES_PASSWORD", "postgres"),
+        ]
+    }
+
+    /// Matches the `testcontainers-modules` default: disable fsync for speed.
+    fn cmd(&self) -> impl IntoIterator<Item = impl Into<std::borrow::Cow<'_, str>>> {
+        ["-c", "fsync=off"]
+    }
 }
