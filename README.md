@@ -919,7 +919,8 @@ assert_eq!(binds, vec![Value::Int(7), Value::String("hello".to_string())]);
 earlier value, so a default followed by a conditional override works. Every row
 in one INSERT must have the same set of columns (`add_value()` panics
 otherwise), so rows that differ in which columns are set belong in separate
-INSERT statements. The bind type `V` is inferred at `add_value()`; write
+INSERT statements, and a row on which no setter was called must not be passed
+to `add_value()` at all. The bind type `V` is inferred at `add_value()`; write
 `CommentsRow<Value>` (or just `CommentsRow`) when returning a row from a helper
 function.
 

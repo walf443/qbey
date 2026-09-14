@@ -189,7 +189,8 @@
 /// INSERT must have the same set of columns — `add_value()` panics
 /// otherwise — so a column set conditionally must be conditional in the same
 /// way for all rows of that statement, or the rows split into separate
-/// INSERTs.
+/// INSERTs. A row on which no setter was called is empty, and `add_value()`
+/// panics on it, so guard the call when every column is conditional.
 ///
 /// `V` (the bind type) is inferred at the `add_value()` call; name it as
 /// `CommentsRow<Value>` (or just `CommentsRow`, whose default is
