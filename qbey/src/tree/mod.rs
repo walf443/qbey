@@ -58,7 +58,7 @@ impl<V: Clone> FromClause<V> {
 /// What the SELECT clause looks like.
 #[derive(Debug, Clone)]
 pub enum SelectClause<V: Clone = crate::Value> {
-    /// SELECT [DISTINCT] * or SELECT [DISTINCT] col1, col2, ...
+    /// SELECT \[DISTINCT\] * or SELECT \[DISTINCT\] col1, col2, ...
     Columns {
         items: Vec<SelectItem<V>>,
         distinct: bool,
