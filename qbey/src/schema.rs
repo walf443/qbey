@@ -107,13 +107,13 @@
 ///     fn from(id: UserId) -> Self { Value::Int(id.0) }
 /// }
 ///
-/// qbey_schema!(Livecomments, "livecomments", [user_id: UserId, tip: i64]);
+/// qbey_schema!(Comments, "comments", [user_id: UserId, likes: i64]);
 ///
-/// let t = Livecomments::new();
+/// let t = Comments::new();
 /// let mut q = qbey(&t);
 /// q.and_where(t.user_id().eq(UserId(7)));
 /// let (sql, binds) = q.to_sql();
-/// assert_eq!(sql, r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" = ?"#);
+/// assert_eq!(sql, r#"SELECT * FROM "comments" WHERE "comments"."user_id" = ?"#);
 /// assert_eq!(binds, vec![Value::Int(7)]);
 /// ```
 ///

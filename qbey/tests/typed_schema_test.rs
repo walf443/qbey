@@ -13,7 +13,7 @@ struct UserId(i64);
 
 /// A second ID type — distinct from `UserId` even though both wrap `i64`.
 #[derive(Debug, Clone, PartialEq)]
-struct LivestreamId(i64);
+struct PostId(i64);
 
 impl From<UserId> for Value {
     fn from(id: UserId) -> Self {
@@ -21,38 +21,38 @@ impl From<UserId> for Value {
     }
 }
 
-impl From<LivestreamId> for Value {
-    fn from(id: LivestreamId) -> Self {
+impl From<PostId> for Value {
+    fn from(id: PostId) -> Self {
         Value::Int(id.0)
     }
 }
 
-qbey_schema!(Livecomments, "livecomments", [
-    id: LivestreamCommentId,
+qbey_schema!(Comments, "comments", [
+    id: CommentId,
     user_id: UserId,
-    livestream_id: LivestreamId,
-    comment: String,
-    tip: i64,
+    post_id: PostId,
+    body: String,
+    likes: i64,
 ]);
 
 #[derive(Debug, Clone, PartialEq)]
-struct LivestreamCommentId(i64);
+struct CommentId(i64);
 
-impl From<LivestreamCommentId> for Value {
-    fn from(id: LivestreamCommentId) -> Self {
+impl From<CommentId> for Value {
+    fn from(id: CommentId) -> Self {
         Value::Int(id.0)
     }
 }
 
 #[test]
 fn typed_col_eq_binds_through_into_value() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
     q.and_where(t.user_id().eq(UserId(7)));
     let (sql, binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" = ?"#
+        r#"SELECT * FROM "comments" WHERE "comments"."user_id" = ?"#
     );
     assert_eq!(binds, vec![Value::Int(7)]);
 }
@@ -60,7 +60,7 @@ fn typed_col_eq_binds_through_into_value() {
 #[test]
 fn typed_col_eq_accepts_reference() {
     let user_id = UserId(7);
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
     q.and_where(t.user_id().eq(&user_id));
     let (_sql, binds) = q.to_sql();
@@ -71,27 +71,27 @@ fn typed_col_eq_accepts_reference() {
 
 #[test]
 fn typed_string_col_accepts_str_literal() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
-    q.and_where(t.comment().eq("hello"));
+    q.and_where(t.body().eq("hello"));
     let (sql, binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."comment" = ?"#
+        r#"SELECT * FROM "comments" WHERE "comments"."body" = ?"#
     );
     assert_eq!(binds, vec![Value::String("hello".to_string())]);
 }
 
 #[test]
 fn typed_col_comparisons() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
-    q.and_where(t.tip().gt(100));
-    q.and_where(t.tip().lte(1000));
+    q.and_where(t.likes().gt(100));
+    q.and_where(t.likes().lte(1000));
     let (sql, binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."tip" > ? AND "livecomments"."tip" <= ?"#
+        r#"SELECT * FROM "comments" WHERE "comments"."likes" > ? AND "comments"."likes" <= ?"#
     );
     assert_eq!(binds, vec![Value::Int(100), Value::Int(1000)]);
 }
@@ -99,13 +99,13 @@ fn typed_col_comparisons() {
 #[test]
 fn typed_col_included_takes_slice_of_the_column_type() {
     let ids = vec![UserId(1), UserId(2), UserId(3)];
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
     q.and_where(t.user_id().included(&ids));
     let (sql, binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" IN (?, ?, ?)"#
+        r#"SELECT * FROM "comments" WHERE "comments"."user_id" IN (?, ?, ?)"#
     );
     assert_eq!(binds, vec![Value::Int(1), Value::Int(2), Value::Int(3)]);
 }
@@ -113,79 +113,79 @@ fn typed_col_included_takes_slice_of_the_column_type() {
 #[test]
 fn typed_col_not_included() {
     let ids = vec![UserId(1)];
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
     q.and_where(t.user_id().not_included(&ids));
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" NOT IN (?)"#
+        r#"SELECT * FROM "comments" WHERE "comments"."user_id" NOT IN (?)"#
     );
 }
 
 #[test]
 fn typed_col_between_and_range() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
-    q.and_where(t.tip().between(10, 20));
+    q.and_where(t.likes().between(10, 20));
     let (sql, binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."tip" BETWEEN ? AND ?"#
+        r#"SELECT * FROM "comments" WHERE "comments"."likes" BETWEEN ? AND ?"#
     );
     assert_eq!(binds, vec![Value::Int(10), Value::Int(20)]);
 
     let mut q2 = qbey(&t);
-    q2.and_where(t.tip().in_range(10..20));
+    q2.and_where(t.likes().in_range(10..20));
     let (sql2, _) = q2.to_sql();
     assert_eq!(
         sql2,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."tip" >= ? AND "livecomments"."tip" < ?"#
+        r#"SELECT * FROM "comments" WHERE "comments"."likes" >= ? AND "comments"."likes" < ?"#
     );
 }
 
-qbey_schema!(Livestreams, "livestreams", [
-    id: LivestreamId,
-    owner_id: UserId,
+qbey_schema!(Posts, "posts", [
+    id: PostId,
+    author_id: UserId,
     title: String,
 ]);
 
 #[test]
 fn typed_join_on_matching_id_types() {
-    let c = Livecomments::new();
-    let s = Livestreams::new();
+    let c = Comments::new();
+    let s = Posts::new();
     let mut q = qbey(&c);
-    q.join(&s, c.livestream_id().eq(s.id()));
+    q.join(&s, c.post_id().eq(s.id()));
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" INNER JOIN "livestreams" ON "livecomments"."livestream_id" = "livestreams"."id""#
+        r#"SELECT * FROM "comments" INNER JOIN "posts" ON "comments"."post_id" = "posts"."id""#
     );
 }
 
 #[test]
 fn typed_col_works_in_select_and_order_by() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
     q.select(&t.all_columns());
-    q.order_by(t.tip().desc());
+    q.order_by(t.likes().desc());
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT "livecomments"."id", "livecomments"."user_id", "livecomments"."livestream_id", "livecomments"."comment", "livecomments"."tip" FROM "livecomments" ORDER BY "livecomments"."tip" DESC"#
+        r#"SELECT "comments"."id", "comments"."user_id", "comments"."post_id", "comments"."body", "comments"."likes" FROM "comments" ORDER BY "comments"."likes" DESC"#
     );
 }
 
 #[test]
 fn typed_col_alias_keeps_the_type() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
-    q.add_select(t.tip().as_("amount"));
-    q.and_where(t.tip().eq(5i64));
+    q.add_select(t.likes().as_("amount"));
+    q.and_where(t.likes().eq(5i64));
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT "livecomments"."tip" AS "amount" FROM "livecomments" WHERE "livecomments"."tip" = ?"#
+        r#"SELECT "comments"."likes" AS "amount" FROM "comments" WHERE "comments"."likes" = ?"#
     );
 }
 
@@ -193,14 +193,14 @@ fn typed_col_alias_keeps_the_type() {
 /// must be unwrapped with `into_col()` first.
 #[test]
 fn mixed_type_select_via_into_col() {
-    let t = Livecomments::new();
-    let cols: Vec<Col> = vec![t.id().into_col(), t.comment().into_col()];
+    let t = Comments::new();
+    let cols: Vec<Col> = vec![t.id().into_col(), t.body().into_col()];
     let mut q = qbey(&t);
     q.select(&cols);
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT "livecomments"."id", "livecomments"."comment" FROM "livecomments""#
+        r#"SELECT "comments"."id", "comments"."body" FROM "comments""#
     );
 }
 
@@ -256,14 +256,14 @@ impl From<&str> for MyValue {
 
 #[test]
 fn typed_col_with_custom_value_type() {
-    let t = Livecomments::new();
-    let mut q = qbey_with::<MyValue>("livecomments");
+    let t = Comments::new();
+    let mut q = qbey_with::<MyValue>("comments");
     q.and_where(t.user_id().eq(UserId(9)));
-    q.and_where(t.comment().eq("hi".to_string()));
+    q.and_where(t.body().eq("hi".to_string()));
     let (sql, binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" = ? AND "livecomments"."comment" = ?"#
+        r#"SELECT * FROM "comments" WHERE "comments"."user_id" = ? AND "comments"."body" = ?"#
     );
     assert_eq!(
         binds,
@@ -273,7 +273,7 @@ fn typed_col_with_custom_value_type() {
 
 #[test]
 fn typed_col_interoperates_with_plain_col() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut q = qbey(&t);
     // A plain `col()` comparison still works alongside typed ones.
     q.and_where(col("deleted_at").eq("x"));
@@ -281,20 +281,20 @@ fn typed_col_interoperates_with_plain_col() {
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" WHERE "deleted_at" = ? AND "livecomments"."user_id" = ?"#
+        r#"SELECT * FROM "comments" WHERE "deleted_at" = ? AND "comments"."user_id" = ?"#
     );
 }
 
 #[test]
 fn typed_col_order_by_asc_returns_order_by_clause() {
-    let t = Livecomments::new();
-    let clause: OrderByClause = t.tip().asc();
+    let t = Comments::new();
+    let clause: OrderByClause = t.likes().asc();
     let mut q = qbey(&t);
     q.order_by(clause);
     let (sql, _binds) = q.to_sql();
     assert_eq!(
         sql,
-        r#"SELECT * FROM "livecomments" ORDER BY "livecomments"."tip" ASC"#
+        r#"SELECT * FROM "comments" ORDER BY "comments"."likes" ASC"#
     );
 }
 
@@ -302,16 +302,16 @@ fn typed_col_order_by_asc_returns_order_by_clause() {
 
 #[test]
 fn typed_update_set_and_where() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut u = qbey(&t).into_update();
-    u.set(t.tip(), 100i64);
-    u.set(t.comment(), "edited");
+    u.set(t.likes(), 100i64);
+    u.set(t.body(), "edited");
     let u = u.and_where(t.user_id().eq(UserId(7)));
     let (sql, binds) = u.to_sql();
     // SET uses the bare column name even though the schema column is qualified.
     assert_eq!(
         sql,
-        r#"UPDATE "livecomments" SET "tip" = ?, "comment" = ? WHERE "livecomments"."user_id" = ?"#
+        r#"UPDATE "comments" SET "likes" = ?, "body" = ? WHERE "comments"."user_id" = ?"#
     );
     assert_eq!(
         binds,
@@ -325,14 +325,14 @@ fn typed_update_set_and_where() {
 
 #[test]
 fn typed_update_set_accepts_reference() {
-    let owner = UserId(3);
-    let s = Livestreams::new();
+    let author = UserId(3);
+    let s = Posts::new();
     let mut u = qbey(&s).into_update();
-    u.set(s.owner_id(), &owner);
-    let u = u.and_where(s.id().eq(LivestreamId(1)));
+    u.set(s.author_id(), &author);
+    let u = u.and_where(s.id().eq(PostId(1)));
     let (_sql, binds) = u.to_sql();
     assert_eq!(binds, vec![Value::Int(3), Value::Int(1)]);
-    assert_eq!(owner, UserId(3));
+    assert_eq!(author, UserId(3));
 }
 
 #[test]
@@ -360,14 +360,14 @@ fn untyped_set_still_takes_plain_col() {
 
 #[test]
 fn typed_update_set_with_custom_value_type() {
-    let t = Livecomments::new();
-    let mut u = qbey_with::<MyValue>("livecomments").into_update();
-    u.set(t.comment(), "hi");
+    let t = Comments::new();
+    let mut u = qbey_with::<MyValue>("comments").into_update();
+    u.set(t.body(), "hi");
     let u = u.and_where(t.user_id().eq(UserId(9)));
     let (sql, binds) = u.to_sql();
     assert_eq!(
         sql,
-        r#"UPDATE "livecomments" SET "comment" = ? WHERE "livecomments"."user_id" = ?"#
+        r#"UPDATE "comments" SET "body" = ? WHERE "comments"."user_id" = ?"#
     );
     assert_eq!(
         binds,
@@ -379,18 +379,18 @@ fn typed_update_set_with_custom_value_type() {
 
 #[test]
 fn typed_insert_row_from_value_pairs() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut ins = qbey(&t).into_insert();
     ins.add_value(&[
         t.user_id().value(UserId(1)),
-        t.livestream_id().value(LivestreamId(2)),
-        t.comment().value("hi"),
-        t.tip().value(100i64),
+        t.post_id().value(PostId(2)),
+        t.body().value("hi"),
+        t.likes().value(100i64),
     ]);
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
-        r#"INSERT INTO "livecomments" ("user_id", "livestream_id", "comment", "tip") VALUES (?, ?, ?, ?)"#
+        r#"INSERT INTO "comments" ("user_id", "post_id", "body", "likes") VALUES (?, ?, ?, ?)"#
     );
     assert_eq!(
         binds,
@@ -407,16 +407,16 @@ fn typed_insert_row_from_value_pairs() {
 /// row in a separate statement must still infer.
 #[test]
 fn typed_insert_row_built_separately() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let user_id = UserId(1);
-    let row = [t.user_id().value(&user_id), t.comment().value("hi")];
+    let row = [t.user_id().value(&user_id), t.body().value("hi")];
     let mut ins = qbey(&t).into_insert();
     ins.add_value(&row);
-    ins.add_value(&[t.comment().value("second"), t.user_id().value(UserId(2))]);
+    ins.add_value(&[t.body().value("second"), t.user_id().value(UserId(2))]);
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
-        r#"INSERT INTO "livecomments" ("user_id", "comment") VALUES (?, ?), (?, ?)"#
+        r#"INSERT INTO "comments" ("user_id", "body") VALUES (?, ?), (?, ?)"#
     );
     assert_eq!(
         binds,
@@ -431,16 +431,16 @@ fn typed_insert_row_built_separately() {
 
 #[test]
 fn typed_insert_rows_from_vec_via_add_values() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let rows: Vec<Vec<(String, Value)>> = (1..=2)
-        .map(|i| vec![t.user_id().value(UserId(i)), t.tip().value(i * 10)])
+        .map(|i| vec![t.user_id().value(UserId(i)), t.likes().value(i * 10)])
         .collect();
     let mut ins = qbey(&t).into_insert();
     ins.add_values(&rows);
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
-        r#"INSERT INTO "livecomments" ("user_id", "tip") VALUES (?, ?), (?, ?)"#
+        r#"INSERT INTO "comments" ("user_id", "likes") VALUES (?, ?), (?, ?)"#
     );
     assert_eq!(
         binds,
@@ -463,9 +463,9 @@ fn untyped_col_value_pairs_in_insert() {
 
 #[test]
 fn typed_insert_with_custom_value_type() {
-    let t = Livecomments::new();
-    let mut ins = qbey_with::<MyValue>("livecomments").into_insert();
-    ins.add_value(&[t.user_id().value(UserId(4)), t.comment().value("yo")]);
+    let t = Comments::new();
+    let mut ins = qbey_with::<MyValue>("comments").into_insert();
+    ins.add_value(&[t.user_id().value(UserId(4)), t.body().value("yo")]);
     let (_sql, binds) = ins.to_sql();
     assert_eq!(
         binds,
@@ -479,14 +479,14 @@ fn typed_insert_with_custom_value_type() {
 #[cfg(feature = "conflict")]
 #[test]
 fn typed_col_in_on_conflict_do_update() {
-    let t = Livecomments::new();
+    let t = Comments::new();
     let mut ins = qbey(&t).into_insert();
-    ins.add_value(&[t.id().value(LivestreamCommentId(1)), t.tip().value(5i64)]);
-    ins.on_conflict_do_update(&[t.id()], t.tip(), 6i64);
+    ins.add_value(&[t.id().value(CommentId(1)), t.likes().value(5i64)]);
+    ins.on_conflict_do_update(&[t.id()], t.likes(), 6i64);
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
-        r#"INSERT INTO "livecomments" ("id", "tip") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "tip" = ?"#
+        r#"INSERT INTO "comments" ("id", "likes") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "likes" = ?"#
     );
     assert_eq!(binds, vec![Value::Int(1), Value::Int(5), Value::Int(6)]);
 }
@@ -495,10 +495,10 @@ fn typed_col_in_on_conflict_do_update() {
 /// `on_conflict_do_update()`; the name is quoted, never parameterized.
 #[test]
 fn set_accepts_str_column_name() {
-    let mut u = qbey("livecomments").into_update();
-    u.set("tip", 1i64);
+    let mut u = qbey("comments").into_update();
+    u.set("likes", 1i64);
     let u = u.allow_without_where();
     let (sql, binds) = u.to_sql();
-    assert_eq!(sql, r#"UPDATE "livecomments" SET "tip" = ?"#);
+    assert_eq!(sql, r#"UPDATE "comments" SET "likes" = ?"#);
     assert_eq!(binds, vec![Value::Int(1)]);
 }
