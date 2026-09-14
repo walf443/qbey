@@ -1499,3 +1499,42 @@ fn test_typed_schema_insert_and_update() {
         .unwrap();
     assert_eq!((name.as_str(), age), ("David", 41));
 }
+
+/// The generated row builder executes end to end.
+#[test]
+fn test_schema_row_builder_insert() {
+    use qbey::qbey_schema;
+
+    #[derive(Debug, Clone)]
+    struct UserId(i64);
+    impl From<UserId> for SqliteValue {
+        fn from(id: UserId) -> Self {
+            SqliteValue::Integer(id.0)
+        }
+    }
+    qbey_schema!(Users, "users", [id: UserId, name: String, age: i64], row = UsersRow);
+
+    let conn = setup_db();
+    let t = Users::new();
+
+    let mut ins = qbey_with::<SqliteValue>(&t).into_insert();
+    ins.add_value(t.row().id(UserId(5)).name("Eve").age(28i64));
+    ins.add_value(t.row().age(29i64).name("Frank").id(UserId(6)));
+    let (sql, binds) = ins.to_sql();
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    let mut stmt = conn
+        .prepare(r#"SELECT "name", "age" FROM "users" WHERE "id" >= 5 ORDER BY "id""#)
+        .unwrap();
+    let rows: Vec<(String, i64)> = stmt
+        .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+    assert_eq!(
+        rows,
+        vec![("Eve".to_string(), 28), ("Frank".to_string(), 29)]
+    );
+}
