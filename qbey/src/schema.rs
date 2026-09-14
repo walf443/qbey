@@ -92,8 +92,9 @@
 ///
 /// A column declared as `name: Type` produces a
 /// [`TypedCol<Type>`](crate::TypedCol) instead of a plain [`Col`](crate::Col).
-/// Its comparison methods accept only that type, so a newtype ID can be passed
-/// straight through instead of being unwrapped at every call site:
+/// Its comparison methods, `set()` in UPDATE and `value()` for INSERT rows
+/// accept only that type, so a newtype ID can be passed straight through
+/// instead of being unwrapped at every call site:
 ///
 /// ```
 /// use qbey::qbey_schema;

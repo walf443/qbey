@@ -41,19 +41,32 @@ use crate::value::Value;
 /// let (sql, binds) = ins.to_sql();
 /// assert_eq!(sql, r#"INSERT INTO "employee" ("name", "age") VALUES (?, ?), (?, ?)"#);
 /// ```
-pub trait ToInsertRow<V: Clone> {
-    fn to_insert_row(&self) -> Vec<(&'static str, V)>;
+///
+/// The column-name type `C` defaults to `&'static str`, which is what hand-written
+/// implementations and `&[("name", v)]` literals use. Rows built from schema
+/// columns via [`Col::value`](crate::Col::value) /
+/// [`TypedCol::value`](crate::TypedCol::value) are `[(String, V); N]`, and the
+/// slice, array and `Vec` impls below are generic over `C` so both shapes are
+/// accepted by [`add_value()`](InsertQueryBuilder::add_value).
+pub trait ToInsertRow<V: Clone, C = &'static str> {
+    fn to_insert_row(&self) -> Vec<(C, V)>;
 }
 
-impl<V: Clone> ToInsertRow<V> for [(&'static str, V)] {
-    fn to_insert_row(&self) -> Vec<(&'static str, V)> {
+impl<V: Clone, C: Clone> ToInsertRow<V, C> for [(C, V)] {
+    fn to_insert_row(&self) -> Vec<(C, V)> {
         self.to_vec()
     }
 }
 
-impl<V: Clone, const N: usize> ToInsertRow<V> for [(&'static str, V); N] {
-    fn to_insert_row(&self) -> Vec<(&'static str, V)> {
+impl<V: Clone, C: Clone, const N: usize> ToInsertRow<V, C> for [(C, V); N] {
+    fn to_insert_row(&self) -> Vec<(C, V)> {
         self.to_vec()
+    }
+}
+
+impl<V: Clone, C: Clone> ToInsertRow<V, C> for Vec<(C, V)> {
+    fn to_insert_row(&self) -> Vec<(C, V)> {
+        self.clone()
     }
 }
 
@@ -67,6 +80,8 @@ pub trait InsertQueryBuilder<V: Clone> {
     ///
     /// Accepts any type that implements [`ToInsertRow<V>`], including:
     /// - A slice of `(&str, V)` tuples: `&[("name", "Alice".into())]`
+    /// - A slice of `(String, V)` tuples, as produced by
+    ///   [`Col::value`](crate::Col::value) / [`TypedCol::value`](crate::TypedCol::value)
     /// - A custom struct that implements `ToInsertRow<V>`
     ///
     /// The first call establishes the column list. Subsequent calls must provide
@@ -78,7 +93,7 @@ pub trait InsertQueryBuilder<V: Clone> {
     /// - Panics if called after [`from_select()`](InsertQueryBuilder::from_select).
     /// - Panics if the row is empty.
     /// - Panics if the column set does not match the first call's column set.
-    fn add_value(&mut self, row: &(impl ToInsertRow<V> + ?Sized)) -> &mut Self;
+    fn add_value<C: Into<String>>(&mut self, row: &(impl ToInsertRow<V, C> + ?Sized)) -> &mut Self;
 
     /// Add multiple rows at once from a slice of [`ToInsertRow<V>`] implementors.
     ///
@@ -88,7 +103,7 @@ pub trait InsertQueryBuilder<V: Clone> {
     /// # Panics
     ///
     /// Same as [`add_value()`](InsertQueryBuilder::add_value).
-    fn add_values(&mut self, rows: &[impl ToInsertRow<V>]) -> &mut Self {
+    fn add_values<C: Into<String>>(&mut self, rows: &[impl ToInsertRow<V, C>]) -> &mut Self {
         for row in rows {
             self.add_value(row);
         }
@@ -186,8 +201,12 @@ pub struct InsertQuery<V: Clone + std::fmt::Debug = Value> {
 }
 
 impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
-    fn add_value(&mut self, row: &(impl ToInsertRow<V> + ?Sized)) -> &mut Self {
-        let pairs = row.to_insert_row();
+    fn add_value<C: Into<String>>(&mut self, row: &(impl ToInsertRow<V, C> + ?Sized)) -> &mut Self {
+        let pairs: Vec<(String, V)> = row
+            .to_insert_row()
+            .into_iter()
+            .map(|(c, v)| (c.into(), v))
+            .collect();
         assert!(
             !pairs.is_empty(),
             "add_value requires at least one column-value pair"
@@ -198,10 +217,10 @@ impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
         );
 
         if self.columns.is_empty() {
-            self.columns = pairs.iter().map(|(c, _)| c.to_string()).collect();
+            let (columns, row): (Vec<String>, Vec<V>) = pairs.into_iter().unzip();
             {
-                let mut seen = HashSet::with_capacity(self.columns.len());
-                for col in &self.columns {
+                let mut seen = HashSet::with_capacity(columns.len());
+                for col in &columns {
                     assert!(
                         seen.insert(col.as_str()),
                         "add_value: duplicate column {:?}",
@@ -209,7 +228,7 @@ impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
                     );
                 }
             }
-            let row: Vec<V> = pairs.into_iter().map(|(_, v)| v).collect();
+            self.columns = columns;
             if let InsertSource::Values(ref mut rows) = self.source {
                 rows.push(row);
             }
@@ -222,17 +241,17 @@ impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for InsertQuery<V> {
                 pairs.len()
             );
 
-            let pair_map: HashMap<&str, V> = pairs.into_iter().collect();
+            let mut pair_map: HashMap<String, V> = pairs.into_iter().collect();
 
             let mut row = Vec::with_capacity(self.columns.len());
             for col_name in &self.columns {
-                let val = pair_map.get(col_name.as_str()).unwrap_or_else(|| {
+                let val = pair_map.remove(col_name.as_str()).unwrap_or_else(|| {
                     panic!(
                         "add_value: missing column {:?} (expected columns: {:?})",
                         col_name, self.columns
                     )
                 });
-                row.push(val.clone());
+                row.push(val);
             }
 
             if let InsertSource::Values(ref mut rows) = self.source {

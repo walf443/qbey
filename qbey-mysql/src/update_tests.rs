@@ -157,3 +157,28 @@ fn test_update_order_by_expr() {
         "UPDATE `users` SET `status` = ? WHERE `dept` = ? ORDER BY RAND() LIMIT 10"
     );
 }
+
+#[test]
+fn test_update_set_typed_col() {
+    use qbey::{Value, qbey_schema};
+
+    #[derive(Debug, Clone)]
+    struct UserId(i64);
+    impl From<UserId> for Value {
+        fn from(id: UserId) -> Self {
+            Value::Int(id.0)
+        }
+    }
+    qbey_schema!(Users, "users", [id: UserId, name: String]);
+
+    let t = Users::new();
+    let mut u = qbey("users").into_update();
+    u.set(t.name(), "Alicia");
+    let u = u.and_where(t.id().eq(UserId(1)));
+    let (sql, binds) = u.to_sql();
+    assert_eq!(sql, "UPDATE `users` SET `name` = ? WHERE `users`.`id` = ?");
+    assert_eq!(
+        binds,
+        vec![Value::String("Alicia".to_string()), Value::Int(1)]
+    );
+}

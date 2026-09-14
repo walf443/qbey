@@ -34,7 +34,10 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
 }
 
 impl<V: Clone + std::fmt::Debug> InsertQueryBuilder<V> for MysqlInsertQuery<V> {
-    fn add_value(&mut self, row: &(impl qbey::ToInsertRow<V> + ?Sized)) -> &mut Self {
+    fn add_value<C: Into<String>>(
+        &mut self,
+        row: &(impl qbey::ToInsertRow<V, C> + ?Sized),
+    ) -> &mut Self {
         self.inner.add_value(row);
         self
     }
@@ -75,17 +78,25 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
     ///     vec![Value::Int(1), Value::String("Alice".to_string()), Value::String("Alice".to_string())]
     /// );
     /// ```
-    pub fn on_duplicate_key_update(&mut self, col: qbey::Col, val: impl Into<V>) -> &mut Self {
+    ///
+    /// A [`TypedCol<T>`](qbey::TypedCol) from `qbey_schema!` only accepts a
+    /// `T` (or `&T`); see [`ColumnValue`](qbey::ColumnValue).
+    pub fn on_duplicate_key_update<A>(
+        &mut self,
+        col: impl qbey::ColumnValue<V, A>,
+        val: A,
+    ) -> &mut Self {
+        let (column, val) = col.into_column_value(val);
         assert!(
             !self.on_duplicate_key_updates.iter().any(|c| matches!(
                 c,
-                OnDuplicateKeyUpdateClause::Value(name, _) if name == &col.column
+                OnDuplicateKeyUpdateClause::Value(name, _) if name == &column
             )),
             "on_duplicate_key_update: duplicate column {:?}",
-            col.column
+            column
         );
         self.on_duplicate_key_updates
-            .push(OnDuplicateKeyUpdateClause::Value(col.column, val.into()));
+            .push(OnDuplicateKeyUpdateClause::Value(column, val));
         self
     }
 

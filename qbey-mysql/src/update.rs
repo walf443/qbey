@@ -24,7 +24,7 @@ impl<V: Clone + std::fmt::Debug> MysqlUpdateQuery<V, WhereNotSet> {
 }
 
 impl<V: Clone + std::fmt::Debug, W> UpdateQueryBuilder<V> for MysqlUpdateQuery<V, W> {
-    fn set(&mut self, col: qbey::Col, val: impl Into<V>) -> &mut Self {
+    fn set<A>(&mut self, col: impl qbey::ColumnValue<V, A>, val: A) -> &mut Self {
         self.inner.set(col, val);
         self
     }
