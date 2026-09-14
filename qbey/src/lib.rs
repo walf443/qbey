@@ -104,6 +104,8 @@ pub use query::{
     SetOp, qbey, qbey_from_subquery, qbey_from_subquery_with, qbey_with,
 };
 pub use raw_sql::RawSql;
+#[doc(hidden)]
+pub use schema::__qbey_row_put;
 pub use typed_col::{TypedCol, TypedRhs};
 pub use update::{SetClause, UpdateQuery, UpdateQueryBuilder};
 pub use value::{ConditionValue, Op, Value};

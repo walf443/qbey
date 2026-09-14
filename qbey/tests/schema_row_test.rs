@@ -20,6 +20,7 @@ qbey_schema!(Comments, "comments", [
     likes: i64,
     is_new = "new",
     r#type,
+    put,
 ], row = CommentsRow);
 
 #[test]
@@ -31,12 +32,13 @@ fn row_builder_sets_typed_and_untyped_columns() {
         .body("hello")
         .likes(3i64)
         .is_new(true)
-        .r#type("plain");
+        .r#type("plain")
+        .put("no collision with the internal helper");
     ins.add_value(&row);
     let (sql, binds) = ins.to_sql();
     assert_eq!(
         sql,
-        r#"INSERT INTO "comments" ("user_id", "body", "likes", "new", "type") VALUES (?, ?, ?, ?, ?)"#
+        r#"INSERT INTO "comments" ("user_id", "body", "likes", "new", "type", "put") VALUES (?, ?, ?, ?, ?, ?)"#
     );
     assert_eq!(
         binds,
@@ -46,6 +48,7 @@ fn row_builder_sets_typed_and_untyped_columns() {
             Value::Int(3),
             Value::Bool(true),
             Value::String("plain".to_string()),
+            Value::String("no collision with the internal helper".to_string()),
         ]
     );
 }
@@ -206,7 +209,7 @@ fn row_builder_setter_replaces_earlier_value() {
     row.likes(0i64).user_id(UserId(1));
     row.likes(9i64);
     assert_eq!(
-        row.clone().into_pairs(),
+        row.to_insert_row(),
         vec![
             ("likes".to_string(), Value::Int(9)),
             ("user_id".to_string(), Value::Int(1)),

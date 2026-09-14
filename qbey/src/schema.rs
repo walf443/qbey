@@ -401,21 +401,6 @@ macro_rules! __qbey_schema_row {
         #[allow(dead_code)]
         impl<V> $row_name<V> {
             $($crate::__qbey_schema_row_setter!(V, $($col_spec)*);)*
-
-            /// The `(column, value)` pairs set so far, in first-set order.
-            pub fn into_pairs(self) -> Vec<(String, V)> {
-                self.pairs
-            }
-
-            /// Setting a column again replaces its value in place, so a
-            /// default followed by a conditional override does not produce a
-            /// duplicate column (which `add_value()` would reject).
-            fn put(&mut self, pair: (String, V)) {
-                match self.pairs.iter_mut().find(|(c, _)| *c == pair.0) {
-                    Some(slot) => slot.1 = pair.1,
-                    None => self.pairs.push(pair),
-                }
-            }
         }
 
         impl<V: Clone> $crate::ToInsertRow<V, String> for $row_name<V> {
@@ -424,6 +409,22 @@ macro_rules! __qbey_schema_row {
             }
         }
     };
+}
+
+/// Backs the row-builder setters. Kept out of the generated struct so that
+/// only the column setters occupy its namespace — a column may be called
+/// `put` without colliding with anything.
+///
+/// Setting a column again replaces its value in place (keeping the
+/// column's original position), so a default followed by a conditional
+/// override does not produce a duplicate column, which `add_value()` would
+/// reject.
+#[doc(hidden)]
+pub fn __qbey_row_put<V>(pairs: &mut Vec<(String, V)>, pair: (String, V)) {
+    match pairs.iter_mut().find(|(c, _)| *c == pair.0) {
+        Some(slot) => slot.1 = pair.1,
+        None => pairs.push(pair),
+    }
 }
 
 /// One setter on the row builder. The column is rebuilt here (bare name, no
@@ -438,7 +439,10 @@ macro_rules! __qbey_schema_row_setter {
             $crate::TypedCol<$ty>: $crate::ColumnValue<$v, A>,
         {
             let typed = $crate::TypedCol::<$ty>::new($crate::col($sql_name));
-            self.put($crate::ColumnValue::into_column_value(typed, val));
+            $crate::__qbey_row_put(
+                &mut self.pairs,
+                $crate::ColumnValue::into_column_value(typed, val),
+            );
             self
         }
     };
@@ -449,20 +453,23 @@ macro_rules! __qbey_schema_row_setter {
         {
             let col_name = stringify!($col).trim_start_matches("r#");
             let typed = $crate::TypedCol::<$ty>::new($crate::col(col_name));
-            self.put($crate::ColumnValue::into_column_value(typed, val));
+            $crate::__qbey_row_put(
+                &mut self.pairs,
+                $crate::ColumnValue::into_column_value(typed, val),
+            );
             self
         }
     };
     ($v:ident, $col:ident, $sql_name:expr) => {
         pub fn $col<A: Into<$v>>(&mut self, val: A) -> &mut Self {
-            self.put(($sql_name.to_string(), val.into()));
+            $crate::__qbey_row_put(&mut self.pairs, ($sql_name.to_string(), val.into()));
             self
         }
     };
     ($v:ident, $col:ident) => {
         pub fn $col<A: Into<$v>>(&mut self, val: A) -> &mut Self {
             let col_name = stringify!($col).trim_start_matches("r#");
-            self.put((col_name.to_string(), val.into()));
+            $crate::__qbey_row_put(&mut self.pairs, (col_name.to_string(), val.into()));
             self
         }
     };
