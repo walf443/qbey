@@ -5,13 +5,18 @@
 //! declared as `name: Type`, and it narrows the comparison methods so that
 //! passing an unrelated type is a compile error rather than a silent bug.
 //!
+//! The same type check applies when writing: [`UpdateQueryBuilder::set`] and
+//! [`TypedCol::value`] (for INSERT rows) accept only the column's type.
+//!
 //! The bind value itself is still converted by the query's value type, so a
 //! newtype ID only needs `impl From<MyId> for Value` (or for whatever custom
 //! value type the query uses) to flow all the way through to the driver.
+//!
+//! [`UpdateQueryBuilder::set`]: crate::UpdateQueryBuilder::set
 
 use std::marker::PhantomData;
 
-use crate::column::{Col, ColCondition, SelectItem};
+use crate::column::{Col, ColCondition, ColumnValue, SelectItem};
 use crate::like::LikeExpression;
 use crate::value::Op;
 use crate::where_clause::{IntoRangeClause, WhereClause};
@@ -103,6 +108,65 @@ use crate::where_clause::{IntoRangeClause, WhereClause};
 /// let mut q = qbey(&u);
 /// // `posts.id` is a `PostId`, so it cannot be joined to `users.id`.
 /// q.join(&p, u.id().eq(p.id()));
+/// ```
+///
+/// # Rejecting a wrong-typed assignment
+///
+/// `UPDATE ... SET` and INSERT rows are checked the same way:
+///
+/// ```compile_fail
+/// use qbey::{qbey, qbey_schema, Value};
+/// use qbey::prelude::*;
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Users, "users", [id: UserId, name: String]);
+///
+/// let u = Users::new();
+/// let mut up = qbey(&u).into_update();
+/// // `id` is a `UserId` column, so a string cannot be assigned to it.
+/// up.set(u.id(), "foo");
+/// ```
+///
+/// ```compile_fail
+/// use qbey::{qbey, qbey_schema, Value};
+/// use qbey::prelude::*;
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Users, "users", [id: UserId, name: String]);
+///
+/// let u = Users::new();
+/// let mut ins = qbey(&u).into_insert();
+/// // Likewise for an INSERT row.
+/// ins.add_value(&[u.id().value("foo")]);
+/// ```
+///
+/// ```compile_fail
+/// use qbey::{qbey, qbey_schema, Value};
+/// use qbey::prelude::*;
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Users, "users", [id: UserId, name: String]);
+///
+/// let u = Users::new();
+/// let mut ins = qbey(&u).into_insert();
+/// ins.add_value(&[u.id().value(UserId(1)), u.name().value("Alice")]);
+/// // And for the ON CONFLICT DO UPDATE value.
+/// ins.on_conflict_do_update(&[u.id()], u.id(), "foo");
 /// ```
 pub struct TypedCol<T> {
     col: Col,
@@ -197,6 +261,37 @@ impl<T> TypedCol<T> {
     /// Less than or equal (`<=`).
     pub fn lte<R: TypedRhs<T>>(self, rhs: R) -> R::Output {
         rhs.apply_condition(self.col, Op::Lte)
+    }
+
+    /// Pair this column with a value of its own type for an INSERT row.
+    ///
+    /// The result is a `(column_name, V)` tuple, so an array of them is a row
+    /// for [`add_value()`](crate::InsertQueryBuilder::add_value). `V` is the
+    /// query's bind type and is inferred at the `add_value()` call.
+    ///
+    /// ```
+    /// use qbey::{qbey, qbey_schema, Value, InsertQueryBuilder};
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct UserId(i64);
+    /// impl From<UserId> for Value {
+    ///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+    /// }
+    ///
+    /// qbey_schema!(Users, "users", [id: UserId, name: String]);
+    ///
+    /// let u = Users::new();
+    /// let mut ins = qbey(&u).into_insert();
+    /// ins.add_value(&[u.id().value(UserId(1)), u.name().value("Alice")]);
+    /// let (sql, binds) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "users" ("id", "name") VALUES (?, ?)"#);
+    /// assert_eq!(binds, vec![Value::Int(1), Value::String("Alice".to_string())]);
+    /// ```
+    pub fn value<V, A>(self, val: A) -> (String, V)
+    where
+        Self: ColumnValue<V, A>,
+    {
+        self.into_column_value(val)
     }
 }
 
@@ -338,5 +433,31 @@ impl TypedRhs<String> for &str {
             op,
             val: self.to_string(),
         }
+    }
+}
+
+// ── Assignment (UPDATE SET / INSERT rows) ──
+//
+// Mirrors the `TypedRhs` shapes: the value itself, a reference to it, and a
+// string literal for `String` columns.
+
+impl<V, T: Into<V>> ColumnValue<V, T> for TypedCol<T> {
+    fn into_column_value(self, val: T) -> (String, V) {
+        (self.col.column, val.into())
+    }
+}
+
+impl<V, T: Clone + Into<V>> ColumnValue<V, &T> for TypedCol<T> {
+    fn into_column_value(self, val: &T) -> (String, V) {
+        (self.col.column, val.clone().into())
+    }
+}
+
+impl<V> ColumnValue<V, &str> for TypedCol<String>
+where
+    String: Into<V>,
+{
+    fn into_column_value(self, val: &str) -> (String, V) {
+        (self.col.column, val.to_string().into())
     }
 }

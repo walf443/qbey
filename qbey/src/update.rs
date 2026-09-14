@@ -1,7 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::Dialect;
-use crate::column::Col;
+use crate::column::ColumnValue;
 use crate::query::CteDefinition;
 use crate::raw_sql::RawSql;
 use crate::value::Value;
@@ -28,7 +28,8 @@ pub enum SetClause<V: Clone> {
 pub trait UpdateQueryBuilder<V: Clone> {
     /// Add a SET clause: `SET "col" = ?`.
     ///
-    /// Use [`col()`](crate::col) to create a column reference for the first argument.
+    /// The first argument is a [`col()`](crate::col) reference, a
+    /// [`TypedCol`](crate::TypedCol) from `qbey_schema!`, or a bare `&str`.
     /// Column names are quoted as identifiers but **not** parameterized,
     /// so never pass external (user-supplied) input as a column name.
     ///
@@ -41,7 +42,29 @@ pub trait UpdateQueryBuilder<V: Clone> {
     /// let (sql, _) = u.to_sql();
     /// assert_eq!(sql, r#"UPDATE "employee" SET "name" = ? WHERE "id" = ?"#);
     /// ```
-    fn set(&mut self, col: Col, val: impl Into<V>) -> &mut Self;
+    ///
+    /// A [`TypedCol<T>`](crate::TypedCol) from `qbey_schema!` only accepts a
+    /// `T` (or `&T`); see [`ColumnValue`] for the accepted shapes.
+    ///
+    /// ```
+    /// use qbey::{qbey, qbey_schema, ConditionExpr, UpdateQueryBuilder, Value};
+    ///
+    /// #[derive(Debug, Clone)]
+    /// struct UserId(i64);
+    /// impl From<UserId> for Value {
+    ///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+    /// }
+    ///
+    /// qbey_schema!(Users, "users", [id: UserId, name: String]);
+    ///
+    /// let t = Users::new();
+    /// let mut u = qbey(&t).into_update();
+    /// u.set(t.name(), "Alice");
+    /// let u = u.and_where(t.id().eq(UserId(1)));
+    /// let (sql, _) = u.to_sql();
+    /// assert_eq!(sql, r#"UPDATE "users" SET "name" = ? WHERE "users"."id" = ?"#);
+    /// ```
+    fn set<A>(&mut self, col: impl ColumnValue<V, A>, val: A) -> &mut Self;
 
     /// Add a raw SQL expression to the SET clause.
     ///
@@ -165,8 +188,9 @@ pub struct UpdateQuery<V: Clone + std::fmt::Debug = Value, W = WhereNotSet> {
 // ── Builder methods available in any WHERE state ──
 
 impl<V: Clone + std::fmt::Debug, W> UpdateQueryBuilder<V> for UpdateQuery<V, W> {
-    fn set(&mut self, col: Col, val: impl Into<V>) -> &mut Self {
-        self.sets.push(SetClause::Value(col.column, val.into()));
+    fn set<A>(&mut self, col: impl ColumnValue<V, A>, val: A) -> &mut Self {
+        let (column, val) = col.into_column_value(val);
+        self.sets.push(SetClause::Value(column, val));
         self
     }
 

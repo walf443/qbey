@@ -91,9 +91,9 @@ pub struct WhereProvided;
 
 // Re-export all public types at the crate root.
 pub use column::{
-    Col, ColCondition, ColRef, ConditionExpr, ConditionRhs, OrderByClause, SelectFunc, SelectItem,
-    SortDir, TableRef, WindowFunc, WindowSpec, col, count_all, count_one, dense_rank, rank,
-    row_number, table, window,
+    Col, ColCondition, ColRef, ColumnValue, ConditionExpr, ConditionRhs, OrderByClause, SelectFunc,
+    SelectItem, SortDir, TableRef, WindowFunc, WindowSpec, col, count_all, count_one, dense_rank,
+    rank, row_number, table, window,
 };
 pub use delete::{DeleteQuery, DeleteQueryBuilder};
 pub use insert::{InsertQuery, InsertQueryBuilder, ToInsertRow};

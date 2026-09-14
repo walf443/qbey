@@ -128,3 +128,35 @@ fn test_insert_on_duplicate_key_update_duplicate_column_panics() {
     ins.on_duplicate_key_update(col("name"), "Alice");
     ins.on_duplicate_key_update(col("name"), "Bob");
 }
+
+#[test]
+fn test_insert_typed_col_values_and_on_duplicate_key_update() {
+    use qbey::{Value, qbey_schema};
+
+    #[derive(Debug, Clone)]
+    struct UserId(i64);
+    impl From<UserId> for Value {
+        fn from(id: UserId) -> Self {
+            Value::Int(id.0)
+        }
+    }
+    qbey_schema!(Users, "users", [id: UserId, name: String]);
+
+    let t = Users::new();
+    let mut ins = qbey("users").into_insert();
+    ins.add_value(&[t.id().value(UserId(1)), t.name().value("Alice")]);
+    ins.on_duplicate_key_update(t.name(), "Alicia");
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        "INSERT INTO `users` (`id`, `name`) VALUES (?, ?) ON DUPLICATE KEY UPDATE `name` = ?"
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::String("Alice".to_string()),
+            Value::String("Alicia".to_string()),
+        ]
+    );
+}

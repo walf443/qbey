@@ -157,6 +157,38 @@ impl<V: ConditionValue> ConditionRhs for V {
     }
 }
 
+/// A column paired with a value to store in it.
+///
+/// This is the conversion point behind
+/// [`UpdateQueryBuilder::set`](crate::UpdateQueryBuilder::set),
+/// [`Col::value`] and [`TypedCol::value`](crate::TypedCol::value): the column
+/// contributes its bare name and the value is converted into the query's bind
+/// type `V`.
+///
+/// - [`Col`] and a bare `&str` column name accept any `A: Into<V>`.
+/// - [`TypedCol<T>`](crate::TypedCol) accepts only `T`, `&T`, or `&str` for a
+///   `TypedCol<String>` — the same shapes as [`TypedRhs`](crate::TypedRhs) —
+///   so assigning a value of the wrong type is a compile error.
+///
+/// Column names are quoted as identifiers but never parameterized, so a
+/// `&str` name must not come from user input.
+pub trait ColumnValue<V, A> {
+    /// Produce the `(column_name, bind_value)` pair.
+    fn into_column_value(self, val: A) -> (String, V);
+}
+
+impl<V, A: Into<V>> ColumnValue<V, A> for Col {
+    fn into_column_value(self, val: A) -> (String, V) {
+        (self.column, val.into())
+    }
+}
+
+impl<V, A: Into<V>> ColumnValue<V, A> for &str {
+    fn into_column_value(self, val: A) -> (String, V) {
+        (self.to_string(), val.into())
+    }
+}
+
 /// Trait for types that can produce WHERE/HAVING conditions.
 ///
 /// Implemented by [`Col`] and [`SelectItem`]. Adding a new condition method
@@ -453,6 +485,31 @@ impl Col {
             window: spec,
             alias: None,
         }
+    }
+
+    /// Pair this column with a value for an INSERT row.
+    ///
+    /// The result is a `(column_name, V)` tuple, so an array of them is a row
+    /// for [`add_value()`](crate::InsertQueryBuilder::add_value). The table
+    /// prefix is dropped — only the column name is used.
+    ///
+    /// ```
+    /// use qbey::{qbey, qbey_schema, Value, InsertQueryBuilder};
+    ///
+    /// qbey_schema!(Employees, "employees", [name, age]);
+    ///
+    /// let e = Employees::new();
+    /// let mut ins = qbey(&e).into_insert();
+    /// ins.add_value(&[e.name().value("Alice"), e.age().value(30)]);
+    /// let (sql, binds) = ins.to_sql();
+    /// assert_eq!(sql, r#"INSERT INTO "employees" ("name", "age") VALUES (?, ?)"#);
+    /// assert_eq!(binds, vec![Value::String("Alice".to_string()), Value::Int(30)]);
+    /// ```
+    pub fn value<V, A>(self, val: A) -> (String, V)
+    where
+        Self: ColumnValue<V, A>,
+    {
+        self.into_column_value(val)
     }
 
     pub fn asc(self) -> OrderByClause {

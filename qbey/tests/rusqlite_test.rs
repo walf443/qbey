@@ -1451,3 +1451,51 @@ fn test_update_blob() {
     let data: Vec<u8> = stmt.query_row([], |row| row.get(0)).unwrap();
     assert_eq!(data, new_data);
 }
+
+/// A typed schema drives INSERT and UPDATE end to end: newtype IDs flow into
+/// the driver's value type without being unwrapped by hand, and the bare
+/// (unqualified) column names rendered for SET / INSERT execute as-is.
+#[test]
+fn test_typed_schema_insert_and_update() {
+    use qbey::qbey_schema;
+
+    #[derive(Debug, Clone)]
+    struct UserId(i64);
+    impl From<UserId> for SqliteValue {
+        fn from(id: UserId) -> Self {
+            SqliteValue::Integer(id.0)
+        }
+    }
+    qbey_schema!(Users, "users", [id: UserId, name: String, age: i64]);
+
+    let conn = setup_db();
+    let t = Users::new();
+
+    let mut ins = qbey_with::<SqliteValue>(&t).into_insert();
+    ins.add_value(&[
+        t.id().value(UserId(4)),
+        t.name().value("Dave"),
+        t.age().value(40i64),
+    ]);
+    let (sql, binds) = ins.to_sql();
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    let mut u = qbey_with::<SqliteValue>(&t).into_update();
+    u.set(t.name(), "David");
+    u.set(t.age(), 41i64);
+    let u = u.and_where(t.id().eq(UserId(4)));
+    let (sql, binds) = u.to_sql();
+    let params = to_rusqlite_params(&binds);
+    conn.execute(&sql, params_from_iter(params.iter().map(|p| p.as_ref())))
+        .unwrap();
+
+    let mut stmt = conn
+        .prepare(r#"SELECT "name", "age" FROM "users" WHERE "id" = 4"#)
+        .unwrap();
+    let (name, age): (String, i64) = stmt
+        .query_row([], |row| Ok((row.get(0)?, row.get(1)?)))
+        .unwrap();
+    assert_eq!((name.as_str(), age), ("David", 41));
+}

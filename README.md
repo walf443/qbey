@@ -847,6 +847,41 @@ assert_eq!(binds, vec![Value::Int(7), Value::Int(100)]);
 `t.user_id().eq("foo")` and `t.user_id().eq(LivestreamId(1))` both fail to compile,
 as does a join between columns of two different ID types.
 
+The same check applies when writing. `set()` on an UPDATE accepts only the
+column's type, and `value()` pairs a typed column with a value for an INSERT row:
+
+```rust
+# use qbey::{qbey_schema, qbey, ConditionExpr, InsertQueryBuilder, UpdateQueryBuilder, Value};
+# #[derive(Debug, Clone)]
+# struct UserId(i64);
+# impl From<UserId> for Value {
+#     fn from(id: UserId) -> Self { Value::Int(id.0) }
+# }
+qbey_schema!(Livecomments, "livecomments", [user_id: UserId, comment: String, tip: i64]);
+
+let t = Livecomments::new();
+
+let mut ins = qbey(&t).into_insert();
+ins.add_value(&[
+    t.user_id().value(UserId(7)),
+    t.comment().value("hello"),
+    t.tip().value(100i64),
+]);
+let (sql, _) = ins.to_sql();
+assert_eq!(sql, r#"INSERT INTO "livecomments" ("user_id", "comment", "tip") VALUES (?, ?, ?)"#);
+
+let mut u = qbey(&t).into_update();
+u.set(t.tip(), 200i64);
+let u = u.and_where(t.user_id().eq(UserId(7)));
+let (sql, binds) = u.to_sql();
+assert_eq!(sql, r#"UPDATE "livecomments" SET "tip" = ? WHERE "livecomments"."user_id" = ?"#);
+assert_eq!(binds, vec![Value::Int(200), Value::Int(7)]);
+```
+
+`u.set(t.user_id(), "foo")` and `t.user_id().value("foo")` are compile errors.
+`value()` is also available on untyped schema columns, so an INSERT row can be
+written from column accessors instead of string names either way.
+
 Typed and untyped columns can be mixed freely in one schema, and `into_col()`
 drops the type when a plain `Col` is needed (for example to put columns of
 differing types in a single `select(&[...])` slice):

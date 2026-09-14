@@ -297,3 +297,208 @@ fn typed_col_order_by_asc_returns_order_by_clause() {
         r#"SELECT * FROM "livecomments" ORDER BY "livecomments"."tip" ASC"#
     );
 }
+
+// ── UPDATE ... SET ──
+
+#[test]
+fn typed_update_set_and_where() {
+    let t = Livecomments::new();
+    let mut u = qbey(&t).into_update();
+    u.set(t.tip(), 100i64);
+    u.set(t.comment(), "edited");
+    let u = u.and_where(t.user_id().eq(UserId(7)));
+    let (sql, binds) = u.to_sql();
+    // SET uses the bare column name even though the schema column is qualified.
+    assert_eq!(
+        sql,
+        r#"UPDATE "livecomments" SET "tip" = ?, "comment" = ? WHERE "livecomments"."user_id" = ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(100),
+            Value::String("edited".to_string()),
+            Value::Int(7)
+        ]
+    );
+}
+
+#[test]
+fn typed_update_set_accepts_reference() {
+    let owner = UserId(3);
+    let s = Livestreams::new();
+    let mut u = qbey(&s).into_update();
+    u.set(s.owner_id(), &owner);
+    let u = u.and_where(s.id().eq(LivestreamId(1)));
+    let (_sql, binds) = u.to_sql();
+    assert_eq!(binds, vec![Value::Int(3), Value::Int(1)]);
+    assert_eq!(owner, UserId(3));
+}
+
+#[test]
+fn untyped_set_still_takes_plain_col() {
+    let f = Features::new();
+    let mut u = qbey(&f).into_update();
+    u.set(f.name(), "x");
+    u.set(col("age"), 30);
+    u.set(f.score(), 5i64);
+    let u = u.allow_without_where();
+    let (sql, binds) = u.to_sql();
+    assert_eq!(
+        sql,
+        r#"UPDATE "features" SET "name" = ?, "age" = ?, "score_value" = ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::String("x".to_string()),
+            Value::Int(30),
+            Value::Int(5)
+        ]
+    );
+}
+
+#[test]
+fn typed_update_set_with_custom_value_type() {
+    let t = Livecomments::new();
+    let mut u = qbey_with::<MyValue>("livecomments").into_update();
+    u.set(t.comment(), "hi");
+    let u = u.and_where(t.user_id().eq(UserId(9)));
+    let (sql, binds) = u.to_sql();
+    assert_eq!(
+        sql,
+        r#"UPDATE "livecomments" SET "comment" = ? WHERE "livecomments"."user_id" = ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![MyValue::Text("hi".to_string()), MyValue::Int(9)]
+    );
+}
+
+// ── INSERT ──
+
+#[test]
+fn typed_insert_row_from_value_pairs() {
+    let t = Livecomments::new();
+    let mut ins = qbey(&t).into_insert();
+    ins.add_value(&[
+        t.user_id().value(UserId(1)),
+        t.livestream_id().value(LivestreamId(2)),
+        t.comment().value("hi"),
+        t.tip().value(100i64),
+    ]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "livecomments" ("user_id", "livestream_id", "comment", "tip") VALUES (?, ?, ?, ?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::Int(2),
+            Value::String("hi".to_string()),
+            Value::Int(100),
+        ]
+    );
+}
+
+/// `V` is only pinned down when the row reaches `add_value()`, so building the
+/// row in a separate statement must still infer.
+#[test]
+fn typed_insert_row_built_separately() {
+    let t = Livecomments::new();
+    let user_id = UserId(1);
+    let row = [t.user_id().value(&user_id), t.comment().value("hi")];
+    let mut ins = qbey(&t).into_insert();
+    ins.add_value(&row);
+    ins.add_value(&[t.comment().value("second"), t.user_id().value(UserId(2))]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "livecomments" ("user_id", "comment") VALUES (?, ?), (?, ?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![
+            Value::Int(1),
+            Value::String("hi".to_string()),
+            Value::Int(2),
+            Value::String("second".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn typed_insert_rows_from_vec_via_add_values() {
+    let t = Livecomments::new();
+    let rows: Vec<Vec<(String, Value)>> = (1..=2)
+        .map(|i| vec![t.user_id().value(UserId(i)), t.tip().value(i * 10)])
+        .collect();
+    let mut ins = qbey(&t).into_insert();
+    ins.add_values(&rows);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "livecomments" ("user_id", "tip") VALUES (?, ?), (?, ?)"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::Int(1), Value::Int(10), Value::Int(2), Value::Int(20)]
+    );
+}
+
+#[test]
+fn untyped_col_value_pairs_in_insert() {
+    let f = Features::new();
+    let mut ins = qbey(&f).into_insert();
+    ins.add_value(&[f.name().value("x"), f.score().value(5i64)]);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "features" ("name", "score_value") VALUES (?, ?)"#
+    );
+    assert_eq!(binds, vec![Value::String("x".to_string()), Value::Int(5)]);
+}
+
+#[test]
+fn typed_insert_with_custom_value_type() {
+    let t = Livecomments::new();
+    let mut ins = qbey_with::<MyValue>("livecomments").into_insert();
+    ins.add_value(&[t.user_id().value(UserId(4)), t.comment().value("yo")]);
+    let (_sql, binds) = ins.to_sql();
+    assert_eq!(
+        binds,
+        vec![MyValue::Int(4), MyValue::Text("yo".to_string())]
+    );
+}
+
+/// `on_conflict_do_update` goes through `ColumnValue` like `set()`, so the
+/// value is checked against the column type. The negative case lives as a
+/// `compile_fail` doctest on `TypedCol`.
+#[cfg(feature = "conflict")]
+#[test]
+fn typed_col_in_on_conflict_do_update() {
+    let t = Livecomments::new();
+    let mut ins = qbey(&t).into_insert();
+    ins.add_value(&[t.id().value(LivestreamCommentId(1)), t.tip().value(5i64)]);
+    ins.on_conflict_do_update(&[t.id()], t.tip(), 6i64);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "livecomments" ("id", "tip") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "tip" = ?"#
+    );
+    assert_eq!(binds, vec![Value::Int(1), Value::Int(5), Value::Int(6)]);
+}
+
+/// A bare `&str` column name is still accepted by `set()`, as it is by
+/// `on_conflict_do_update()`; the name is quoted, never parameterized.
+#[test]
+fn set_accepts_str_column_name() {
+    let mut u = qbey("livecomments").into_update();
+    u.set("tip", 1i64);
+    let u = u.allow_without_where();
+    let (sql, binds) = u.to_sql();
+    assert_eq!(sql, r#"UPDATE "livecomments" SET "tip" = ?"#);
+    assert_eq!(binds, vec![Value::Int(1)]);
+}
