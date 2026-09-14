@@ -817,34 +817,34 @@ passing the wrong one is a compile error.
 #[derive(Debug, Clone)]
 struct UserId(i64);
 #[derive(Debug, Clone)]
-struct LivestreamId(i64);
+struct PostId(i64);
 
 // Only this is needed to carry the type through to the driver.
 impl From<UserId> for Value {
     fn from(id: UserId) -> Self { Value::Int(id.0) }
 }
-# impl From<LivestreamId> for Value {
-#     fn from(id: LivestreamId) -> Self { Value::Int(id.0) }
+# impl From<PostId> for Value {
+#     fn from(id: PostId) -> Self { Value::Int(id.0) }
 # }
 
-qbey_schema!(Livecomments, "livecomments", [
+qbey_schema!(Comments, "comments", [
     user_id: UserId,
-    livestream_id: LivestreamId,
-    comment: String,
-    tip: i64,
+    post_id: PostId,
+    body: String,
+    likes: i64,
 ]);
 
-let t = Livecomments::new();
+let t = Comments::new();
 let mut q = qbey(&t);
 q.and_where(t.user_id().eq(UserId(7)));
-q.and_where(t.tip().gt(100i64));
+q.and_where(t.likes().gt(100i64));
 
 let (sql, binds) = q.to_sql();
-assert_eq!(sql, r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" = ? AND "livecomments"."tip" > ?"#);
+assert_eq!(sql, r#"SELECT * FROM "comments" WHERE "comments"."user_id" = ? AND "comments"."likes" > ?"#);
 assert_eq!(binds, vec![Value::Int(7), Value::Int(100)]);
 ```
 
-`t.user_id().eq("foo")` and `t.user_id().eq(LivestreamId(1))` both fail to compile,
+`t.user_id().eq("foo")` and `t.user_id().eq(PostId(1))` both fail to compile,
 as does a join between columns of two different ID types.
 
 The same check applies when writing. `set()` on an UPDATE accepts only the
@@ -857,24 +857,24 @@ column's type, and `value()` pairs a typed column with a value for an INSERT row
 # impl From<UserId> for Value {
 #     fn from(id: UserId) -> Self { Value::Int(id.0) }
 # }
-qbey_schema!(Livecomments, "livecomments", [user_id: UserId, comment: String, tip: i64]);
+qbey_schema!(Comments, "comments", [user_id: UserId, body: String, likes: i64]);
 
-let t = Livecomments::new();
+let t = Comments::new();
 
 let mut ins = qbey(&t).into_insert();
 ins.add_value(&[
     t.user_id().value(UserId(7)),
-    t.comment().value("hello"),
-    t.tip().value(100i64),
+    t.body().value("hello"),
+    t.likes().value(100i64),
 ]);
 let (sql, _) = ins.to_sql();
-assert_eq!(sql, r#"INSERT INTO "livecomments" ("user_id", "comment", "tip") VALUES (?, ?, ?)"#);
+assert_eq!(sql, r#"INSERT INTO "comments" ("user_id", "body", "likes") VALUES (?, ?, ?)"#);
 
 let mut u = qbey(&t).into_update();
-u.set(t.tip(), 200i64);
+u.set(t.likes(), 200i64);
 let u = u.and_where(t.user_id().eq(UserId(7)));
 let (sql, binds) = u.to_sql();
-assert_eq!(sql, r#"UPDATE "livecomments" SET "tip" = ? WHERE "livecomments"."user_id" = ?"#);
+assert_eq!(sql, r#"UPDATE "comments" SET "likes" = ? WHERE "comments"."user_id" = ?"#);
 assert_eq!(binds, vec![Value::Int(200), Value::Int(7)]);
 ```
 
