@@ -63,7 +63,8 @@
 ///
 /// Use `rust_name = "sql_name"` when you want the Rust method name to differ
 /// from the SQL column name. This is useful for columns that conflict with
-/// built-in method names (`table`, `table_name`, `as_`, `all_columns`, `new`):
+/// built-in method names (`table`, `table_name`, `as_`, `all_columns`, `new`,
+/// and `row` when a row builder is generated):
 ///
 /// ```
 /// use qbey::qbey_schema;
@@ -142,6 +143,55 @@
 ///
 /// See [`TypedCol`](crate::TypedCol) for what is rejected at compile time.
 ///
+/// # INSERT row builder
+///
+/// Adding `row = Name` after the column list generates a row-builder struct
+/// with one setter per column and a `row()` constructor on the schema. Typed
+/// columns accept only their own type (or a reference to it); untyped columns
+/// accept anything `Into<V>`. The row implements
+/// [`ToInsertRow`](crate::ToInsertRow), so it goes straight into
+/// [`add_value()`](crate::InsertQueryBuilder::add_value) /
+/// [`add_values()`](crate::InsertQueryBuilder::add_values):
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::{qbey, Value};
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Comments, "comments", [user_id: UserId, body: String, likes: i64], row = CommentsRow);
+///
+/// let t = Comments::new();
+/// let mut ins = qbey(&t).into_insert();
+///
+/// let mut row = t.row();
+/// row.user_id(UserId(7)).body("hello");
+/// if true {
+///     row.likes(3i64);
+/// }
+/// ins.add_value(&row);
+///
+/// // Or inline, when the row is short.
+/// ins.add_value(t.row().user_id(UserId(8)).body("second").likes(0i64));
+///
+/// let (sql, binds) = ins.to_sql();
+/// assert_eq!(sql, r#"INSERT INTO "comments" ("user_id", "body", "likes") VALUES (?, ?, ?), (?, ?, ?)"#);
+/// assert_eq!(binds[0], Value::Int(7));
+/// ```
+///
+/// `V` (the bind type) is inferred at the `add_value()` call; name it as
+/// `CommentsRow<Value>` (or just `CommentsRow`, whose default is
+/// [`Value`](crate::Value)) when a row is built in a helper function. The
+/// row-builder methods share the schema's namespace, so a column named `row`
+/// must be renamed (`row_ = "row"`) when `row = Name` is used.
+///
+/// `row.user_id("foo")` is a compile error, like `set()` and `value()`.
+///
 /// # Adding custom methods
 ///
 /// The generated struct is a regular Rust struct, so you can add your own
@@ -165,9 +215,13 @@
 /// ```
 #[macro_export]
 macro_rules! qbey_schema {
-    // Entry point: parse column definitions and forward to internal macro
-    ($struct_name:ident, $table_name:expr, [$($col_def:tt)*]) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [] $($col_def)*);
+    // Entry point: parse column definitions and forward to internal macro.
+    // `{}` / `{RowName}` carries the optional row-builder name through parsing.
+    ($struct_name:ident, $table_name:expr, [$($col_def:tt)*] $(,)?) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {}, [] $($col_def)*);
+    };
+    ($struct_name:ident, $table_name:expr, [$($col_def:tt)*], row = $row_name:ident $(,)?) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$row_name}, [] $($col_def)*);
     };
 }
 
@@ -177,44 +231,45 @@ macro_rules! qbey_schema {
 #[macro_export]
 macro_rules! __qbey_schema_parse {
     // Typed + renamed column: `col: Type = "sql_name"` followed by comma and more
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty = $sql_name:expr, $($rest:tt)*) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty, $sql_name]] $($rest)*);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident : $ty:ty = $sql_name:expr, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col : $ty, $sql_name]] $($rest)*);
     };
     // Typed + renamed column at end
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty = $sql_name:expr) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty, $sql_name]]);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident : $ty:ty = $sql_name:expr) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col : $ty, $sql_name]]);
     };
     // Typed column: `col: Type` followed by comma and more
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty, $($rest:tt)*) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty]] $($rest)*);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident : $ty:ty, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col : $ty]] $($rest)*);
     };
     // Typed column at end
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty]]);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident : $ty:ty) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col : $ty]]);
     };
     // Renamed column: `col = "sql_name"` followed by comma and more
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident = $sql_name:expr, $($rest:tt)*) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col, $sql_name]] $($rest)*);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident = $sql_name:expr, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col, $sql_name]] $($rest)*);
     };
     // Renamed column: `col = "sql_name"` at end
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident = $sql_name:expr) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col, $sql_name]]);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident = $sql_name:expr) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col, $sql_name]]);
     };
     // Plain column followed by comma and more
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident, $($rest:tt)*) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col]] $($rest)*);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col]] $($rest)*);
     };
     // Plain column at end
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col]]);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] $col:ident) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)* [$col]]);
     };
     // Trailing comma only
-    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] ,) => {
-        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)*]);
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$($parsed:tt)*] ,) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, {$($row)?}, [$($parsed)*]);
     };
-    // Terminal: all columns parsed, generate the struct
-    ($struct_name:ident, $table_name:expr, [$([$($col_spec:tt)*])*]) => {
+    // Terminal: all columns parsed, generate the struct and the optional row builder
+    ($struct_name:ident, $table_name:expr, {$($row:ident)?}, [$([$($col_spec:tt)*])*]) => {
         $crate::__qbey_schema_emit!($struct_name, $table_name, $([$($col_spec)*]),*);
+        $crate::__qbey_schema_row!($struct_name, {$($row)?}, $([$($col_spec)*]),*);
     };
 }
 
@@ -307,5 +362,93 @@ macro_rules! __qbey_schema_col_call {
     // even for a schema that mixes typed and untyped columns.
     ($self:ident, $col:ident $($rest:tt)*) => {
         $crate::Col::from($self.$col())
+    };
+}
+
+/// Emits the row builder when `row = Name` was given; expands to nothing otherwise.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __qbey_schema_row {
+    ($struct_name:ident, {}, $([$($col_spec:tt)*]),*) => {};
+    ($struct_name:ident, {$row_name:ident}, $([$($col_spec:tt)*]),*) => {
+        /// An INSERT row for the table, with one setter per column.
+        ///
+        /// Build with the schema's `row()` method, set the columns you need
+        /// (typed columns accept only their own type), and pass it to
+        /// `add_value()` / `add_values()`. `V` is the query's bind type and is
+        /// inferred at that call.
+        #[allow(dead_code)]
+        #[derive(Debug, Clone)]
+        pub struct $row_name<V = $crate::Value> {
+            pairs: Vec<(String, V)>,
+        }
+
+        #[allow(dead_code)]
+        impl $struct_name {
+            /// Start an empty INSERT row for this table.
+            pub fn row<V>(&self) -> $row_name<V> {
+                $row_name { pairs: Vec::new() }
+            }
+        }
+
+        #[allow(dead_code)]
+        impl<V> $row_name<V> {
+            $($crate::__qbey_schema_row_setter!(V, $($col_spec)*);)*
+
+            /// The `(column, value)` pairs set so far, in call order.
+            pub fn into_pairs(self) -> Vec<(String, V)> {
+                self.pairs
+            }
+        }
+
+        impl<V: Clone> $crate::ToInsertRow<V, String> for $row_name<V> {
+            fn to_insert_row(&self) -> Vec<(String, V)> {
+                self.pairs.clone()
+            }
+        }
+    };
+}
+
+/// One setter on the row builder. The column is rebuilt here (bare name, no
+/// table prefix) so INSERT column lists never carry the schema alias, and the
+/// value goes through the same `ColumnValue` bound as `set()` / `value()`.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __qbey_schema_row_setter {
+    ($v:ident, $col:ident : $ty:ty, $sql_name:expr) => {
+        pub fn $col<A>(&mut self, val: A) -> &mut Self
+        where
+            $crate::TypedCol<$ty>: $crate::ColumnValue<$v, A>,
+        {
+            let typed = $crate::TypedCol::<$ty>::new($crate::col($sql_name));
+            self.pairs
+                .push($crate::ColumnValue::into_column_value(typed, val));
+            self
+        }
+    };
+    ($v:ident, $col:ident : $ty:ty) => {
+        pub fn $col<A>(&mut self, val: A) -> &mut Self
+        where
+            $crate::TypedCol<$ty>: $crate::ColumnValue<$v, A>,
+        {
+            let col_name = stringify!($col).trim_start_matches("r#");
+            let typed = $crate::TypedCol::<$ty>::new($crate::col(col_name));
+            self.pairs
+                .push($crate::ColumnValue::into_column_value(typed, val));
+            self
+        }
+    };
+    ($v:ident, $col:ident, $sql_name:expr) => {
+        pub fn $col<A: Into<$v>>(&mut self, val: A) -> &mut Self {
+            self.pairs.push(($sql_name.to_string(), val.into()));
+            self
+        }
+    };
+    ($v:ident, $col:ident) => {
+        pub fn $col<A: Into<$v>>(&mut self, val: A) -> &mut Self {
+            let col_name = stringify!($col).trim_start_matches("r#");
+            self.pairs.push((col_name.to_string(), val.into()));
+            self
+        }
     };
 }

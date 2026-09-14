@@ -882,6 +882,43 @@ assert_eq!(binds, vec![Value::Int(200), Value::Int(7)]);
 `value()` is also available on untyped schema columns, so an INSERT row can be
 written from column accessors instead of string names either way.
 
+#### INSERT row builder
+
+Adding `row = Name` to the schema generates a row builder with one setter per
+column, which is the most convenient way to write INSERTs from a struct or in
+test setup. Typed columns accept only their own type; the row goes straight into
+`add_value()` / `add_values()`:
+
+```rust
+# use qbey::{qbey_schema, qbey, InsertQueryBuilder, Value};
+# #[derive(Debug, Clone)]
+# struct UserId(i64);
+# impl From<UserId> for Value {
+#     fn from(id: UserId) -> Self { Value::Int(id.0) }
+# }
+qbey_schema!(Comments, "comments", [user_id: UserId, body: String, likes: i64], row = CommentsRow);
+
+struct NewComment { user_id: UserId, body: String, likes: Option<i64> }
+let c = NewComment { user_id: UserId(7), body: "hello".into(), likes: None };
+
+let t = Comments::new();
+let mut row = t.row();
+row.user_id(&c.user_id).body(&c.body);
+if let Some(likes) = c.likes {
+    row.likes(likes);
+}
+
+let mut ins = qbey(&t).into_insert();
+ins.add_value(&row);
+let (sql, binds) = ins.to_sql();
+assert_eq!(sql, r#"INSERT INTO "comments" ("user_id", "body") VALUES (?, ?)"#);
+assert_eq!(binds, vec![Value::Int(7), Value::String("hello".to_string())]);
+```
+
+`row.user_id("foo")` is a compile error. The bind type `V` is inferred at
+`add_value()`; write `CommentsRow<Value>` (or just `CommentsRow`) when returning
+a row from a helper function.
+
 Typed and untyped columns can be mixed freely in one schema, and `into_col()`
 drops the type when a plain `Col` is needed (for example to put columns of
 differing types in a single `select(&[...])` slice):
