@@ -196,3 +196,29 @@ fn schema_without_row_is_unchanged() {
     let p = Plain::new();
     assert_eq!(p.all_columns().len(), 2);
 }
+
+/// A default followed by an override must not leave a duplicate column
+/// behind; the last value wins and the column keeps its original position.
+#[test]
+fn row_builder_setter_replaces_earlier_value() {
+    let t = Comments::new();
+    let mut row: CommentsRow = t.row();
+    row.likes(0i64).user_id(UserId(1));
+    row.likes(9i64);
+    assert_eq!(
+        row.clone().into_pairs(),
+        vec![
+            ("likes".to_string(), Value::Int(9)),
+            ("user_id".to_string(), Value::Int(1)),
+        ]
+    );
+
+    let mut ins = qbey(&t).into_insert();
+    ins.add_value(&row);
+    let (sql, binds) = ins.to_sql();
+    assert_eq!(
+        sql,
+        r#"INSERT INTO "comments" ("likes", "user_id") VALUES (?, ?)"#
+    );
+    assert_eq!(binds, vec![Value::Int(9), Value::Int(1)]);
+}
