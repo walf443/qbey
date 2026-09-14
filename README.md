@@ -805,6 +805,72 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, r#"SELECT "users"."name", "managers"."name" AS "manager_name" FROM "users" LEFT JOIN "users" AS "managers" ON "users"."manager_id" = "managers"."id""#);
 ```
 
+### Typed columns
+
+A column can be declared as `name: Type` to bind a Rust type to it. The accessor
+then returns a `TypedCol<T>`, whose comparison methods only accept that type — so
+a newtype ID no longer has to be unwrapped to `i64` at every call site, and
+passing the wrong one is a compile error.
+
+```rust
+# use qbey::{qbey_schema, qbey, ConditionExpr, SelectQueryBuilder, Value};
+#[derive(Debug, Clone)]
+struct UserId(i64);
+#[derive(Debug, Clone)]
+struct LivestreamId(i64);
+
+// Only this is needed to carry the type through to the driver.
+impl From<UserId> for Value {
+    fn from(id: UserId) -> Self { Value::Int(id.0) }
+}
+# impl From<LivestreamId> for Value {
+#     fn from(id: LivestreamId) -> Self { Value::Int(id.0) }
+# }
+
+qbey_schema!(Livecomments, "livecomments", [
+    user_id: UserId,
+    livestream_id: LivestreamId,
+    comment: String,
+    tip: i64,
+]);
+
+let t = Livecomments::new();
+let mut q = qbey(&t);
+q.and_where(t.user_id().eq(UserId(7)));
+q.and_where(t.tip().gt(100i64));
+
+let (sql, binds) = q.to_sql();
+assert_eq!(sql, r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" = ? AND "livecomments"."tip" > ?"#);
+assert_eq!(binds, vec![Value::Int(7), Value::Int(100)]);
+```
+
+`t.user_id().eq("foo")` and `t.user_id().eq(LivestreamId(1))` both fail to compile,
+as does a join between columns of two different ID types.
+
+Typed and untyped columns can be mixed freely in one schema, and `into_col()`
+drops the type when a plain `Col` is needed (for example to put columns of
+differing types in a single `select(&[...])` slice):
+
+```rust
+# use qbey::{qbey_schema, qbey, Col, ConditionExpr, SelectQueryBuilder, Value};
+# #[derive(Debug, Clone)]
+# struct UserId(i64);
+# impl From<UserId> for Value {
+#     fn from(id: UserId) -> Self { Value::Int(id.0) }
+# }
+qbey_schema!(Users, "users", [id: UserId, name, email = "mail"]);
+
+let u = Users::new();
+let cols: Vec<Col> = vec![u.id().into_col(), u.name()];
+let mut q = qbey(&u);
+q.select(&cols);
+q.and_where(u.id().eq(UserId(1)));
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, r#"SELECT "users"."id", "users"."name" FROM "users" WHERE "users"."id" = ?"#);
+```
+
+
 # Example
 
 You can see [walf443/isucon#3](https://github.com/walf443/isucon13/pull/3) for the practical example.

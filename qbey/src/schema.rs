@@ -88,6 +88,59 @@
 /// qbey_schema!(Bad, "bad", [id, col = 42]);
 /// ```
 ///
+/// # Typed columns
+///
+/// A column declared as `name: Type` produces a
+/// [`TypedCol<Type>`](crate::TypedCol) instead of a plain [`Col`](crate::Col).
+/// Its comparison methods accept only that type, so a newtype ID can be passed
+/// straight through instead of being unwrapped at every call site:
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::{qbey, Value};
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Livecomments, "livecomments", [user_id: UserId, tip: i64]);
+///
+/// let t = Livecomments::new();
+/// let mut q = qbey(&t);
+/// q.and_where(t.user_id().eq(UserId(7)));
+/// let (sql, binds) = q.to_sql();
+/// assert_eq!(sql, r#"SELECT * FROM "livecomments" WHERE "livecomments"."user_id" = ?"#);
+/// assert_eq!(binds, vec![Value::Int(7)]);
+/// ```
+///
+/// Typed, untyped and renamed columns can be mixed, and `Type` may be combined
+/// with a rename as `rust_name: Type = "sql_name"`:
+///
+/// ```
+/// use qbey::qbey_schema;
+/// use qbey::prelude::*;
+/// use qbey::{qbey, Value};
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Users, "users", [id: UserId, name, score: i64 = "score_value"]);
+///
+/// let u = Users::new();
+/// let mut q = qbey(&u);
+/// q.select(&u.all_columns());
+/// let (sql, _binds) = q.to_sql();
+/// assert_eq!(sql, r#"SELECT "users"."id", "users"."name", "users"."score_value" FROM "users""#);
+/// ```
+///
+/// See [`TypedCol`](crate::TypedCol) for what is rejected at compile time.
+///
 /// # Adding custom methods
 ///
 /// The generated struct is a regular Rust struct, so you can add your own
@@ -122,6 +175,22 @@ macro_rules! qbey_schema {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __qbey_schema_parse {
+    // Typed + renamed column: `col: Type = "sql_name"` followed by comma and more
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty = $sql_name:expr, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty, $sql_name]] $($rest)*);
+    };
+    // Typed + renamed column at end
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty = $sql_name:expr) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty, $sql_name]]);
+    };
+    // Typed column: `col: Type` followed by comma and more
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty, $($rest:tt)*) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty]] $($rest)*);
+    };
+    // Typed column at end
+    ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident : $ty:ty) => {
+        $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col : $ty]]);
+    };
     // Renamed column: `col = "sql_name"` followed by comma and more
     ($struct_name:ident, $table_name:expr, [$($parsed:tt)*] $col:ident = $sql_name:expr, $($rest:tt)*) => {
         $crate::__qbey_schema_parse!($struct_name, $table_name, [$($parsed)* [$col, $sql_name]] $($rest)*);
@@ -205,6 +274,17 @@ macro_rules! __qbey_schema_emit {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __qbey_schema_col {
+    ($table_name:expr, $col:ident : $ty:ty, $sql_name:expr) => {
+        pub fn $col(&self) -> $crate::TypedCol<$ty> {
+            $crate::TypedCol::new($crate::table(self.alias.unwrap_or($table_name)).col($sql_name))
+        }
+    };
+    ($table_name:expr, $col:ident : $ty:ty) => {
+        pub fn $col(&self) -> $crate::TypedCol<$ty> {
+            let col_name = stringify!($col).trim_start_matches("r#");
+            $crate::TypedCol::new($crate::table(self.alias.unwrap_or($table_name)).col(col_name))
+        }
+    };
     ($table_name:expr, $col:ident, $sql_name:expr) => {
         pub fn $col(&self) -> $crate::Col {
             $crate::table(self.alias.unwrap_or($table_name)).col($sql_name)
@@ -221,7 +301,10 @@ macro_rules! __qbey_schema_col {
 #[doc(hidden)]
 #[macro_export]
 macro_rules! __qbey_schema_col_call {
-    ($self:ident, $col:ident $(, $sql_name:expr)?) => {
-        $self.$col()
+    // Matches plain, renamed and typed specs alike; the reflexive `From<Col> for Col`
+    // makes this work for untyped columns too, so `all_columns()` stays `Vec<Col>`
+    // even for a schema that mixes typed and untyped columns.
+    ($self:ident, $col:ident $($rest:tt)*) => {
+        $crate::Col::from($self.$col())
     };
 }

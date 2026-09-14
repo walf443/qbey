@@ -13,6 +13,7 @@ pub mod raw_sql;
 pub mod renderer;
 pub mod schema;
 pub mod tree;
+pub mod typed_col;
 pub mod update;
 pub mod value;
 pub mod where_clause;
@@ -103,6 +104,7 @@ pub use query::{
     SetOp, qbey, qbey_from_subquery, qbey_from_subquery_with, qbey_with,
 };
 pub use raw_sql::RawSql;
+pub use typed_col::{TypedCol, TypedRhs};
 pub use update::{SetClause, UpdateQuery, UpdateQueryBuilder};
 pub use value::{ConditionValue, Op, Value};
 pub use where_clause::{
