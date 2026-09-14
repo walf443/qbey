@@ -165,10 +165,13 @@ impl<V: ConditionValue> ConditionRhs for V {
 /// contributes its bare name and the value is converted into the query's bind
 /// type `V`.
 ///
-/// - [`Col`] accepts any `A: Into<V>`, as `set()` always has.
+/// - [`Col`] and a bare `&str` column name accept any `A: Into<V>`.
 /// - [`TypedCol<T>`](crate::TypedCol) accepts only `T`, `&T`, or `&str` for a
 ///   `TypedCol<String>` — the same shapes as [`TypedRhs`](crate::TypedRhs) —
 ///   so assigning a value of the wrong type is a compile error.
+///
+/// Column names are quoted as identifiers but never parameterized, so a
+/// `&str` name must not come from user input.
 pub trait ColumnValue<V, A> {
     /// Produce the `(column_name, bind_value)` pair.
     fn into_column_value(self, val: A) -> (String, V);
@@ -177,6 +180,12 @@ pub trait ColumnValue<V, A> {
 impl<V, A: Into<V>> ColumnValue<V, A> for Col {
     fn into_column_value(self, val: A) -> (String, V) {
         (self.column, val.into())
+    }
+}
+
+impl<V, A: Into<V>> ColumnValue<V, A> for &str {
+    fn into_column_value(self, val: A) -> (String, V) {
+        (self.to_string(), val.into())
     }
 }
 

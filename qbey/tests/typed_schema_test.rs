@@ -473,9 +473,9 @@ fn typed_insert_with_custom_value_type() {
     );
 }
 
-/// `on_conflict_do_update` takes `impl Into<Col>`, so a `TypedCol` is accepted
-/// here — but the value is *not* type-checked on this path (it still takes
-/// `impl Into<V>`), unlike `set()` and `value()`.
+/// `on_conflict_do_update` goes through `ColumnValue` like `set()`, so the
+/// value is checked against the column type. The negative case lives as a
+/// `compile_fail` doctest on `TypedCol`.
 #[cfg(feature = "conflict")]
 #[test]
 fn typed_col_in_on_conflict_do_update() {
@@ -489,4 +489,16 @@ fn typed_col_in_on_conflict_do_update() {
         r#"INSERT INTO "livecomments" ("id", "tip") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "tip" = ?"#
     );
     assert_eq!(binds, vec![Value::Int(1), Value::Int(5), Value::Int(6)]);
+}
+
+/// A bare `&str` column name is still accepted by `set()`, as it is by
+/// `on_conflict_do_update()`; the name is quoted, never parameterized.
+#[test]
+fn set_accepts_str_column_name() {
+    let mut u = qbey("livecomments").into_update();
+    u.set("tip", 1i64);
+    let u = u.allow_without_where();
+    let (sql, binds) = u.to_sql();
+    assert_eq!(sql, r#"UPDATE "livecomments" SET "tip" = ?"#);
+    assert_eq!(binds, vec![Value::Int(1)]);
 }

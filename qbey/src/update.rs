@@ -28,7 +28,8 @@ pub enum SetClause<V: Clone> {
 pub trait UpdateQueryBuilder<V: Clone> {
     /// Add a SET clause: `SET "col" = ?`.
     ///
-    /// Use [`col()`](crate::col) to create a column reference for the first argument.
+    /// The first argument is a [`col()`](crate::col) reference, a
+    /// [`TypedCol`](crate::TypedCol) from `qbey_schema!`, or a bare `&str`.
     /// Column names are quoted as identifiers but **not** parameterized,
     /// so never pass external (user-supplied) input as a column name.
     ///

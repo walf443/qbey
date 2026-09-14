@@ -149,6 +149,25 @@ use crate::where_clause::{IntoRangeClause, WhereClause};
 /// // Likewise for an INSERT row.
 /// ins.add_value(&[u.id().value("foo")]);
 /// ```
+///
+/// ```compile_fail
+/// use qbey::{qbey, qbey_schema, Value};
+/// use qbey::prelude::*;
+///
+/// #[derive(Debug, Clone)]
+/// struct UserId(i64);
+/// impl From<UserId> for Value {
+///     fn from(id: UserId) -> Self { Value::Int(id.0) }
+/// }
+///
+/// qbey_schema!(Users, "users", [id: UserId, name: String]);
+///
+/// let u = Users::new();
+/// let mut ins = qbey(&u).into_insert();
+/// ins.add_value(&[u.id().value(UserId(1)), u.name().value("Alice")]);
+/// // And for the ON CONFLICT DO UPDATE value.
+/// ins.on_conflict_do_update(&[u.id()], u.id(), "foo");
+/// ```
 pub struct TypedCol<T> {
     col: Col,
     // `fn() -> T` keeps `TypedCol<T>` covariant in `T` without requiring `T` to

@@ -365,7 +365,9 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// Add an ON CONFLICT (...) DO UPDATE SET col = ? clause with a bind value.
     ///
     /// Accepts `&str` or `Col` for `columns` and `col`. When `Col` is passed,
-    /// the table prefix is ignored — only the column name is used.
+    /// the table prefix is ignored — only the column name is used. A
+    /// [`TypedCol<T>`](crate::TypedCol) for `col` only accepts a `T` (or `&T`)
+    /// value; see [`ColumnValue`](crate::ColumnValue).
     ///
     /// # Panics
     ///
@@ -382,11 +384,11 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
     /// assert_eq!(sql, r#"INSERT INTO "employee" ("id", "name") VALUES (?, ?) ON CONFLICT ("id") DO UPDATE SET "name" = ?"#);
     /// ```
     #[cfg(feature = "conflict")]
-    pub fn on_conflict_do_update(
+    pub fn on_conflict_do_update<A>(
         &mut self,
         columns: &[impl Into<Col> + Clone],
-        col: impl Into<Col>,
-        val: impl Into<V>,
+        col: impl crate::column::ColumnValue<V, A>,
+        val: A,
     ) -> &mut Self {
         assert!(
             !columns.is_empty(),
@@ -396,9 +398,10 @@ impl<V: Clone + std::fmt::Debug> InsertQuery<V> {
             self.on_conflict.is_none(),
             "on_conflict_do_update: ON CONFLICT clause already set"
         );
+        let (column, val) = col.into_column_value(val);
         self.on_conflict = Some(OnConflict::DoUpdate {
             columns: columns.iter().map(|c| c.clone().into().column).collect(),
-            sets: vec![OnConflictUpdateClause::Value(col.into().column, val.into())],
+            sets: vec![OnConflictUpdateClause::Value(column, val)],
         });
         self
     }
