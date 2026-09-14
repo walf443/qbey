@@ -5,7 +5,6 @@ edition = "2024"
 license = "MIT"
 description = "MySQL dialect extension for the qbey SQL query builder"
 repository = "https://github.com/walf443/qbey"
-changelog = "https://github.com/walf443/qbey/blob/main/CHANGELOG.md"
 readme = "./README.md"
 keywords = ["sql", "query-builder", "database", "mysql"]
 categories = ["database"]
