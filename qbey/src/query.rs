@@ -352,7 +352,7 @@ pub struct SelectQuery<V: Clone + std::fmt::Debug = Value> {
 
 /// Create a new query builder for the given table.
 ///
-/// Accepts a table name (`&str`) or a [`TableRef`] (created with [`table()`]):
+/// Accepts a table name (`&str`) or a [`TableRef`] (created with [`table()`](crate::table)):
 ///
 /// ```
 /// use qbey::{qbey, table};
@@ -923,7 +923,8 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
     ///
     /// Consumes `self` and transfers the table name, alias, WHERE conditions, and CTEs.
     /// The returned query is in [`WhereNotSet`](crate::WhereNotSet) state — you must call
-    /// [`and_where()`], [`or_where()`], or [`allow_without_where()`] before `to_sql()`.
+    /// [`and_where()`](UpdateQuery::and_where), [`or_where()`](UpdateQuery::or_where), or
+    /// [`allow_without_where()`](UpdateQuery::allow_without_where) before `to_sql()`.
     ///
     /// ```
     /// use qbey::{qbey, col, ConditionExpr, UpdateQueryBuilder};
@@ -1000,7 +1001,8 @@ impl<V: Clone + std::fmt::Debug> SelectQuery<V> {
     ///
     /// Consumes `self` and transfers the table name, alias, WHERE conditions, and CTEs.
     /// The returned query is in [`WhereNotSet`](crate::WhereNotSet) state — you must call
-    /// [`and_where()`], [`or_where()`], or [`allow_without_where()`] before `to_sql()`.
+    /// [`and_where()`](DeleteQuery::and_where), [`or_where()`](DeleteQuery::or_where), or
+    /// [`allow_without_where()`](DeleteQuery::allow_without_where) before `to_sql()`.
     ///
     /// ```
     /// use qbey::{qbey, col, ConditionExpr};

@@ -68,11 +68,12 @@ pub trait DeleteQueryBuilder<V: Clone> {
 
 /// A DELETE query builder, generic over the bind value type `V` and WHERE state `W`.
 ///
-/// Created via [`SelectQuery::into_delete()`] to convert a SELECT query builder into a DELETE statement.
+/// Created via [`SelectQuery::into_delete()`](crate::SelectQuery::into_delete) to convert a SELECT query builder into a DELETE statement.
 ///
 /// By default, WHERE clause is required at compile time. The query starts in the
-/// [`WhereNotSet`] state where `to_sql()` is not available. Call [`and_where()`],
-/// [`or_where()`], or [`allow_without_where()`] to transition to [`WhereProvided`]
+/// [`WhereNotSet`] state where `to_sql()` is not available. Call
+/// [`and_where()`](DeleteQuery::and_where), [`or_where()`](DeleteQuery::or_where), or
+/// [`allow_without_where()`](DeleteQuery::allow_without_where) to transition to [`WhereProvided`]
 /// state, which enables `to_sql()` and `to_sql_with()`.
 ///
 /// ```

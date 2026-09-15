@@ -77,7 +77,8 @@ impl Dialect for MySqlDialect {
 ///
 /// This is the initial state for [`UpdateQuery`] and [`DeleteQuery`].
 /// In this state, `to_sql()` is not available — you must first call
-/// [`and_where()`], [`or_where()`], or [`allow_without_where()`] to
+/// [`and_where()`](UpdateQuery::and_where), [`or_where()`](UpdateQuery::or_where), or
+/// [`allow_without_where()`](UpdateQuery::allow_without_where) to
 /// transition to [`WhereProvided`].
 #[derive(Debug, Clone, Copy)]
 pub struct WhereNotSet;

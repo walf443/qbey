@@ -151,3 +151,6 @@ jobs:
           save-if: false
       - run: cargo clippy -p qbey --all-targets --features full -- -D warnings
       - run: cargo clippy -p qbey-mysql --all-targets --features full -- -D warnings
+      - run: cargo doc --workspace --no-deps --features full
+        env:
+          RUSTDOCFLAGS: -D warnings

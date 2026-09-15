@@ -146,11 +146,12 @@ pub trait UpdateQueryBuilder<V: Clone> {
 
 /// An UPDATE query builder, generic over the bind value type `V` and WHERE state `W`.
 ///
-/// Created via [`SelectQuery::into_update()`] to convert a SELECT query builder into an UPDATE statement.
+/// Created via [`SelectQuery::into_update()`](crate::SelectQuery::into_update) to convert a SELECT query builder into an UPDATE statement.
 ///
 /// By default, WHERE clause is required at compile time. The query starts in the
-/// [`WhereNotSet`] state where `to_sql()` is not available. Call [`and_where()`],
-/// [`or_where()`], or [`allow_without_where()`] to transition to [`WhereProvided`]
+/// [`WhereNotSet`] state where `to_sql()` is not available. Call
+/// [`and_where()`](UpdateQuery::and_where), [`or_where()`](UpdateQuery::or_where), or
+/// [`allow_without_where()`](UpdateQuery::allow_without_where) to transition to [`WhereProvided`]
 /// state, which enables `to_sql()` and `to_sql_with()`.
 ///
 /// ```

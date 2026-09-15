@@ -102,7 +102,7 @@ impl<V: Clone + std::fmt::Debug> MysqlInsertQuery<V> {
 
     /// Add an ON DUPLICATE KEY UPDATE clause with a raw SQL expression.
     ///
-    /// Use [`RawSql::new()`] to create the expression, making it explicit
+    /// Use [`RawSql::new()`](qbey::RawSql::new) to create the expression, making it explicit
     /// that raw SQL is being injected.
     ///
     /// ```

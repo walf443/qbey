@@ -348,7 +348,7 @@ impl ConditionExpr for Col {
 /// # Panics
 ///
 /// Panics if called on a `SelectItem::Expr` variant, which cannot be safely
-/// converted to a column reference. Use [`RawSql`](crate::RawSql) in
+/// converted to a column reference. Use [`RawSql`] in
 /// WHERE/HAVING clauses through other means instead.
 impl<V: Clone> ConditionExpr for SelectItem<V> {
     fn into_condition_col(self) -> Col {
@@ -546,7 +546,7 @@ pub enum SelectItem<V: Clone = Value> {
     /// A raw SQL expression (e.g., `"COUNT(*)"`, `"price * quantity"`).
     ///
     /// **Warning:** `raw` is embedded into SQL without escaping.
-    /// Never pass user-supplied input — see [`SelectQuery::add_select_expr`](crate::SelectQuery::add_select_expr).
+    /// Never pass user-supplied input — see [`SelectQueryBuilder::add_select_expr`](crate::SelectQueryBuilder::add_select_expr).
     Expr {
         raw: crate::raw_sql::RawSql<V>,
         alias: Option<String>,

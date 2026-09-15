@@ -1,5 +1,33 @@
 # Changelog
 
+## [0.4.0] - 2026-09-14
+
+### Added
+
+- Typed columns in `qbey_schema!`. A column declared as `name: Type` produces a `TypedCol<Type>` whose comparison methods accept only that type, so a newtype ID flows through unchanged and passing the wrong one is a compile error instead of a query that silently matches nothing. Typed, untyped and renamed (`rust_name: Type = "sql_name"`) columns can be mixed in one declaration; existing schemas are unchanged.
+- `TypedCol<T>` / `TypedRhs<T>` — `eq`/`ne`/`gt`/`lt`/`gte`/`lte` against `T`, `&T` or another `TypedCol<T>` (a join between two different ID types does not compile), plus `included`/`not_included`/`between`/`not_between`/`in_range`, `like`/`not_like` on `TypedCol<String>`, and `as_`/`asc`/`desc`. `into_col()` / `as_col()` drop the type where a plain `Col` is needed.
+- `ColumnValue<V, A>` — the conversion behind every `col = value` assignment. `Col` and a bare `&str` accept any `A: Into<V>`; `TypedCol<T>` accepts only `T`, `&T`, or `&str` for a `String` column.
+- `UpdateQueryBuilder::set`, `InsertQuery::on_conflict_do_update` and `MysqlInsertQuery::on_duplicate_key_update` accept a `TypedCol` and type-check the value.
+- `Col::value()` / `TypedCol::value()` pair a schema column with a value for an INSERT row: `ins.add_value(&[t.user_id().value(id), t.body().value("hi")])`.
+- `ToInsertRow<V, C = &'static str>` — the column-name type is now a defaulted type parameter, so rows built from schema columns (`[(String, V); N]`) are accepted by `add_value()` / `add_values()` alongside `&[("name", v)]` literals. A `Vec<(C, V)>` impl was added.
+- `row = Name` in `qbey_schema!` generates an INSERT row builder with one setter per column: `let mut row = t.row(); row.user_id(&id).body("hi"); ins.add_value(&row);`. Typed columns are checked like `set()` / `value()`, setters return `&mut Self` so columns can be set conditionally, setting a column again replaces the value, and the row implements `ToInsertRow<V, String>`. The name is explicit because `macro_rules!` cannot derive `CommentsRow` from `Comments`; schemas without `row = ...` are unchanged. `row` joins the schema method names a column must be renamed away from when the builder is generated.
+- `set()` accepts a bare `&str` column name.
+- The lint CI job now runs `cargo doc` with warnings denied.
+
+### Changed
+
+- **Breaking:** `UpdateQueryBuilder::set` is now `set<A>(col: impl ColumnValue<V, A>, val: A)`, and `InsertQueryBuilder::add_value` / `add_values` gained a `C: Into<String>` type parameter. External implementors of these traits must update their signatures; callers are unaffected except as noted below.
+- **Breaking:** `set()` and `MysqlInsertQuery::on_duplicate_key_update()` no longer take a concrete `Col`, so `u.set("name".into(), v)` fails with `E0283: type annotations needed`. Write `col("name")`, a schema accessor, or the bare `"name"` instead.
+- **Breaking:** `InsertQuery::on_conflict_do_update` is now `on_conflict_do_update<A>(columns, col: impl ColumnValue<V, A>, val: A)`. `&str` and `Col` arguments keep working unchanged.
+- **Breaking:** a downstream `impl ToInsertRow<MyV> for Vec<(&'static str, MyV)>` now conflicts with the new `Vec<(C, V)>` impl; delete it, the built-in impl covers it.
+- Fixed intra-doc links that rendered as plain text on docs.rs.
+- Removed the unknown `package.changelog` manifest key that made cargo warn on every invocation.
+
+### Dev Dependencies
+
+- Updated `sqlx` to 0.9, `rusqlite` to 0.39, `testcontainers` to 0.28 (dropping `testcontainers-modules`), and replaced `ctor` with `dtor`.
+- Integration tests run against both the minimum supported and the newest database versions in CI.
+
 ## [0.3.0] - 2026-04-09
 
 ### Added

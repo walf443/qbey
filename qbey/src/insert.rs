@@ -166,7 +166,7 @@ pub(crate) enum OnConflict<V: Clone> {
 
 /// An INSERT query builder, generic over the bind value type `V`.
 ///
-/// Created via [`SelectQuery::into_insert()`] to convert a SELECT query builder
+/// Created via [`SelectQuery::into_insert()`](crate::SelectQuery::into_insert) to convert a SELECT query builder
 /// into an INSERT statement.
 ///
 /// At least one row must be provided via [`add_value()`](InsertQuery::add_value)
