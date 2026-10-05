@@ -439,6 +439,41 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\", \"tenant_id\")");
 ```
 
+#### CROSS JOIN
+
+`cross_join` renders a standard `CROSS JOIN`, which takes no join condition.
+Passing `JoinType::Cross` to `add_join` panics.
+
+```rust
+# use qbey::{qbey, SelectQueryBuilder};
+let mut q = qbey("users");
+q.cross_join("colors");
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" CROSS JOIN \"colors\"");
+```
+
+SQLite (and MySQL) also accept the non-standard `CROSS JOIN ... ON`. In SQLite this
+pins the join order, which is useful for manual query tuning. Write it with
+`JoinType::Custom`, since PostgreSQL rejects it with a syntax error.
+(MySQL treats `CROSS JOIN` the same as `INNER JOIN`, so it does not pin the join order there;
+use `straight_join` from [qbey-mysql](https://github.com/walf443/qbey/tree/main/qbey-mysql) instead.)
+
+```rust
+# use qbey::{qbey, col, table, ConditionExpr, JoinType, SelectQueryBuilder};
+let mut q = qbey("users");
+q.add_join(
+    JoinType::Custom("CROSS JOIN".to_string()),
+    "orders",
+    table("users").col("id").eq(col("user_id")),
+);
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" CROSS JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\"");
+```
+
 #### Table aliases and qualified columns
 
 ```rust

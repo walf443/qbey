@@ -174,6 +174,93 @@ fn test_join() {
 }
 
 #[test]
+fn test_cross_join() {
+    let conn = setup_db();
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.cross_join("orders");
+    q.and_where(table("users").col("id").eq(table("orders").col("user_id")));
+    q.and_where(table("orders").col("status").eq("shipped"));
+    q.select(&table("users").cols(&["id", "name"]));
+    q.add_select(table("orders").col("total"));
+    let (sql, binds) = q.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<(i64, String, f64)> = stmt
+        .query_map(params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    assert_eq!(rows.len(), 2);
+}
+
+#[test]
+fn test_cross_join_with_on() {
+    let conn = setup_db();
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.add_join(
+        qbey::JoinType::Custom("CROSS JOIN".to_string()),
+        "orders",
+        table("users").col("id").eq(col("user_id")),
+    );
+    q.and_where(table("orders").col("status").eq("shipped"));
+    q.select(&table("users").cols(&["id", "name"]));
+    q.add_select(table("orders").col("total"));
+    let (sql, binds) = q.to_sql();
+    assert!(sql.contains("CROSS JOIN \"orders\" ON"));
+
+    let params = to_rusqlite_params(&binds);
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<(i64, String, f64)> = stmt
+        .query_map(params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    assert_eq!(rows.len(), 2);
+}
+
+#[test]
+fn test_cross_join_inside_subquery() {
+    let conn = setup_db();
+
+    let mut sub = qbey_with::<SqliteValue>("orders");
+    sub.add_join(
+        qbey::JoinType::Custom("CROSS JOIN".to_string()),
+        "users",
+        table("orders").col("user_id").eq(table("users").col("id")),
+    );
+    sub.select(&[table("orders").col("user_id")]);
+    sub.and_where(table("orders").col("status").eq("shipped"));
+    sub.and_where(table("users").col("age").gt(20));
+
+    let mut q = qbey_with::<SqliteValue>("users");
+    q.and_where(col("id").included(sub));
+    q.select(&["id", "name"]);
+    q.order_by(col("id").asc());
+    let (sql, binds) = q.to_sql();
+
+    let params = to_rusqlite_params(&binds);
+    let mut stmt = conn.prepare(&sql).unwrap();
+    let rows: Vec<(i64, String)> = stmt
+        .query_map(params_from_iter(params.iter().map(|p| p.as_ref())), |row| {
+            Ok((row.get(0)?, row.get(1)?))
+        })
+        .unwrap()
+        .map(|r| r.unwrap())
+        .collect();
+
+    assert_eq!(rows, vec![(1, "Alice".to_string()), (2, "Bob".to_string())]);
+}
+
+#[test]
 fn test_join_with_alias() {
     let conn = setup_db();
 

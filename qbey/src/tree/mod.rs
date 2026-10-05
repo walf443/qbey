@@ -667,7 +667,9 @@ pub(crate) fn drain_select_tree_binds<V: Clone>(tree: SelectTree<V>, out: &mut V
                 }
             }
             SelectToken::Join { clause, subquery } => {
-                drain_join_condition_binds(clause.condition, out);
+                if let Some(cond) = clause.condition {
+                    drain_join_condition_binds(cond, out);
+                }
                 if let Some(sub) = subquery {
                     drain_select_tree_binds(*sub, out);
                 }

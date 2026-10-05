@@ -95,6 +95,13 @@ pub fn on_expr<V: Clone>(raw: RawSql<V>) -> JoinCondition<V> {
 pub enum JoinType {
     Inner,
     Left,
+    /// `CROSS JOIN`. Always rendered without a join condition, as required by
+    /// the SQL standard.
+    ///
+    /// `CROSS JOIN ... ON` is a non-standard extension (accepted by SQLite and
+    /// MySQL, rejected by PostgreSQL). Use `Custom("CROSS JOIN".to_string())`
+    /// for that form, e.g. to pin the join order in SQLite.
+    Cross,
     /// Dialect-specific join type (e.g., "STRAIGHT_JOIN" in MySQL).
     Custom(String),
 }
@@ -105,7 +112,8 @@ pub struct JoinClause<V: Clone = Value> {
     pub join_type: JoinType,
     pub table: String,
     pub alias: Option<String>,
-    pub condition: JoinCondition<V>,
+    /// The ON / USING condition. `None` renders no condition (e.g. `CROSS JOIN t`).
+    pub condition: Option<JoinCondition<V>>,
 }
 
 impl<V: Clone> JoinClause<V> {
@@ -115,7 +123,7 @@ impl<V: Clone> JoinClause<V> {
             join_type: self.join_type,
             table: self.table,
             alias: self.alias,
-            condition: self.condition.map_values(f),
+            condition: self.condition.map(|c| c.map_values(f)),
         }
     }
 }
