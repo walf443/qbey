@@ -168,11 +168,18 @@ pub trait SelectQueryBuilder<V: Clone + std::fmt::Debug> {
     ) -> &mut Self;
     /// Add a CROSS JOIN clause (no join condition).
     ///
-    /// To render `CROSS JOIN ... ON ...` (accepted by SQLite and MySQL, but not
-    /// PostgreSQL), use [`add_join`](Self::add_join) with [`JoinType::Cross`].
+    /// The SQL standard does not allow ON / USING on a CROSS JOIN. To render the
+    /// non-standard `CROSS JOIN ... ON ...` (accepted by SQLite and MySQL, but
+    /// not PostgreSQL), use [`add_join`](Self::add_join) with
+    /// `JoinType::Custom("CROSS JOIN".to_string())`.
     fn cross_join(&mut self, table: impl IntoJoinTable) -> &mut Self;
     /// Add a JOIN clause with a custom join type. Used by dialect crates for
     /// dialect-specific join types (e.g., STRAIGHT_JOIN in MySQL).
+    ///
+    /// # Panics
+    ///
+    /// Panics if `join_type` is [`JoinType::Cross`], because a standard CROSS
+    /// JOIN cannot take a join condition. Use [`cross_join`](Self::cross_join).
     fn add_join(
         &mut self,
         join_type: JoinType,
@@ -196,6 +203,11 @@ pub trait SelectQueryBuilder<V: Clone + std::fmt::Debug> {
     /// Add a CROSS JOIN with a subquery as the join target (no join condition).
     fn cross_join_subquery(&mut self, sub: impl IntoSelectTree<V>, alias: &str) -> &mut Self;
     /// Add a JOIN with a subquery and a custom join type.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `join_type` is [`JoinType::Cross`]. Use
+    /// [`cross_join_subquery`](Self::cross_join_subquery).
     fn add_join_subquery(
         &mut self,
         join_type: JoinType,
@@ -419,6 +431,14 @@ impl<V: Clone + std::fmt::Debug> IntoIncluded<V> for SelectQuery<V> {
     }
 }
 
+fn assert_join_type_accepts_condition(join_type: &JoinType) {
+    assert!(
+        !matches!(join_type, JoinType::Cross),
+        "CROSS JOIN cannot take a join condition in standard SQL; use cross_join() / cross_join_subquery(), \
+         or JoinType::Custom(\"CROSS JOIN\".to_string()) for the non-standard CROSS JOIN ... ON form"
+    );
+}
+
 fn resolve_join_condition<V: Clone>(cond: &mut JoinCondition<V>, join_table: &str) {
     match cond {
         JoinCondition::ColEq { right, .. } => {
@@ -554,6 +574,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
         table: impl IntoJoinTable,
         condition: impl Into<JoinCondition>,
     ) -> &mut Self {
+        assert_join_type_accepts_condition(&join_type);
         let (name, alias) = table.into_join_table();
         let resolve_name = alias.as_deref().unwrap_or(&name);
         let mut condition = JoinCondition::from_default(condition.into());
@@ -606,6 +627,7 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for SelectQuery<V> {
         alias: &str,
         condition: impl Into<JoinCondition>,
     ) -> &mut Self {
+        assert_join_type_accepts_condition(&join_type);
         let tree = sub.into_select_tree();
         let mut condition = JoinCondition::from_default(condition.into());
         resolve_join_condition(&mut condition, alias);

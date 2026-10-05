@@ -197,7 +197,7 @@ async fn test_cross_join_with_on() {
 
     let mut q = qbey_with::<SqliteValue>("users");
     q.add_join(
-        qbey::JoinType::Cross,
+        qbey::JoinType::Custom("CROSS JOIN".to_string()),
         "orders",
         table("users").col("id").eq(col("user_id")),
     );

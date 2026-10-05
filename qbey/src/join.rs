@@ -95,11 +95,12 @@ pub fn on_expr<V: Clone>(raw: RawSql<V>) -> JoinCondition<V> {
 pub enum JoinType {
     Inner,
     Left,
-    /// `CROSS JOIN`. Usually rendered without a condition (cartesian product).
+    /// `CROSS JOIN`. Always rendered without a join condition, as required by
+    /// the SQL standard.
     ///
-    /// Some databases (e.g. SQLite, MySQL) also accept `CROSS JOIN ... ON`.
-    /// In SQLite, `CROSS JOIN` additionally forces the planner to keep the
-    /// written table order, which can be used for manual query tuning.
+    /// `CROSS JOIN ... ON` is a non-standard extension (accepted by SQLite and
+    /// MySQL, rejected by PostgreSQL). Use `Custom("CROSS JOIN".to_string())`
+    /// for that form, e.g. to pin the join order in SQLite.
     Cross,
     /// Dialect-specific join type (e.g., "STRAIGHT_JOIN" in MySQL).
     Custom(String),

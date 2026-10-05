@@ -441,23 +441,31 @@ assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" US
 
 #### CROSS JOIN
 
-`cross_join` renders `CROSS JOIN` without a join condition. Some databases accept
-`CROSS JOIN ... ON` as well — notably SQLite, where `CROSS JOIN` forces the planner to
-keep the written table order. Use `add_join(JoinType::Cross, ...)` for that form
-(not supported by PostgreSQL).
+`cross_join` renders a standard `CROSS JOIN`, which takes no join condition.
+Passing `JoinType::Cross` to `add_join` panics.
 
 ```rust
-# use qbey::{qbey, col, table, ConditionExpr, JoinType, SelectQueryBuilder};
+# use qbey::{qbey, SelectQueryBuilder};
 let mut q = qbey("users");
 q.cross_join("colors");
 q.select(&["id", "name"]);
 
 let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" CROSS JOIN \"colors\"");
+```
 
-// CROSS JOIN with ON (SQLite / MySQL)
+SQLite (and MySQL) also accept the non-standard `CROSS JOIN ... ON`. In SQLite this
+pins the join order, which is useful for manual query tuning. Write it with
+`JoinType::Custom`, since PostgreSQL rejects it with a syntax error:
+
+```rust
+# use qbey::{qbey, col, table, ConditionExpr, JoinType, SelectQueryBuilder};
 let mut q = qbey("users");
-q.add_join(JoinType::Cross, "orders", table("users").col("id").eq(col("user_id")));
+q.add_join(
+    JoinType::Custom("CROSS JOIN".to_string()),
+    "orders",
+    table("users").col("id").eq(col("user_id")),
+);
 q.select(&["id", "name"]);
 
 let (sql, _) = q.to_sql();

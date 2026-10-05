@@ -366,10 +366,10 @@ fn test_cross_join_with_where() {
 }
 
 #[test]
-fn test_cross_join_with_on_via_add_join() {
+fn test_cross_join_with_on_via_custom() {
     let mut q = qbey("users");
     q.add_join(
-        JoinType::Cross,
+        JoinType::Custom("CROSS JOIN".to_string()),
         "orders",
         table("users").col("id").eq(col("user_id")),
     );
@@ -422,7 +422,7 @@ fn test_cross_join_mixed_with_inner_join() {
 fn test_cross_join_inside_in_subquery() {
     let mut sub = qbey("orders");
     sub.add_join(
-        JoinType::Cross,
+        JoinType::Custom("CROSS JOIN".to_string()),
         "users",
         table("orders").col("user_id").eq(table("users").col("id")),
     );
@@ -463,4 +463,28 @@ fn test_cross_join_inside_join_subquery() {
         r#"SELECT "id", "name" FROM "users" INNER JOIN (SELECT "orders"."user_id", "orders"."total" FROM "orders" CROSS JOIN "users" WHERE "orders"."user_id" = "users"."id" AND "orders"."status" = $1) AS "o" ON "users"."id" = "o"."user_id""#
     );
     assert_eq!(binds, vec![Value::String("shipped".to_string())]);
+}
+
+#[test]
+#[should_panic(expected = "CROSS JOIN cannot take a join condition")]
+fn test_add_join_cross_with_condition_panics() {
+    let mut q = qbey("users");
+    q.add_join(
+        JoinType::Cross,
+        "orders",
+        table("users").col("id").eq(col("user_id")),
+    );
+}
+
+#[test]
+#[should_panic(expected = "CROSS JOIN cannot take a join condition")]
+fn test_add_join_subquery_cross_with_condition_panics() {
+    let sub = qbey("orders");
+    let mut q = qbey("users");
+    q.add_join_subquery(
+        JoinType::Cross,
+        sub,
+        "o",
+        table("users").col("id").eq(col("user_id")),
+    );
 }
