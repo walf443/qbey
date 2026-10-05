@@ -198,6 +198,22 @@ pg_test!(test_join, |client| {
     assert_eq!(rows.len(), 2);
 });
 
+pg_test!(test_cross_join, |client| {
+    let mut q = qbey_with::<PgValue>("users");
+    q.cross_join("orders");
+    q.and_where(table("users").col("id").eq(table("orders").col("user_id")));
+    q.and_where(table("orders").col("status").eq("shipped"));
+    q.select(&table("users").cols(&["id", "name"]));
+    q.add_select(table("orders").col("total"));
+    let (sql, binds) = q.to_sql_with(&PostgresDialect);
+
+    let params = to_pg_params(&binds);
+    let param_refs: Vec<&(dyn ToSql + Sync)> = params.iter().map(|p| p.as_ref()).collect();
+
+    let rows = client.query(&sql, &param_refs).unwrap();
+    assert_eq!(rows.len(), 2);
+});
+
 pg_test!(test_join_with_alias, |client| {
     let mut q = qbey_with::<PgValue>("users");
     q.as_("u");

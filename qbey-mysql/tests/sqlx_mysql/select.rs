@@ -143,6 +143,24 @@ async fn test_straight_join() {
 }
 
 #[tokio::test]
+async fn test_cross_join() {
+    let pool = setup_pool().await;
+
+    let mut q = qbey_with::<MysqlValue>("users");
+    q.cross_join("orders");
+    q.and_where(table("users").col("id").eq(table("orders").col("user_id")));
+    q.select(&table("users").cols(&["id", "name"]));
+    q.add_select(table("orders").col("total"));
+    let (sql, binds) = q.to_sql();
+
+    let rows = bind_params(sqlx::query(sqlx::AssertSqlSafe(sql.as_str())), &binds)
+        .fetch_all(&pool)
+        .await
+        .unwrap();
+    assert_eq!(rows.len(), 3);
+}
+
+#[tokio::test]
 async fn test_force_index() {
     let pool = setup_pool().await;
 

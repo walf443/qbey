@@ -439,6 +439,31 @@ let (sql, _) = q.to_sql();
 assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" INNER JOIN \"orders\" USING (\"user_id\", \"tenant_id\")");
 ```
 
+#### CROSS JOIN
+
+`cross_join` renders `CROSS JOIN` without a join condition. Some databases accept
+`CROSS JOIN ... ON` as well — notably SQLite, where `CROSS JOIN` forces the planner to
+keep the written table order. Use `add_join(JoinType::Cross, ...)` for that form
+(not supported by PostgreSQL).
+
+```rust
+# use qbey::{qbey, col, table, ConditionExpr, JoinType, SelectQueryBuilder};
+let mut q = qbey("users");
+q.cross_join("colors");
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" CROSS JOIN \"colors\"");
+
+// CROSS JOIN with ON (SQLite / MySQL)
+let mut q = qbey("users");
+q.add_join(JoinType::Cross, "orders", table("users").col("id").eq(col("user_id")));
+q.select(&["id", "name"]);
+
+let (sql, _) = q.to_sql();
+assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" CROSS JOIN \"orders\" ON \"users\".\"id\" = \"orders\".\"user_id\"");
+```
+
 #### Table aliases and qualified columns
 
 ```rust

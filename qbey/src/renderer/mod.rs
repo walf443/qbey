@@ -173,6 +173,7 @@ pub(super) fn render_join<V: Clone>(
     let keyword = match &join.join_type {
         JoinType::Inner => "INNER JOIN",
         JoinType::Left => "LEFT JOIN",
+        JoinType::Cross => "CROSS JOIN",
         JoinType::Custom(s) => s.as_str(),
     };
     let table = if let Some(sub) = subquery {
@@ -184,16 +185,19 @@ pub(super) fn render_join<V: Clone>(
     } else {
         render_join_table(&join.table, &join.alias, cfg)
     };
-    if let JoinCondition::Using(cols) = &join.condition {
-        let quoted: Vec<String> = cols.iter().map(|c| (cfg.qi)(c)).collect();
-        return format!("{} {} USING ({})", keyword, table, quoted.join(", "));
+    match &join.condition {
+        None => format!("{} {}", keyword, table),
+        Some(JoinCondition::Using(cols)) => {
+            let quoted: Vec<String> = cols.iter().map(|c| (cfg.qi)(c)).collect();
+            format!("{} {} USING ({})", keyword, table, quoted.join(", "))
+        }
+        Some(cond) => format!(
+            "{} {} ON {}",
+            keyword,
+            table,
+            render_join_condition(cond, cfg, bind_count)
+        ),
     }
-    format!(
-        "{} {} ON {}",
-        keyword,
-        table,
-        render_join_condition(&join.condition, cfg, bind_count)
-    )
 }
 
 pub(super) fn render_select_columns<V: Clone>(

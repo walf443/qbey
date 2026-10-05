@@ -1,5 +1,17 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- `CROSS JOIN` support: `SelectQueryBuilder::cross_join(table)` and `cross_join_subquery(sub, alias)` render a condition-less `CROSS JOIN`. `JoinType::Cross` can also be passed to `add_join` / `add_join_subquery` to render `CROSS JOIN ... ON ...`, which SQLite uses to pin the join order for manual query tuning (also accepted by MySQL, not by PostgreSQL).
+
+### Changed
+
+- **Breaking:** `JoinClause::condition` is now `Option<JoinCondition<V>>`; `None` renders no ON / USING clause.
+- **Breaking:** `JoinType` gained a `Cross` variant, so exhaustive matches on it must handle it.
+- **Breaking:** `SelectQueryBuilder` gained the required methods `cross_join` and `cross_join_subquery`; external implementors must add them.
+
 ## [0.4.0] - 2026-09-14
 
 ### Added

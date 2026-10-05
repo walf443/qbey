@@ -260,6 +260,34 @@ fn test_straight_join() {
 }
 
 #[test]
+fn test_cross_join() {
+    let mut q = qbey("users");
+    q.cross_join("colors");
+    q.select(&["id", "name"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(sql, "SELECT `id`, `name` FROM `users` CROSS JOIN `colors`");
+}
+
+#[test]
+fn test_cross_join_subquery() {
+    let mut sub = qbey("orders");
+    sub.select(&["user_id"]);
+    sub.and_where(col("status").eq("shipped"));
+
+    let mut q = qbey("users");
+    q.cross_join_subquery(sub, "o");
+    q.select(&["id", "name"]);
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT `id`, `name` FROM `users` CROSS JOIN (SELECT `user_id` FROM `orders` WHERE `status` = ?) AS `o`"
+    );
+    assert_eq!(binds, vec![qbey::Value::String("shipped".to_string())]);
+}
+
+#[test]
 fn test_in_subquery() {
     let mut sub = qbey("orders");
     sub.select(&["user_id"]);

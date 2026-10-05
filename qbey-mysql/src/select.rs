@@ -113,6 +113,11 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for MysqlQuery<V> {
         self
     }
 
+    fn cross_join(&mut self, table: impl qbey::IntoJoinTable) -> &mut Self {
+        self.inner.cross_join(table);
+        self
+    }
+
     fn add_join(
         &mut self,
         join_type: qbey::JoinType,
@@ -140,6 +145,11 @@ impl<V: Clone + std::fmt::Debug> SelectQueryBuilder<V> for MysqlQuery<V> {
         condition: impl Into<qbey::JoinCondition>,
     ) -> &mut Self {
         self.inner.left_join_subquery(sub, alias, condition);
+        self
+    }
+
+    fn cross_join_subquery(&mut self, sub: impl qbey::IntoSelectTree<V>, alias: &str) -> &mut Self {
+        self.inner.cross_join_subquery(sub, alias);
         self
     }
 

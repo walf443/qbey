@@ -318,3 +318,149 @@ fn test_left_join_with_col_eq() {
         "SELECT \"id\", \"name\" FROM \"users\" LEFT JOIN \"addresses\" ON \"users\".\"id\" = \"addresses\".\"user_id\""
     );
 }
+
+#[test]
+fn test_cross_join() {
+    let mut q = qbey("users");
+    q.cross_join("colors");
+    q.select(&["id", "name"]);
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" CROSS JOIN "colors""#
+    );
+    assert!(binds.is_empty());
+}
+
+#[test]
+fn test_cross_join_with_alias() {
+    let mut q = qbey("users");
+    q.cross_join(table("colors").as_("c"));
+    q.select(&[
+        table("users").col("name"),
+        table("c").col("name").as_("color"),
+    ]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "users"."name", "c"."name" AS "color" FROM "users" CROSS JOIN "colors" AS "c""#
+    );
+}
+
+#[test]
+fn test_cross_join_with_where() {
+    let mut q = qbey("users");
+    q.cross_join("orders");
+    q.and_where(table("users").col("id").eq(table("orders").col("user_id")));
+    q.and_where(col("status").eq("shipped"));
+    q.select(&["id", "name"]);
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" CROSS JOIN "orders" WHERE "users"."id" = "orders"."user_id" AND "status" = ?"#
+    );
+    assert_eq!(binds, vec![Value::String("shipped".to_string())]);
+}
+
+#[test]
+fn test_cross_join_with_on_via_add_join() {
+    let mut q = qbey("users");
+    q.add_join(
+        JoinType::Cross,
+        "orders",
+        table("users").col("id").eq(col("user_id")),
+    );
+    q.select(&["id", "name"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" CROSS JOIN "orders" ON "users"."id" = "orders"."user_id""#
+    );
+}
+
+#[test]
+fn test_cross_join_subquery() {
+    let mut sub = qbey("orders");
+    sub.add_select_expr(RawSql::new("MAX(\"total\")"), Some("max_total"));
+    sub.and_where(col("status").eq("shipped"));
+
+    let mut q = qbey("users");
+    q.cross_join_subquery(sub, "m");
+    q.and_where(col("age").gt(20));
+    q.select(&[table("users").col("name"), table("m").col("max_total")]);
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "users"."name", "m"."max_total" FROM "users" CROSS JOIN (SELECT MAX("total") AS "max_total" FROM "orders" WHERE "status" = ?) AS "m" WHERE "age" > ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::String("shipped".to_string()), Value::Int(20)]
+    );
+}
+
+#[test]
+fn test_cross_join_mixed_with_inner_join() {
+    let mut q = qbey("users");
+    q.cross_join("colors");
+    q.join("orders", table("users").col("id").eq(col("user_id")));
+    q.select(&["id"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id" FROM "users" CROSS JOIN "colors" INNER JOIN "orders" ON "users"."id" = "orders"."user_id""#
+    );
+}
+
+#[test]
+fn test_cross_join_inside_in_subquery() {
+    let mut sub = qbey("orders");
+    sub.add_join(
+        JoinType::Cross,
+        "users",
+        table("orders").col("user_id").eq(table("users").col("id")),
+    );
+    sub.select(&[table("orders").col("user_id")]);
+    sub.and_where(table("orders").col("status").eq("shipped"));
+
+    let mut q = qbey("users");
+    q.and_where(col("id").included(sub));
+    q.and_where(col("age").gt(20));
+    q.select(&["id", "name"]);
+
+    let (sql, binds) = q.to_sql();
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" WHERE "id" IN (SELECT "orders"."user_id" FROM "orders" CROSS JOIN "users" ON "orders"."user_id" = "users"."id" WHERE "orders"."status" = ?) AND "age" > ?"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::String("shipped".to_string()), Value::Int(20)]
+    );
+}
+
+#[test]
+fn test_cross_join_inside_join_subquery() {
+    let mut sub = qbey("orders");
+    sub.cross_join("users");
+    sub.and_where(table("orders").col("user_id").eq(table("users").col("id")));
+    sub.and_where(table("orders").col("status").eq("shipped"));
+    sub.select(&[table("orders").col("user_id"), table("orders").col("total")]);
+
+    let mut q = qbey("users");
+    q.join_subquery(sub, "o", table("users").col("id").eq(col("user_id")));
+    q.select(&["id", "name"]);
+
+    let (sql, binds) = q.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" INNER JOIN (SELECT "orders"."user_id", "orders"."total" FROM "orders" CROSS JOIN "users" WHERE "orders"."user_id" = "users"."id" AND "orders"."status" = $1) AS "o" ON "users"."id" = "o"."user_id""#
+    );
+    assert_eq!(binds, vec![Value::String("shipped".to_string())]);
+}
