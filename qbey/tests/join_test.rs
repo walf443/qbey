@@ -488,3 +488,30 @@ fn test_add_join_subquery_cross_with_condition_panics() {
         table("users").col("id").eq(col("user_id")),
     );
 }
+
+#[test]
+fn test_cross_join_with_on_subquery_via_custom() {
+    let mut sub = qbey("orders");
+    sub.select(&["user_id", "total"]);
+    sub.and_where(col("status").eq("shipped"));
+
+    let mut q = qbey("users");
+    q.add_join_subquery(
+        JoinType::Custom("CROSS JOIN".to_string()),
+        sub,
+        "o",
+        table("users").col("id").eq(col("user_id")),
+    );
+    q.and_where(col("age").gt(20));
+    q.select(&["id", "name"]);
+
+    let (sql, binds) = q.to_sql_with(&PgDialect);
+    assert_eq!(
+        sql,
+        r#"SELECT "id", "name" FROM "users" CROSS JOIN (SELECT "user_id", "total" FROM "orders" WHERE "status" = $1) AS "o" ON "users"."id" = "o"."user_id" WHERE "age" > $2"#
+    );
+    assert_eq!(
+        binds,
+        vec![Value::String("shipped".to_string()), Value::Int(20)]
+    );
+}

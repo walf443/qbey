@@ -270,6 +270,23 @@ fn test_cross_join() {
 }
 
 #[test]
+fn test_cross_join_with_on_via_custom() {
+    let mut q = qbey("users");
+    q.add_join(
+        qbey::JoinType::Custom("CROSS JOIN".to_string()),
+        "orders",
+        table("users").col("id").eq(col("user_id")),
+    );
+    q.select(&["id", "name"]);
+
+    let (sql, _) = q.to_sql();
+    assert_eq!(
+        sql,
+        "SELECT `id`, `name` FROM `users` CROSS JOIN `orders` ON `users`.`id` = `orders`.`user_id`"
+    );
+}
+
+#[test]
 fn test_cross_join_subquery() {
     let mut sub = qbey("orders");
     sub.select(&["user_id"]);

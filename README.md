@@ -456,7 +456,9 @@ assert_eq!(sql, "SELECT \"id\", \"name\" FROM \"users\" CROSS JOIN \"colors\"");
 
 SQLite (and MySQL) also accept the non-standard `CROSS JOIN ... ON`. In SQLite this
 pins the join order, which is useful for manual query tuning. Write it with
-`JoinType::Custom`, since PostgreSQL rejects it with a syntax error:
+`JoinType::Custom`, since PostgreSQL rejects it with a syntax error.
+(MySQL treats `CROSS JOIN` the same as `INNER JOIN`, so it does not pin the join order there;
+use `straight_join` from [qbey-mysql](https://github.com/walf443/qbey/tree/main/qbey-mysql) instead.)
 
 ```rust
 # use qbey::{qbey, col, table, ConditionExpr, JoinType, SelectQueryBuilder};
