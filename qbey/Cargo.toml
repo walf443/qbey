@@ -20,7 +20,7 @@ postgres = "0.19"
 testcontainers = { version = "0.28", features = ["watchdog"] }
 dtor = "1.0"
 criterion = { version = "0.8" }
-libsql = { version = "0.9", default-features = false, features = ["core"] }
+libsql = { version = "0.10", default-features = false, features = ["core"] }
 
 [[bench]]
 name = "query_bench"
